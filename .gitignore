@@ -47,7 +47,8 @@ data/
 
 # Logs
 *.log
-logs/
+logs/*
+!logs/.gitkeep
 
 # Test & Coverage
 .pytest_cache/
@@ -55,10 +56,12 @@ logs/
 htmlcov/
 .tox/
 .nox/
+tests/
 
 # Jupyter & notebooks
 .ipynb_checkpoints/
 marimo_notebooks/
+__marimo__/
 
 # mypy
 .mypy_cache/

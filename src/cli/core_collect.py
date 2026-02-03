@@ -10,6 +10,8 @@ import asyncio
 import datetime
 import json
 import logging
+import logging.handlers
+import os
 import sys
 from pathlib import Path
 
@@ -46,11 +48,46 @@ from src.core.crawler import (
     AAAI_VENUES,
 )
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+# Configure logging (console + file)
+LOG_DIR = Path(__file__).parent.parent.parent / "logs"
+LOG_DIR.mkdir(exist_ok=True)
+LOG_FILE = LOG_DIR / "lexiconarxiv.log"
+
+# Create formatters
+log_format = logging.Formatter(
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
+
+# Console handler
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(log_format)
+
+
+# File handler with immediate flush for real-time log saving
+class FlushingFileHandler(logging.handlers.RotatingFileHandler):
+    """RotatingFileHandler that flushes after every emit for real-time logging."""
+    def emit(self, record):
+        super().emit(record)
+        self.flush()
+
+
+# File handler (rotating, 10MB max, keep 5 backups)
+file_handler = FlushingFileHandler(
+    LOG_FILE,
+    maxBytes=10 * 1024 * 1024,  # 10MB
+    backupCount=5,
+    encoding="utf-8",
+)
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(log_format)
+
+# Configure root logger
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+root_logger.addHandler(console_handler)
+root_logger.addHandler(file_handler)
+
 logger = logging.getLogger(__name__)
 
 
@@ -59,7 +96,9 @@ logger = logging.getLogger(__name__)
 def cli(verbose: bool) -> None:
     """Core Corpus collection CLI for LexiconArxiv."""
     if verbose:
-        logging.getLogger().setLevel(logging.DEBUG)
+        root_logger.setLevel(logging.DEBUG)
+        console_handler.setLevel(logging.DEBUG)
+        file_handler.setLevel(logging.DEBUG)
 
 
 @cli.command()
