@@ -1,0 +1,527 @@
+"""Semantic Scholar API integration for citation enrichment.
+
+Semantic Scholar often has better coverage for ML/AI papers than OpenAlex,
+especially for recent conference papers (NeurIPS, ICML, ICLR, ACL).
+
+API Documentation: https://api.semanticscholar.org/api-docs/
+"""
+
+import asyncio
+import json
+import logging
+import os
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+import httpx
+
+from src.core.storage import QdrantStorage
+
+logger = logging.getLogger(__name__)
+
+S2_API_BASE = "https://api.semanticscholar.org/graph/v1"
+
+
+@dataclass
+class S2EnrichmentProgress:
+    """Track Semantic Scholar enrichment progress."""
+
+    total_to_process: int = 0
+    processed: int = 0
+    enriched: int = 0
+    not_found: int = 0
+    no_refs: int = 0  # Found but no references
+    errors: int = 0
+    last_offset: str | None = None
+    processed_point_ids: set[str] = field(default_factory=set)
+    started_at: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+    last_updated: str | None = None
+
+
+class SemanticScholarEnricher:
+    """Enrich papers with citation data from Semantic Scholar."""
+
+    def __init__(
+        self,
+        storage: QdrantStorage | None = None,
+        api_key: str | None = None,
+        checkpoint_dir: Path | str | None = None,
+        batch_size: int = 100,
+        delay: float = 1.0,  # S2 has stricter rate limits
+        max_concurrent: int = 1,
+    ):
+        """Initialize SemanticScholarEnricher.
+
+        Args:
+            storage: QdrantStorage instance.
+            api_key: S2 API key for higher rate limits.
+                     Get one at: https://www.semanticscholar.org/product/api#api-key
+            checkpoint_dir: Directory for checkpoint files.
+            batch_size: Papers per batch.
+            delay: Delay between requests (S2 needs ~1s without key).
+            max_concurrent: Max concurrent requests (keep low for S2).
+        """
+        self.storage = storage or QdrantStorage()
+        self.api_key = api_key or os.getenv("S2_API_KEY") or os.getenv("SEMANTIC_SCHOLAR_API_KEY")
+        self.batch_size = batch_size
+        self.delay = delay
+        self.max_concurrent = max_concurrent
+
+        self.checkpoint_dir = Path(checkpoint_dir or "data/core/checkpoints")
+        self._checkpoint_file_doi = self.checkpoint_dir / "s2_doi_enrichment.json"
+        self._checkpoint_file_title = self.checkpoint_dir / "s2_title_enrichment.json"
+        self._client: httpx.AsyncClient | None = None
+        self._semaphore: asyncio.Semaphore | None = None
+
+    async def __aenter__(self) -> "SemanticScholarEnricher":
+        """Enter async context."""
+        headers = {}
+        if self.api_key:
+            headers["x-api-key"] = self.api_key
+            logger.info("Using Semantic Scholar API key")
+        else:
+            logger.warning("No S2 API key - rate limits will be strict (100 req/5min)")
+
+        self._client = httpx.AsyncClient(timeout=30.0, headers=headers)
+        self._semaphore = asyncio.Semaphore(self.max_concurrent)
+        return self
+
+    async def __aexit__(self, *args) -> None:
+        """Exit async context."""
+        if self._client:
+            await self._client.aclose()
+
+    async def fetch_by_doi(self, doi: str) -> dict[str, Any] | None:
+        """Fetch paper data from S2 by DOI.
+
+        Args:
+            doi: The DOI to look up.
+
+        Returns:
+            Dict with 'references' list or None if not found.
+        """
+        if not self._client:
+            raise RuntimeError("Client not initialized. Use async context manager.")
+
+        # Clean DOI
+        if doi.startswith("https://doi.org/"):
+            doi = doi[16:]
+        elif doi.startswith("http://doi.org/"):
+            doi = doi[15:]
+
+        url = f"{S2_API_BASE}/paper/DOI:{doi}"
+        params = {"fields": "paperId,title,references.paperId,references.title,references.externalIds"}
+
+        try:
+            response = await self._client.get(url, params=params)
+
+            if response.status_code == 404:
+                return None
+
+            if response.status_code == 429:
+                # Rate limited - wait and retry
+                retry_after = int(response.headers.get("Retry-After", 60))
+                logger.warning(f"S2 rate limited, waiting {retry_after}s...")
+                await asyncio.sleep(retry_after)
+                return await self.fetch_by_doi(doi)
+
+            response.raise_for_status()
+            data = response.json()
+
+            refs = data.get("references") or []  # Handle None case
+            if not refs:
+                return {"references": [], "s2_id": data.get("paperId")}
+
+            # Extract reference IDs (prefer DOI, fallback to S2 ID)
+            ref_ids = []
+            for ref in refs:
+                if ref is None:
+                    continue
+                ext_ids = ref.get("externalIds") or {}
+                if ext_ids.get("DOI"):
+                    ref_ids.append(f"DOI:{ext_ids['DOI']}")
+                elif ref.get("paperId"):
+                    ref_ids.append(f"S2:{ref['paperId']}")
+
+            return {
+                "references": ref_ids,
+                "s2_id": data.get("paperId"),
+            }
+
+        except httpx.HTTPStatusError as e:
+            logger.warning(f"S2 HTTP error for DOI {doi}: {e}")
+            return None
+        except Exception as e:
+            logger.warning(f"S2 error for DOI {doi}: {e}")
+            return None
+
+    async def fetch_by_title(self, title: str, min_refs: int = 1) -> dict[str, Any] | None:
+        """Search S2 by title and return paper with references.
+
+        Args:
+            title: Paper title to search.
+            min_refs: Minimum references required.
+
+        Returns:
+            Dict with 'references', 'doi', 's2_id' or None.
+        """
+        if not self._client:
+            raise RuntimeError("Client not initialized. Use async context manager.")
+
+        url = f"{S2_API_BASE}/paper/search"
+        params = {
+            "query": title,
+            "fields": "paperId,title,externalIds,references.paperId,references.externalIds",
+            "limit": 5,
+        }
+
+        try:
+            response = await self._client.get(url, params=params)
+
+            if response.status_code == 429:
+                retry_after = int(response.headers.get("Retry-After", 60))
+                logger.warning(f"S2 rate limited, waiting {retry_after}s...")
+                await asyncio.sleep(retry_after)
+                return await self.fetch_by_title(title, min_refs)
+
+            response.raise_for_status()
+            data = response.json()
+
+            results = data.get("data", [])
+            if not results:
+                return None
+
+            # Find best match with sufficient references
+            title_lower = title.lower().strip()
+            for result in results:
+                result_title = (result.get("title") or "").lower().strip()
+                refs = result.get("references") or []  # Handle None case
+
+                # Check title similarity
+                if result_title == title_lower or (
+                    len(result_title) > 20
+                    and (result_title in title_lower or title_lower in result_title)
+                ):
+                    if len(refs) >= min_refs:
+                        # Extract reference IDs
+                        ref_ids = []
+                        for ref in refs:
+                            if ref is None:
+                                continue
+                            ext_ids = ref.get("externalIds") or {}
+                            if ext_ids.get("DOI"):
+                                ref_ids.append(f"DOI:{ext_ids['DOI']}")
+                            elif ref.get("paperId"):
+                                ref_ids.append(f"S2:{ref['paperId']}")
+
+                        ext_ids = result.get("externalIds") or {}
+                        return {
+                            "references": ref_ids,
+                            "doi": ext_ids.get("DOI"),
+                            "s2_id": result.get("paperId"),
+                        }
+
+            return None
+
+        except httpx.HTTPStatusError as e:
+            logger.warning(f"S2 search error for '{title[:30]}': {e}")
+            return None
+        except Exception as e:
+            logger.warning(f"S2 error for '{title[:30]}': {e}")
+            return None
+
+    async def _fetch_with_limit(self, doi: str) -> dict[str, Any] | None:
+        """Fetch with rate limiting."""
+        async with self._semaphore:
+            result = await self.fetch_by_doi(doi)
+            await asyncio.sleep(self.delay)
+            return result
+
+    async def _search_with_limit(self, title: str, min_refs: int = 1) -> dict[str, Any] | None:
+        """Search with rate limiting."""
+        async with self._semaphore:
+            result = await self.fetch_by_title(title, min_refs)
+            await asyncio.sleep(self.delay)
+            return result
+
+    async def enrich_by_doi(
+        self,
+        dry_run: bool = False,
+        limit: int | None = None,
+    ) -> S2EnrichmentProgress:
+        """Enrich papers with DOIs using Semantic Scholar.
+
+        This is a fallback for papers where OpenAlex didn't have citation data.
+
+        Args:
+            dry_run: Only count papers without updating.
+            limit: Maximum papers to process.
+
+        Returns:
+            S2EnrichmentProgress with statistics.
+        """
+        progress = self._load_checkpoint(by_title=False)
+        offset = progress.last_offset
+
+        logger.info("Starting Semantic Scholar DOI-based enrichment...")
+
+        while True:
+            # Get papers with DOI but no refs (OpenAlex failed)
+            papers, next_offset = self.storage.get_papers_missing_references(
+                has_doi=True,
+                limit=self.batch_size,
+                offset=offset,
+            )
+
+            if not papers:
+                break
+
+            if dry_run:
+                progress.total_to_process += len(papers)
+                logger.info(f"Found {len(papers)} papers (dry run)")
+            else:
+                enriched = await self._enrich_batch_by_doi(papers, progress)
+                logger.info(
+                    f"Batch: {enriched}/{len(papers)} enriched | "
+                    f"Total: {progress.enriched} enriched, "
+                    f"{progress.not_found} not found, {progress.no_refs} no refs"
+                )
+
+            progress.last_offset = next_offset
+            progress.last_updated = datetime.now(timezone.utc).isoformat()
+            self._save_checkpoint(progress, by_title=False)
+
+            offset = next_offset
+            if offset is None:
+                break
+
+            if limit and progress.processed >= limit:
+                break
+
+        logger.info(
+            f"S2 DOI enrichment complete: {progress.enriched} enriched, "
+            f"{progress.not_found} not found, {progress.no_refs} no refs, "
+            f"{progress.errors} errors"
+        )
+        return progress
+
+    async def enrich_by_title(
+        self,
+        dry_run: bool = False,
+        limit: int | None = None,
+        venues: list[str] | None = None,
+        min_refs: int = 1,
+    ) -> S2EnrichmentProgress:
+        """Enrich papers without DOIs by searching S2 by title.
+
+        Args:
+            dry_run: Only count papers without updating.
+            limit: Maximum papers to process.
+            venues: Filter by venue names.
+            min_refs: Minimum refs required for match.
+
+        Returns:
+            S2EnrichmentProgress with statistics.
+        """
+        progress = self._load_checkpoint(by_title=True)
+        offset = progress.last_offset
+
+        logger.info("Starting Semantic Scholar title-based enrichment...")
+
+        while True:
+            papers, next_offset = self.storage.get_papers_without_doi_missing_references(
+                limit=self.batch_size,
+                offset=offset,
+                venues=venues,
+            )
+
+            if not papers:
+                break
+
+            if dry_run:
+                progress.total_to_process += len(papers)
+                logger.info(f"Found {len(papers)} papers without DOIs (dry run)")
+            else:
+                enriched = await self._enrich_batch_by_title(papers, progress, min_refs)
+                logger.info(
+                    f"Batch: {enriched}/{len(papers)} enriched | "
+                    f"Total: {progress.enriched} enriched, "
+                    f"{progress.not_found} not found"
+                )
+
+            progress.last_offset = next_offset
+            progress.last_updated = datetime.now(timezone.utc).isoformat()
+            self._save_checkpoint(progress, by_title=True)
+
+            offset = next_offset
+            if offset is None:
+                break
+
+            if limit and progress.processed >= limit:
+                break
+
+        logger.info(
+            f"S2 title enrichment complete: {progress.enriched} enriched, "
+            f"{progress.not_found} not found, {progress.errors} errors"
+        )
+        return progress
+
+    async def _enrich_batch_by_doi(
+        self,
+        papers: list[tuple[str, dict]],
+        progress: S2EnrichmentProgress,
+    ) -> int:
+        """Enrich batch using DOI lookup."""
+        to_process = [
+            (pid, payload)
+            for pid, payload in papers
+            if payload.get("doi") and pid not in progress.processed_point_ids
+        ]
+
+        if not to_process:
+            return 0
+
+        tasks = [self._fetch_with_limit(payload.get("doi")) for _, payload in to_process]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        enriched = 0
+        updates = []
+
+        for (point_id, payload), result in zip(to_process, results):
+            progress.processed += 1
+            progress.processed_point_ids.add(point_id)
+
+            if isinstance(result, Exception):
+                logger.warning(f"Error for {payload.get('doi')}: {result}")
+                progress.errors += 1
+                continue
+
+            if result is None:
+                progress.not_found += 1
+                continue
+
+            refs = result.get("references", [])
+            if refs:
+                updates.append((point_id, refs))
+                progress.enriched += 1
+                enriched += 1
+                logger.debug(f"S2 enriched {payload.get('doi')}: {len(refs)} refs")
+            else:
+                progress.no_refs += 1
+
+        if updates:
+            self.storage.batch_update_referenced_works(updates)
+
+        return enriched
+
+    async def _enrich_batch_by_title(
+        self,
+        papers: list[tuple[str, dict]],
+        progress: S2EnrichmentProgress,
+        min_refs: int = 1,
+    ) -> int:
+        """Enrich batch using title search."""
+        to_process = [
+            (pid, payload)
+            for pid, payload in papers
+            if payload.get("title") and pid not in progress.processed_point_ids
+        ]
+
+        if not to_process:
+            return 0
+
+        tasks = [
+            self._search_with_limit(payload.get("title"), min_refs)
+            for _, payload in to_process
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        enriched = 0
+        updates = []
+
+        for (point_id, payload), result in zip(to_process, results):
+            progress.processed += 1
+            progress.processed_point_ids.add(point_id)
+
+            if isinstance(result, Exception):
+                progress.errors += 1
+                continue
+
+            if result is None:
+                progress.not_found += 1
+                continue
+
+            refs = result.get("references", [])
+            doi = result.get("doi")
+            if refs:
+                if doi:
+                    updates.append((point_id, doi, refs))
+                else:
+                    # No DOI found, just update refs
+                    self.storage.batch_update_referenced_works([(point_id, refs)])
+                progress.enriched += 1
+                enriched += 1
+            else:
+                progress.not_found += 1
+
+        if updates:
+            self.storage.batch_update_papers_with_doi_and_refs(updates)
+
+        return enriched
+
+    def _load_checkpoint(self, by_title: bool = False) -> S2EnrichmentProgress:
+        """Load checkpoint from file."""
+        checkpoint_file = self._checkpoint_file_title if by_title else self._checkpoint_file_doi
+        if checkpoint_file.exists():
+            with open(checkpoint_file) as f:
+                data = json.load(f)
+            progress = S2EnrichmentProgress(
+                total_to_process=data.get("total_to_process", 0),
+                processed=data.get("processed", 0),
+                enriched=data.get("enriched", 0),
+                not_found=data.get("not_found", 0),
+                no_refs=data.get("no_refs", 0),
+                errors=data.get("errors", 0),
+                last_offset=data.get("last_offset"),
+                started_at=data.get("started_at", datetime.now(timezone.utc).isoformat()),
+                last_updated=data.get("last_updated"),
+            )
+            progress.processed_point_ids = set(data.get("processed_point_ids", []))
+            return progress
+        return S2EnrichmentProgress()
+
+    def _save_checkpoint(self, progress: S2EnrichmentProgress, by_title: bool = False) -> None:
+        """Save checkpoint to file."""
+        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        checkpoint_file = self._checkpoint_file_title if by_title else self._checkpoint_file_doi
+        data = {
+            "total_to_process": progress.total_to_process,
+            "processed": progress.processed,
+            "enriched": progress.enriched,
+            "not_found": progress.not_found,
+            "no_refs": progress.no_refs,
+            "errors": progress.errors,
+            "last_offset": progress.last_offset,
+            "processed_point_ids": list(progress.processed_point_ids),
+            "started_at": progress.started_at,
+            "last_updated": progress.last_updated,
+        }
+        with open(checkpoint_file, "w") as f:
+            json.dump(data, f, indent=2)
+
+    def clear_checkpoint(self, by_title: bool = False) -> None:
+        """Clear checkpoint for fresh start."""
+        checkpoint_file = self._checkpoint_file_title if by_title else self._checkpoint_file_doi
+        if checkpoint_file.exists():
+            checkpoint_file.unlink()
+            mode = "title" if by_title else "DOI"
+            logger.info(f"S2 {mode} enrichment checkpoint cleared")
+
+    def clear_all_checkpoints(self) -> None:
+        """Clear all S2 checkpoints."""
+        self.clear_checkpoint(by_title=False)
+        self.clear_checkpoint(by_title=True)

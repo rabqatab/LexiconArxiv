@@ -1,0 +1,43 @@
+[project]
+name = "lexiconarxiv"
+version = "0.1.0"
+description = "Maximum recall paper search engine for AI/NLP researchers"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.27.0",
+    "pydantic>=2.0.0",
+    "feedparser>=6.0.0",
+    "tenacity>=8.0.0",
+    "python-dateutil>=2.8.0",
+    "qdrant-client>=1.7.0",
+    "click>=8.1.0",
+    "python-dotenv>=1.0.0",
+    "openreview-py>=1.40.0",
+    "beautifulsoup4>=4.12.0",
+    "lxml>=5.0.0",
+    "marimo>=0.19.7",
+    "auto-mix-prep>=0.2.0",
+    "google-genai>=1.61.0",
+    "pydantic-ai-slim>=1.52.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-httpx>=0.30.0",
+    "respx>=0.21.0",
+    "ruff>=0.1.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.marimo.keymap]
+vimrc = "relative/path/.vimrc"
