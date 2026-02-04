@@ -26,7 +26,12 @@ RUN mkdir -p /opt/grobid/grobid-home/lib/lin-64 \
 RUN apt-get update && apt-get install -y libxml2-dev libpng-dev && rm -rf /var/lib/apt/lists/*
 RUN git clone --recursive https://github.com/kermitt2/pdfalto.git /opt/pdfalto
 WORKDIR /opt/pdfalto
-RUN mkdir -p build && cd build && cmake .. && make -j"$(nproc)"
+# Configure cmake
+RUN cmake -B build .
+# Copy aconf.h from xpdf build dir to xpdf source dir (where includes expect it)
+RUN cp build/xpdf-4.03/aconf.h xpdf-4.03/aconf.h || find . -name "aconf.h" -exec cp {} xpdf-4.03/ \;
+# Build
+RUN cmake --build build -j"$(nproc)"
 
 # Place arm64 pdfalto where GROBID expects it
 WORKDIR /opt/grobid
@@ -47,9 +52,12 @@ RUN ./gradlew clean :grobid-service:installDist --no-daemon
 
 FROM eclipse-temurin:17-jre
 
+# Runtime dependencies for pdfalto (libxml2, libpng) - per GPT review
 RUN apt-get update && apt-get install -y \
     curl \
     libstdc++6 \
+    libxml2 \
+    libpng16-16 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/grobid
