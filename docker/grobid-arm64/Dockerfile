@@ -24,9 +24,8 @@ RUN mkdir -p /opt/grobid/grobid-home/lib/lin-64 \
 
 # --- Build pdfalto (arm64) for PDF to XML conversion ---
 RUN apt-get update && apt-get install -y libxml2-dev libpng-dev && rm -rf /var/lib/apt/lists/*
-RUN git clone --depth 1 https://github.com/kermitt2/pdfalto.git /opt/pdfalto
+RUN git clone --recursive https://github.com/kermitt2/pdfalto.git /opt/pdfalto
 WORKDIR /opt/pdfalto
-RUN git submodule update --init --recursive || true
 RUN mkdir -p build && cd build && cmake .. && make -j"$(nproc)"
 
 # Place arm64 pdfalto where GROBID expects it
