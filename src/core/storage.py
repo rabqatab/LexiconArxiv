@@ -1087,6 +1087,114 @@ class QdrantStorage:
             pass
         return None
 
+    def build_cited_by_index(
+        self,
+        batch_size: int = 100,
+        progress_callback: Any | None = None,
+    ) -> dict[str, Any]:
+        """Build the cited_by field for all papers.
+
+        Scans all papers and builds a reverse citation index, then stores
+        the `cited_by` list in each paper's payload. This enables O(1)
+        bidirectional citation traversal for GraphRAG queries.
+
+        Args:
+            batch_size: Number of papers to update in each batch.
+            progress_callback: Optional callback(processed, total) for progress.
+
+        Returns:
+            Statistics about the operation.
+        """
+        from collections import defaultdict
+
+        logger.info("Building cited_by index...")
+
+        # Phase 1: Build reverse index in memory
+        reverse_index: dict[str, list[str]] = defaultdict(list)
+        total_papers = 0
+        total_edges = 0
+
+        offset = None
+        while True:
+            results, offset = self.client.scroll(
+                collection_name=self.collection_name,
+                limit=1000,
+                offset=offset,
+                with_payload=["resolved_references"],
+            )
+
+            for point in results:
+                paper_id = str(point.id)
+                resolved_refs = point.payload.get("resolved_references", [])
+
+                for cited_id in resolved_refs:
+                    reverse_index[cited_id].append(paper_id)
+                    total_edges += 1
+
+                total_papers += 1
+
+            if total_papers % 10000 == 0:
+                logger.info(f"  Scanned {total_papers} papers, {total_edges} edges...")
+
+            if offset is None:
+                break
+
+        logger.info(
+            f"Built reverse index: {total_papers} papers, "
+            f"{total_edges} edges, {len(reverse_index)} cited papers"
+        )
+
+        # Phase 2: Store cited_by field for each paper
+        updated = 0
+        papers_with_citations = 0
+
+        # Get all paper IDs for updating
+        offset = None
+        all_ids: list[str] = []
+        while True:
+            results, offset = self.client.scroll(
+                collection_name=self.collection_name,
+                limit=1000,
+                offset=offset,
+                with_payload=False,
+            )
+            all_ids.extend(str(point.id) for point in results)
+            if offset is None:
+                break
+
+        # Update in batches
+        for i in range(0, len(all_ids), batch_size):
+            batch_ids = all_ids[i : i + batch_size]
+
+            for paper_id in batch_ids:
+                citing_papers = reverse_index.get(paper_id, [])
+                self.client.set_payload(
+                    collection_name=self.collection_name,
+                    payload={"cited_by": citing_papers},
+                    points=[paper_id],
+                )
+                if citing_papers:
+                    papers_with_citations += 1
+                updated += 1
+
+            if progress_callback:
+                progress_callback(updated, len(all_ids))
+
+            if updated % 5000 == 0:
+                logger.info(f"  Updated {updated}/{len(all_ids)} papers...")
+
+        logger.info(
+            f"Stored cited_by field: {updated} papers updated, "
+            f"{papers_with_citations} have incoming citations"
+        )
+
+        return {
+            "total_papers": total_papers,
+            "total_edges": total_edges,
+            "papers_with_citations": papers_with_citations,
+            "unique_cited_papers": len(reverse_index),
+        }
+
     def get_paper_by_normalized_title(
         self, normalized_title: str
     ) -> tuple[str, dict] | None:

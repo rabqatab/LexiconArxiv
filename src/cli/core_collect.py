@@ -2061,6 +2061,7 @@ def clear_resolve_checkpoint(step: str) -> None:
 @click.option("--year-start", type=int, help="Filter papers from this year")
 @click.option("--year-end", type=int, help="Filter papers until this year")
 @click.option("--no-metadata", is_flag=True, help="Don't include paper metadata in export")
+@click.option("--streaming", is_flag=True, help="Use streaming export (low memory, CSV only)")
 def build_citation_graph(
     output: str | None,
     format: str,
@@ -2068,11 +2069,15 @@ def build_citation_graph(
     year_start: int | None,
     year_end: int | None,
     no_metadata: bool,
+    streaming: bool,
 ) -> None:
     """Build and export the citation graph.
 
     Creates a directed graph from resolved_references where edges point
     from citing papers to cited papers (A cites B means edge A->B).
+
+    For large graphs (>1M edges), use --streaming to avoid memory issues.
+    Streaming mode exports CSV files directly without loading the full graph.
 
     Examples:
 
@@ -2087,12 +2092,56 @@ def build_citation_graph(
 
       # Filter by year range
       python -m src.cli.core_collect build-citation-graph --year-start 2020 --year-end 2023 -o recent.json
+
+      # Large graph: use streaming export (low memory)
+      python -m src.cli.core_collect build-citation-graph -o /tmp/graph --streaming
     """
-    from src.core.citation_graph import CitationGraphBuilder, GraphExporter
+    from src.core.citation_graph import CitationGraphBuilder, GraphExporter, StreamingGraphExporter, estimate_memory_mb
 
     click.echo("\n=== Building Citation Graph ===\n")
 
     storage = QdrantStorage()
+
+    # Streaming mode: export directly from Qdrant
+    if streaming:
+        if venue or year_start or year_end:
+            click.echo("Warning: Filters are not supported in streaming mode. Exporting full graph.")
+
+        if not output:
+            click.echo("Error: --output is required for streaming export")
+            sys.exit(1)
+
+        click.echo("Using streaming export (low memory mode)...")
+        exporter = StreamingGraphExporter(storage)
+        result = exporter.export_csv(
+            output_dir=output,
+            prefix="citation_graph",
+            include_metadata=not no_metadata,
+        )
+
+        click.echo(f"\nStreaming export complete:")
+        click.echo(f"  Nodes: {result['node_count']:,}")
+        click.echo(f"  Edges: {result['edge_count']:,}")
+        click.echo(f"  Files: {result['edges_file']}")
+        click.echo(f"         {result['nodes_file']}")
+        return
+
+    # Check graph size and warn about memory
+    stats = storage.get_citation_graph_stats()
+    est_memory = estimate_memory_mb(
+        stats["total_papers"],
+        stats["total_resolved_refs"],
+        not no_metadata,
+    )
+
+    click.echo(f"Estimated graph size: {stats['total_papers']:,} nodes, {stats['total_resolved_refs']:,} edges")
+    click.echo(f"Estimated memory: {est_memory:.0f} MB ({est_memory/1024:.1f} GB)")
+
+    if est_memory > 2000:  # > 2 GB
+        click.echo("\nWarning: Large graph may require significant memory.")
+        click.echo("Consider using --streaming for memory-efficient CSV export.")
+        click.echo("Or use --no-metadata to reduce memory by ~40%.\n")
+
     builder = CitationGraphBuilder(storage=storage)
 
     # Build filters
@@ -2162,12 +2211,27 @@ def analyze_citation_graph(
       # Detect communities
       python -m src.cli.core_collect analyze-citation-graph --compute-communities
     """
-    from src.core.citation_graph import CitationGraphBuilder, GraphAnalyzer
+    from src.core.citation_graph import CitationGraphBuilder, GraphAnalyzer, estimate_memory_mb
 
     click.echo("\n=== Analyzing Citation Graph ===\n")
 
-    # Build graph
+    # Check graph size and warn about memory
     storage = QdrantStorage()
+    stats = storage.get_citation_graph_stats()
+    est_memory = estimate_memory_mb(
+        stats["total_papers"],
+        stats["total_resolved_refs"],
+        True,  # Analysis needs metadata
+    )
+
+    click.echo(f"Estimated graph size: {stats['total_papers']:,} nodes, {stats['total_resolved_refs']:,} edges")
+    click.echo(f"Estimated memory: {est_memory:.0f} MB ({est_memory/1024:.1f} GB)")
+
+    if est_memory > 3000:  # > 3 GB
+        click.echo("\nWarning: Graph analysis may require significant memory (3+ GB).")
+        click.echo("Ensure sufficient RAM is available.\n")
+
+    # Build graph
     builder = CitationGraphBuilder(storage=storage)
 
     click.echo("Building graph...")
@@ -2285,6 +2349,8 @@ def citation_graph_stats(output_json: bool) -> None:
         click.echo(json.dumps(stats, indent=2))
         return
 
+    from src.core.citation_graph import estimate_memory_mb
+
     click.echo(f"\n{'=' * 50}")
     click.echo("CITATION GRAPH STATISTICS")
     click.echo(f"{'=' * 50}\n")
@@ -2296,6 +2362,55 @@ def citation_graph_stats(output_json: bool) -> None:
     click.echo(f"Total resolved references:    {stats['total_resolved_refs']:,}")
     click.echo(f"Resolution coverage:          {stats['resolution_coverage']:.1f}%")
     click.echo(f"Papers with graph metrics:    {stats['papers_with_graph_metrics']:,}")
+
+    # Memory estimates
+    est_with_meta = estimate_memory_mb(stats['total_papers'], stats['total_resolved_refs'], True)
+    est_no_meta = estimate_memory_mb(stats['total_papers'], stats['total_resolved_refs'], False)
+
+    click.echo(f"\n=== Memory Estimates ===\n")
+    click.echo(f"With metadata:     {est_with_meta:.0f} MB ({est_with_meta/1024:.1f} GB)")
+    click.echo(f"Without metadata:  {est_no_meta:.0f} MB ({est_no_meta/1024:.1f} GB)")
+    if est_with_meta > 2000:
+        click.echo(f"\nTip: Use --streaming for memory-efficient CSV export")
+
+
+@cli.command("build-cited-by")
+def build_cited_by() -> None:
+    """Build the cited_by field for all papers (required for GraphRAG).
+
+    Scans all papers' resolved_references and builds a reverse index,
+    storing the `cited_by` list in each paper's payload. This enables
+    O(1) bidirectional citation traversal for GraphRAG queries.
+
+    After running this command, each paper will have:
+    - resolved_references: papers this paper cites
+    - cited_by: papers that cite this paper
+
+    Examples:
+
+      python -m src.cli.core_collect build-cited-by
+    """
+    click.echo("\n=== Building cited_by Index ===\n")
+    click.echo("This will scan all papers and compute reverse citations.")
+    click.echo("Progress will be logged every 5000 papers.\n")
+
+    storage = QdrantStorage()
+
+    def progress(processed: int, total: int) -> None:
+        if processed % 5000 == 0 or processed == total:
+            pct = processed / total * 100 if total > 0 else 0
+            click.echo(f"  Progress: {processed:,}/{total:,} ({pct:.1f}%)")
+
+    result = storage.build_cited_by_index(progress_callback=progress)
+
+    click.echo(f"\n=== Complete ===\n")
+    click.echo(f"Total papers:              {result['total_papers']:,}")
+    click.echo(f"Total citation edges:      {result['total_edges']:,}")
+    click.echo(f"Papers with citations:     {result['papers_with_citations']:,}")
+    click.echo(f"Unique cited papers:       {result['unique_cited_papers']:,}")
+
+    click.echo("\nThe cited_by field is now available for GraphRAG queries.")
+    click.echo("Use get-citing-papers <paper_id> to query reverse citations.")
 
 
 @cli.command("get-citing-papers")

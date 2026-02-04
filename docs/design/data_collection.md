@@ -831,6 +831,17 @@ core_coverage = Gauge('core_coverage', 'Core coverage by venue', ['venue'])
 | Identifier Normalizer | `src/core/resolution/normalizer.py` | ✅ Complete |
 | Reference Resolver | `src/core/resolution/resolver.py` | ✅ Complete |
 
+### 11.5 Citation Graph Modules
+
+| Module | File | Status |
+|--------|------|--------|
+| Reverse Citation Index | `src/core/citation_graph/reverse_index.py` | ✅ Complete |
+| Citation Graph Builder | `src/core/citation_graph/builder.py` | ✅ Complete |
+| Graph Exporter | `src/core/citation_graph/exporter.py` | ✅ Complete |
+| Graph Analyzer | `src/core/citation_graph/analyzer.py` | ✅ Complete |
+
+See [Citation Graph Design](./citation_graph.md) for details.
+
 ### 11.3 CLI Commands Available
 
 ```bash
@@ -859,6 +870,17 @@ python -m src.cli.core_collect init-storage
 
 # Clear checkpoint (reset progress)
 python -m src.cli.core_collect clear-checkpoint
+
+# Citation graph commands
+python -m src.cli.core_collect citation-graph-stats
+python -m src.cli.core_collect build-citation-graph -o graph.json
+python -m src.cli.core_collect build-citation-graph -o graph.graphml --format graphml
+python -m src.cli.core_collect build-citation-graph -o /tmp/graph --streaming  # Low memory
+python -m src.cli.core_collect analyze-citation-graph --all --top-n 50
+python -m src.cli.core_collect analyze-citation-graph --compute-pagerank --store
+python -m src.cli.core_collect get-citing-papers <paper_id>
+python -m src.cli.core_collect export-graph-subgraph <paper_id> --hops 2 -o subgraph.json
+python -m src.cli.core_collect build-cited-by  # Build reverse citations for GraphRAG
 ```
 
 ### 11.4 Remaining Work (Application Layer)

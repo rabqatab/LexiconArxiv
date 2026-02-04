@@ -18,6 +18,7 @@ AI 연구 인사이트 엔진 — **Core + On-demand** 기술 문서
 | [Data Model](./design/data_model.md) | 데이터베이스 스키마 및 데이터 모델 | Backend Engineer |
 | [Search Pipeline](./design/search_pipeline.md) | 하이브리드 검색 파이프라인 상세 설계 | Search Engineer |
 | [Data Collection](./design/data_collection.md) | 다중 소스 데이터 수집 전략 | Data Engineer |
+| [Citation Graph](./design/citation_graph.md) | 인용 그래프 및 GraphRAG 설계 | Search Engineer, ML Engineer |
 | [UX Design](./design/ux_design.md) | 사용자 경험 및 인터페이스 설계 | Frontend, Designer |
 | [Testing Strategy](./design/testing_strategy.md) | 테스트 전략 및 품질 보증 | QA, All Engineers |
 

@@ -123,6 +123,13 @@ python -m src.cli.core_collect enrich-abstracts --parallel 10
 # Reference Resolution (build citation graph)
 python -m src.cli.core_collect ref-stats
 python -m src.cli.core_collect resolve-refs
+
+# Citation Graph Analysis
+python -m src.cli.core_collect citation-graph-stats
+python -m src.cli.core_collect build-citation-graph -o graph.json
+python -m src.cli.core_collect analyze-citation-graph --all --top-n 10
+python -m src.cli.core_collect get-citing-papers <paper_id>
+python -m src.cli.core_collect build-cited-by  # Required for GraphRAG
 ```
 
 ## Documentation

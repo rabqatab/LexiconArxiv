@@ -32,6 +32,11 @@ scripts/
 │   └── run_enrichment.sh
 ├── resolution/               # Reference resolution (citation graph)
 │   └── run_resolution.sh
+├── graph/                    # Citation graph & GraphRAG
+│   ├── run_graph_pipeline.sh # Full graph pipeline
+│   ├── build_cited_by.sh     # Build reverse citations (GraphRAG)
+│   ├── export_graph.sh       # Export to CSV/JSON/GraphML
+│   └── analyze_graph.sh      # PageRank, HITS, communities
 └── maintenance/              # Deduplication, cleanup
     └── run_deduplication.sh
 ```

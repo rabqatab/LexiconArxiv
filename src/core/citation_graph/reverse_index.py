@@ -4,12 +4,45 @@ Builds an in-memory index from resolved_references field in Qdrant.
 """
 
 import logging
+import sys
 from collections import defaultdict
 from typing import Iterator
 
 from src.core.storage import QdrantStorage
 
 logger = logging.getLogger(__name__)
+
+
+def estimate_memory_mb(num_papers: int, num_edges: int, include_metadata: bool) -> float:
+    """Estimate memory usage in MB for the citation index.
+
+    Args:
+        num_papers: Approximate number of papers.
+        num_edges: Approximate number of citation edges.
+        include_metadata: Whether metadata will be cached.
+
+    Returns:
+        Estimated memory usage in MB.
+    """
+    # UUID string: ~36 bytes + Python str overhead (~50 bytes) = ~90 bytes
+    # List entry overhead: ~8 bytes (pointer)
+    # Dict entry overhead: ~50 bytes
+
+    # Forward index: num_citing_papers entries, each with list of refs
+    # Assume ~70% of papers have refs
+    citing_papers = int(num_papers * 0.7)
+    forward_mb = (citing_papers * 50 + num_edges * 8) / (1024 * 1024)
+
+    # Reverse index: similar structure
+    reverse_mb = forward_mb
+
+    # Metadata: ~500 bytes per paper (title, venue, year, etc.)
+    metadata_mb = (num_papers * 500 / (1024 * 1024)) if include_metadata else 0
+
+    # NetworkX graph overhead if building full graph: ~100 bytes per node, ~50 per edge
+    # (This is separate but good to know)
+
+    return forward_mb + reverse_mb + metadata_mb
 
 
 class ReverseCitationIndex:
@@ -40,12 +73,18 @@ class ReverseCitationIndex:
 
         self._is_built = False
 
-    def build_index(self, include_metadata: bool = True) -> None:
+    def build_index(
+        self,
+        include_metadata: bool = True,
+        warn_memory_gb: float = 2.0,
+    ) -> None:
         """Build the reverse citation index by scanning all papers.
 
         Args:
             include_metadata: Whether to cache paper metadata (title, venue, year).
                             Needed for graph node attributes. Adds memory overhead.
+                            Set to False to reduce memory by ~40%.
+            warn_memory_gb: Warn if estimated memory exceeds this threshold (in GB).
         """
         logger.info("Building reverse citation index...")
 
@@ -101,10 +140,22 @@ class ReverseCitationIndex:
                 break
 
         self._is_built = True
+
+        # Estimate and report memory usage
+        est_memory_mb = estimate_memory_mb(total_papers, total_edges, include_metadata)
+        est_memory_gb = est_memory_mb / 1024
+
         logger.info(
-            f"Built reverse citation index: {total_papers} papers, "
-            f"{total_edges} edges, {len(self._reverse)} cited papers"
+            f"Built reverse citation index: {total_papers:,} papers, "
+            f"{total_edges:,} edges, {len(self._reverse):,} cited papers"
         )
+        logger.info(f"Estimated memory usage: {est_memory_mb:.0f} MB ({est_memory_gb:.2f} GB)")
+
+        if est_memory_gb > warn_memory_gb:
+            logger.warning(
+                f"Memory usage ({est_memory_gb:.1f} GB) exceeds threshold ({warn_memory_gb} GB). "
+                f"Consider using include_metadata=False or streaming export."
+            )
 
     def get_citing_papers(self, paper_id: str) -> list[str]:
         """Get papers that cite the given paper.
@@ -237,6 +288,10 @@ class ReverseCitationIndex:
         citing_counts = [len(refs) for refs in self._forward.values()]
         cited_counts = [len(refs) for refs in self._reverse.values()]
 
+        est_memory_mb = estimate_memory_mb(
+            self.num_papers, self.num_edges, bool(self._metadata)
+        )
+
         return {
             "is_built": True,
             "num_papers": self.num_papers,
@@ -248,4 +303,13 @@ class ReverseCitationIndex:
             "max_refs": max(citing_counts) if citing_counts else 0,
             "max_citations": max(cited_counts) if cited_counts else 0,
             "has_metadata": bool(self._metadata),
+            "estimated_memory_mb": est_memory_mb,
         }
+
+    def clear(self) -> None:
+        """Clear the index to free memory."""
+        self._forward.clear()
+        self._reverse.clear()
+        self._metadata.clear()
+        self._is_built = False
+        logger.info("Cleared citation index")

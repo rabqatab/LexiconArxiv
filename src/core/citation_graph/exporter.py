@@ -1,14 +1,17 @@
 """Graph export functionality for citation graphs.
 
 Supports CSV, JSON, GraphML, and GEXF formats.
+Includes streaming export for large graphs that don't fit in memory.
 """
 
 import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 import networkx as nx
+
+from src.core.storage import QdrantStorage
 
 logger = logging.getLogger(__name__)
 
@@ -225,3 +228,185 @@ class GraphExporter:
             self.to_gexf(output_path)
         else:
             raise ValueError(f"Unknown format: {format}. Use csv, json, graphml, or gexf.")
+
+
+class StreamingGraphExporter:
+    """Memory-efficient streaming graph exporter.
+
+    Exports citation graph directly from Qdrant without loading the full
+    graph into memory. Use this for large graphs (>1M edges).
+
+    Only supports CSV format for streaming (edges and nodes exported separately).
+    """
+
+    def __init__(self, storage: QdrantStorage | None = None):
+        """Initialize the streaming exporter.
+
+        Args:
+            storage: QdrantStorage instance. Creates one if not provided.
+        """
+        self.storage = storage or QdrantStorage()
+
+    def stream_edges(self) -> Iterator[tuple[str, str]]:
+        """Stream all citation edges from Qdrant.
+
+        Yields:
+            Tuples of (citing_paper_id, cited_paper_id).
+        """
+        offset = None
+        total_edges = 0
+
+        while True:
+            results, offset = self.storage.client.scroll(
+                collection_name=self.storage.collection_name,
+                limit=1000,
+                offset=offset,
+                with_payload=["resolved_references"],
+            )
+
+            for point in results:
+                paper_id = str(point.id)
+                resolved_refs = point.payload.get("resolved_references", [])
+                for cited_id in resolved_refs:
+                    yield (paper_id, cited_id)
+                    total_edges += 1
+
+            if offset is None:
+                break
+
+        logger.info(f"Streamed {total_edges:,} edges")
+
+    def stream_nodes(
+        self,
+        include_metadata: bool = True,
+    ) -> Iterator[tuple[str, dict]]:
+        """Stream all nodes (papers) from Qdrant.
+
+        Args:
+            include_metadata: Whether to include paper metadata.
+
+        Yields:
+            Tuples of (paper_id, metadata_dict).
+        """
+        fields = ["title", "venue", "year", "citation_count", "doi"] if include_metadata else []
+
+        offset = None
+        total_nodes = 0
+
+        while True:
+            results, offset = self.storage.client.scroll(
+                collection_name=self.storage.collection_name,
+                limit=1000,
+                offset=offset,
+                with_payload=fields if fields else False,
+            )
+
+            for point in results:
+                paper_id = str(point.id)
+                metadata = point.payload if include_metadata else {}
+                yield (paper_id, metadata)
+                total_nodes += 1
+
+            if offset is None:
+                break
+
+        logger.info(f"Streamed {total_nodes:,} nodes")
+
+    def export_edges_csv(self, output_path: Path | str) -> int:
+        """Export edges to CSV using streaming (low memory).
+
+        Args:
+            output_path: Path to output CSV file.
+
+        Returns:
+            Number of edges written.
+        """
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        edge_count = 0
+        with open(output_path, "w") as f:
+            f.write("source,target\n")
+            for source, target in self.stream_edges():
+                f.write(f"{source},{target}\n")
+                edge_count += 1
+
+                if edge_count % 100000 == 0:
+                    logger.info(f"  Written {edge_count:,} edges...")
+
+        logger.info(f"Exported {edge_count:,} edges to {output_path}")
+        return edge_count
+
+    def export_nodes_csv(
+        self,
+        output_path: Path | str,
+        include_metadata: bool = True,
+    ) -> int:
+        """Export nodes to CSV using streaming (low memory).
+
+        Args:
+            output_path: Path to output CSV file.
+            include_metadata: Whether to include paper metadata.
+
+        Returns:
+            Number of nodes written.
+        """
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        columns = ["id"]
+        if include_metadata:
+            columns.extend(["title", "venue", "year", "citation_count", "doi"])
+
+        node_count = 0
+        with open(output_path, "w") as f:
+            f.write(",".join(columns) + "\n")
+
+            for paper_id, metadata in self.stream_nodes(include_metadata):
+                row = [paper_id]
+                if include_metadata:
+                    for col in columns[1:]:
+                        val = metadata.get(col, "")
+                        if isinstance(val, str) and ("," in val or '"' in val):
+                            val = '"' + val.replace('"', '""') + '"'
+                        row.append(str(val) if val is not None else "")
+                f.write(",".join(row) + "\n")
+                node_count += 1
+
+                if node_count % 50000 == 0:
+                    logger.info(f"  Written {node_count:,} nodes...")
+
+        logger.info(f"Exported {node_count:,} nodes to {output_path}")
+        return node_count
+
+    def export_csv(
+        self,
+        output_dir: Path | str,
+        prefix: str = "citation_graph",
+        include_metadata: bool = True,
+    ) -> dict[str, int]:
+        """Export both edges and nodes to CSV using streaming.
+
+        Args:
+            output_dir: Directory for output files.
+            prefix: Filename prefix.
+            include_metadata: Whether to include node metadata.
+
+        Returns:
+            Dict with edge_count and node_count.
+        """
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        edges_path = output_dir / f"{prefix}_edges.csv"
+        nodes_path = output_dir / f"{prefix}_nodes.csv"
+
+        edge_count = self.export_edges_csv(edges_path)
+        node_count = self.export_nodes_csv(nodes_path, include_metadata)
+
+        return {
+            "edge_count": edge_count,
+            "node_count": node_count,
+            "edges_file": str(edges_path),
+            "nodes_file": str(nodes_path),
+        }
