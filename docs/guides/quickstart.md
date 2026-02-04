@@ -239,6 +239,46 @@ See `docker/grobid-arm64/grobid_arm64_troubleshooting.md` for details.
 
 ---
 
+## 7. Incremental Updates (Weekly Cron Job)
+
+After initial collection, set up automated weekly updates:
+
+### Setup Cron Job
+
+```bash
+# Install weekly cron job (runs every Sunday at 2 AM)
+./scripts/crawler/setup_crontab.sh --install
+
+# Or customize schedule (e.g., daily at 3 AM)
+CRON_SCHEDULE="0 3 * * *" ./scripts/crawler/setup_crontab.sh --install
+
+# Check installed cron
+./scripts/crawler/setup_crontab.sh --show
+
+# Remove cron job
+./scripts/crawler/setup_crontab.sh --remove
+```
+
+The cron job runs the full pipeline for **current year only**:
+1. Collection - Crawl new papers from all sources
+2. Deduplication - Remove cross-source duplicates
+3. Enrichment - Add citations/abstracts via OpenAlex + GROBID
+4. Resolution - Build citation graph
+
+Logs are saved to `logs/incremental_pipeline.log`.
+
+### Manual Incremental Run
+
+```bash
+# Run full pipeline for current year only
+./scripts/run_full_pipeline.sh --since-year 2026 --include-workshops
+
+# Or just post-processing (if collection already done)
+./scripts/run_full_pipeline.sh --skip-collection
+```
+
+---
+
 ## Next Steps
 
 After pipeline completion:

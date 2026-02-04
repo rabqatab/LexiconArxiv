@@ -86,11 +86,19 @@ Collects papers from the current year only.
 ./scripts/crawler/check_status.sh
 ```
 
-### Setup Cron Job
+### Setup Cron Job (Weekly Full Pipeline)
 ```bash
-./scripts/crawler/setup_crontab.sh
+# Install weekly cron job (Sunday 2 AM)
+./scripts/crawler/setup_crontab.sh --install
+
+# Custom schedule (e.g., daily at 3 AM)
+CRON_SCHEDULE="0 3 * * *" ./scripts/crawler/setup_crontab.sh --install
+
+# Show/remove
+./scripts/crawler/setup_crontab.sh --show
+./scripts/crawler/setup_crontab.sh --remove
 ```
-Configures weekly incremental collection.
+Runs full pipeline (collection → dedup → enrichment → resolution) for current year.
 
 ---
 
