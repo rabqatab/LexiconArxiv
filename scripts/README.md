@@ -96,7 +96,7 @@ Configures weekly incremental collection.
 
 ## Enrichment Scripts
 
-Adds citations and abstracts via OpenAlex API:
+4-step enrichment: DOI lookup → Title lookup → PDF extraction → Abstracts
 
 ```bash
 ./scripts/enrichment/run_enrichment.sh [OPTIONS]
@@ -104,8 +104,28 @@ Adds citations and abstracts via OpenAlex API:
 Options:
   --parallel N       Concurrent requests (default: 10)
   --batch-size N     Batch size for updates (default: 50)
-  --citations-only   Only enrich citations
+  --skip-citations   Skip DOI-based citation enrichment
+  --skip-title       Skip title-based citation enrichment
+  --skip-pdf         Skip PDF reference extraction
+  --skip-abstracts   Skip abstract enrichment
+  --citations-only   Only enrich citations (skip abstracts)
   --abstracts-only   Only enrich abstracts
+```
+
+**Steps**:
+1. DOI lookup - Papers WITH DOIs via OpenAlex
+2. Title lookup - Papers WITHOUT DOIs via OpenAlex title search
+3. PDF extraction - Papers still missing refs via GROBID (requires GROBID running)
+4. Abstracts - Fill missing abstracts via OpenAlex
+
+**GROBID Setup** (for PDF extraction):
+```bash
+# x86_64 (Intel/AMD)
+docker run -d --rm --name grobid -p 8070:8070 lfoppiano/grobid:0.8.0
+
+# ARM64 (Apple Silicon)
+docker build --no-cache -t grobid-arm64 ./docker/grobid-arm64
+docker run -d --rm --name grobid -p 8070:8070 grobid-arm64
 ```
 
 ---

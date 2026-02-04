@@ -39,15 +39,26 @@ QDRANT_COLLECTION=lexicon_arxiv
 
 ---
 
-## 3. Start Qdrant
+## 3. Start Docker Services
 
 ```bash
-# Run Qdrant container
+# Run Qdrant (vector database)
 docker run -d -p 6333:6333 --name qdrant qdrant/qdrant
 
-# Verify it's running
+# Run GROBID (PDF reference extraction) - optional but recommended
+# For x86_64 (Intel/AMD):
+docker run -d --rm --name grobid -p 8070:8070 lfoppiano/grobid:0.8.0
+
+# For ARM64 (Apple Silicon, ARM Linux) - build from source:
+docker build --no-cache -t grobid-arm64 ./docker/grobid-arm64
+docker run -d --rm --name grobid -p 8070:8070 grobid-arm64
+
+# Verify they're running
 curl http://localhost:6333/health
+curl http://localhost:8070/api/isalive
 ```
+
+> **Note**: GROBID is optional. If not running, the pipeline will skip PDF extraction and only use OpenAlex for reference enrichment.
 
 ---
 
@@ -208,6 +219,23 @@ Reduce parallelism:
 ```bash
 python -m src.cli.core_collect enrich-citations --parallel 5
 ```
+
+### GROBID on ARM64 (Apple Silicon)
+
+The official GROBID image is x86_64 only. On ARM64, you'll see:
+```
+exec format error
+# or
+UnsatisfiedLinkError: libwapiti.so
+```
+
+**Solution**: Build ARM64 image from source:
+```bash
+docker build --no-cache -t grobid-arm64 ./docker/grobid-arm64
+docker run -d --rm --name grobid -p 8070:8070 grobid-arm64
+```
+
+See `docker/grobid-arm64/grobid_arm64_troubleshooting.md` for details.
 
 ---
 

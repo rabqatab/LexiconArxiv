@@ -19,8 +19,13 @@ AI Research Insights Engine - Core Corpus collection and semantic search for top
 # Python 3.11+
 python --version
 
-# Start Qdrant
-docker run -p 6333:6333 qdrant/qdrant
+# Start Qdrant (vector database)
+docker run -d -p 6333:6333 --name qdrant qdrant/qdrant
+
+# Start GROBID (PDF extraction) - optional
+# x86_64:
+docker run -d --rm --name grobid -p 8070:8070 lfoppiano/grobid:0.8.0
+# ARM64 (Apple Silicon): see docker/grobid-arm64/
 ```
 
 ### Installation
