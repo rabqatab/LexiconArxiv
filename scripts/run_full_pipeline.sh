@@ -111,7 +111,26 @@ fi
 # Step 3: Enrichment
 if [ "$SKIP_ENRICHMENT" = false ]; then
     echo "============ [3/4] ENRICHMENT ============"
+
+    # 3a. Enrich papers WITH DOIs via OpenAlex
+    echo "[3a] Enriching citations (papers with DOIs)..."
     uv run python -m src.cli.core_collect enrich-citations --parallel "$PARALLEL"
+
+    # 3b. Enrich papers WITHOUT DOIs via title search
+    echo "[3b] Enriching citations by title (papers without DOIs)..."
+    uv run python -m src.cli.core_collect enrich-citations-by-title --parallel 5
+
+    # 3c. Extract refs from PDFs (if GROBID is running)
+    if curl -s http://localhost:8070/api/isalive > /dev/null 2>&1; then
+        echo "[3c] Extracting references from PDFs (GROBID available)..."
+        uv run python -m src.cli.core_collect extract-pdf-refs
+    else
+        echo "[3c] GROBID not running - skipping PDF extraction"
+        echo "    To enable: docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.0"
+    fi
+
+    # 3d. Enrich abstracts
+    echo "[3d] Enriching abstracts..."
     uv run python -m src.cli.core_collect enrich-abstracts --parallel "$PARALLEL"
     echo ""
 else

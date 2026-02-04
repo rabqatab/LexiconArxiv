@@ -123,11 +123,12 @@ class PDFReferenceExtractor:
         if self._client:
             await self._client.aclose()
 
-    async def download_pdf(self, url: str) -> bytes | None:
-        """Download PDF from URL.
+    async def download_pdf(self, url: str, max_retries: int = 3) -> bytes | None:
+        """Download PDF from URL with retry logic.
 
         Args:
             url: PDF URL.
+            max_retries: Maximum retry attempts for transient errors.
 
         Returns:
             PDF bytes or None if failed.
@@ -135,27 +136,40 @@ class PDFReferenceExtractor:
         if not self._client:
             raise RuntimeError("Client not initialized.")
 
-        try:
-            response = await self._client.get(
-                url,
-                timeout=self.download_timeout,
-                headers={"User-Agent": "LexiconArxiv/1.0 (Citation enrichment)"},
-            )
-            response.raise_for_status()
+        for attempt in range(max_retries):
+            try:
+                response = await self._client.get(
+                    url,
+                    timeout=self.download_timeout,
+                    headers={"User-Agent": "LexiconArxiv/1.0 (Citation enrichment)"},
+                )
+                response.raise_for_status()
 
-            content_type = response.headers.get("content-type", "")
-            if "pdf" not in content_type.lower() and not url.endswith(".pdf"):
-                logger.warning(f"Not a PDF: {url} (content-type: {content_type})")
+                content_type = response.headers.get("content-type", "")
+                if "pdf" not in content_type.lower() and not url.endswith(".pdf"):
+                    logger.warning(f"Not a PDF: {url} (content-type: {content_type})")
+                    return None
+
+                return response.content
+
+            except httpx.TimeoutException:
+                logger.warning(f"Timeout downloading {url} (attempt {attempt + 1}/{max_retries})")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                    continue
+                return None
+            except (httpx.RemoteProtocolError, httpx.ConnectError) as e:
+                # Transient network errors - retry
+                logger.warning(f"Network error downloading {url} (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+                return None
+            except Exception as e:
+                logger.warning(f"Error downloading {url}: {e}")
                 return None
 
-            return response.content
-
-        except httpx.TimeoutException:
-            logger.warning(f"Timeout downloading {url}")
-            return None
-        except Exception as e:
-            logger.warning(f"Error downloading {url}: {e}")
-            return None
+        return None
 
     async def extract_references_from_pdf(
         self, pdf_content: bytes

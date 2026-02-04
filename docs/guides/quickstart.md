@@ -82,16 +82,23 @@ python -m src.cli.core_collect collect-all-sources --since-year 2018 --include-w
 # 2. Deduplicate
 python -m src.cli.core_collect deduplicate
 
-# 3. Enrich citations
+# 3. Enrich citations (papers WITH DOIs)
 python -m src.cli.core_collect enrich-citations --parallel 10
 
-# 4. Enrich abstracts
+# 4. Enrich citations by title (papers WITHOUT DOIs - e.g., OpenReview)
+python -m src.cli.core_collect enrich-citations-by-title --parallel 5
+
+# 5. Extract refs from PDFs (papers still missing refs - requires GROBID)
+# Start GROBID first: docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.0
+python -m src.cli.core_collect extract-pdf-refs
+
+# 6. Enrich abstracts
 python -m src.cli.core_collect enrich-abstracts --parallel 10
 
-# 5. Resolve references (build citation graph)
+# 7. Resolve references (build citation graph)
 python -m src.cli.core_collect resolve-refs
 
-# 6. Check final status
+# 8. Check final status
 python -m src.cli.core_collect status
 python -m src.cli.core_collect ref-stats
 ```
