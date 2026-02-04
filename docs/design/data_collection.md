@@ -861,26 +861,25 @@ python -m src.cli.core_collect init-storage
 python -m src.cli.core_collect clear-checkpoint
 ```
 
-### 11.4 Next Steps
+### 11.4 Remaining Work (Application Layer)
 
-1. **Implement ACL Anthology Crawler**
-   - Clone XML files from GitHub
-   - Parse with co-location grouping
-   - Extract paper metadata
+The Data Pipeline Layer is complete. Remaining work is in the Application Layer:
 
-2. **Implement DBLP Crawler**
-   - Use DBLP API for IR/Legal venues
-   - Map to RawPaper format
+| Component | File | Status |
+|-----------|------|--------|
+| Embedding Pipeline | `src/core/embedding.py` | ❌ Not started (using placeholder vectors) |
+| FastAPI Server | `src/api/` | ❌ Not started |
+| Search Service | `src/api/search.py` | ❌ Not started |
+| Graph Service | `src/api/graph.py` | ❌ Not started |
+| On-demand Retrieval | `src/core/ondemand/` | ❌ Not started |
+| Web Frontend | `frontend/` | ❌ Not started |
 
-3. **Cross-source Deduplication**
-   - Match by DOI (primary)
-   - Match by title+year (fallback)
-   - Prefer OpenAlex record when available (has more metadata)
-
-4. **Run Collection**
-   - Phase 1: OpenAlex (ML/AI venues)
-   - Phase 2: ACL Anthology (NLP venues)
-   - Phase 3: DBLP (IR/Legal venues)
+**Priority Order:**
+1. **Embedding Pipeline** - Generate real embeddings (SPECTER2) to enable semantic search
+2. **FastAPI Server** - Basic search endpoint with hybrid BM25 + semantic
+3. **Graph Service** - Citation network API, trend analysis
+4. **On-demand Retrieval** - arXiv real-time search with Core connection detection
+5. **Web Frontend** - Per `docs/design/ux_design.md`
 
 ### 11.5 Environment Configuration
 

@@ -330,3 +330,39 @@ stats = storage.get_data_quality_stats()
 print(f'Papers with abstracts: {stats[\"by_source\"]}')
 "
 ```
+
+---
+
+## Implementation Status (Feb 2026)
+
+All enrichment pipeline enhancements have been implemented:
+
+| Feature | Status | Module |
+|---------|--------|--------|
+| Abstract Enrichment | ✅ Complete | `src/core/enrichment/openalex.py` |
+| Data Quality Dashboard | ✅ Complete | `src/cli/core_collect.py` (`data-quality`) |
+| Parallel Enrichment | ✅ Complete | `--parallel` flag on enrichment commands |
+| Citation Enrichment (DOI) | ✅ Complete | `enrich-citations` command |
+| Citation Enrichment (Title) | ✅ Complete | `enrich-citations-by-title` command |
+| PDF Reference Extraction | ✅ Complete | `extract-pdf-refs` (requires GROBID) |
+
+### Additional Enrichment (Added Feb 2026)
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Title-based OpenAlex lookup | ✅ Complete | For papers without DOI |
+| PDF extraction via GROBID | ✅ Complete | Extracts refs from PDF for papers with no DOI match |
+| GROBID ARM64 support | ✅ Complete | Native build for Apple Silicon |
+
+### CLI Commands
+
+```bash
+# 4-step enrichment pipeline
+python -m src.cli.core_collect enrich-citations --parallel 10       # Step 1: DOI lookup
+python -m src.cli.core_collect enrich-citations-by-title --parallel 5  # Step 2: Title lookup
+python -m src.cli.core_collect extract-pdf-refs                      # Step 3: PDF extraction
+python -m src.cli.core_collect enrich-abstracts --parallel 10        # Step 4: Abstracts
+
+# Data quality
+python -m src.cli.core_collect data-quality
+```

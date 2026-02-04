@@ -978,6 +978,115 @@ class QdrantStorage:
 
         return stats
 
+    # =========================================================================
+    # Citation Graph Methods
+    # =========================================================================
+
+    def batch_update_graph_metrics(
+        self,
+        updates: list[tuple[str, dict]],  # [(point_id, {metric: value}), ...]
+    ) -> int:
+        """Batch update graph metrics (pagerank, hub_score, etc.) for papers.
+
+        Args:
+            updates: List of (point_id, metrics_dict) tuples where
+                     metrics_dict contains fields like pagerank, hub_score,
+                     authority_score, community_id.
+
+        Returns:
+            Number of papers updated.
+        """
+        for point_id, metrics in updates:
+            self.client.set_payload(
+                collection_name=self.collection_name,
+                payload=metrics,
+                points=[point_id],
+            )
+        return len(updates)
+
+    def get_citation_graph_stats(self) -> dict[str, Any]:
+        """Get statistics about the citation graph.
+
+        Returns:
+            Dictionary with citation graph metrics including:
+            - papers_with_refs: Papers with referenced_works
+            - papers_with_resolved_refs: Papers with resolved_references
+            - total_edges: Total resolved citation edges
+            - coverage: Percentage of refs that are resolved
+        """
+        stats: dict[str, Any] = {
+            "total_papers": 0,
+            "papers_with_refs": 0,
+            "papers_with_resolved_refs": 0,
+            "total_raw_refs": 0,
+            "total_resolved_refs": 0,
+            "papers_with_graph_metrics": 0,
+        }
+
+        offset = None
+        while True:
+            results, offset = self.client.scroll(
+                collection_name=self.collection_name,
+                limit=1000,
+                offset=offset,
+                with_payload=[
+                    "referenced_works",
+                    "resolved_references",
+                    "pagerank",
+                ],
+            )
+
+            for point in results:
+                payload = point.payload
+                stats["total_papers"] += 1
+
+                refs = payload.get("referenced_works", [])
+                if refs:
+                    stats["papers_with_refs"] += 1
+                    stats["total_raw_refs"] += len(refs)
+
+                resolved = payload.get("resolved_references", [])
+                if resolved:
+                    stats["papers_with_resolved_refs"] += 1
+                    stats["total_resolved_refs"] += len(resolved)
+
+                if payload.get("pagerank") is not None:
+                    stats["papers_with_graph_metrics"] += 1
+
+            if offset is None:
+                break
+
+        # Calculate coverage
+        if stats["total_raw_refs"] > 0:
+            stats["resolution_coverage"] = (
+                stats["total_resolved_refs"] / stats["total_raw_refs"] * 100
+            )
+        else:
+            stats["resolution_coverage"] = 0.0
+
+        return stats
+
+    def get_paper_by_id(self, point_id: str) -> dict[str, Any] | None:
+        """Get a paper by its Qdrant point ID.
+
+        Args:
+            point_id: The Qdrant point ID.
+
+        Returns:
+            Paper payload if found, None otherwise.
+        """
+        try:
+            result = self.client.retrieve(
+                collection_name=self.collection_name,
+                ids=[point_id],
+                with_payload=True,
+            )
+            if result:
+                return result[0].payload
+        except Exception:
+            pass
+        return None
+
     def get_paper_by_normalized_title(
         self, normalized_title: str
     ) -> tuple[str, dict] | None:

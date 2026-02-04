@@ -22,8 +22,22 @@ WORKDIR /opt/grobid
 RUN mkdir -p /opt/grobid/grobid-home/lib/lin-64 \
  && cp /opt/wapiti/build/libwapiti.so /opt/grobid/grobid-home/lib/lin-64/libwapiti.so
 
-# Verify it's there
+# --- Build pdfalto (arm64) for PDF to XML conversion ---
+RUN apt-get update && apt-get install -y libxml2-dev libpng-dev && rm -rf /var/lib/apt/lists/*
+RUN git clone --depth 1 https://github.com/kermitt2/pdfalto.git /opt/pdfalto
+WORKDIR /opt/pdfalto
+RUN git submodule update --init --recursive || true
+RUN mkdir -p build && cd build && cmake .. && make -j"$(nproc)"
+
+# Place arm64 pdfalto where GROBID expects it
+WORKDIR /opt/grobid
+RUN mkdir -p /opt/grobid/grobid-home/pdfalto/lin-64 \
+ && cp /opt/pdfalto/build/pdfalto /opt/grobid/grobid-home/pdfalto/lin-64/pdfalto \
+ && chmod +x /opt/grobid/grobid-home/pdfalto/lin-64/pdfalto
+
+# Verify both binaries are there
 RUN ls -al /opt/grobid/grobid-home/lib/lin-64
+RUN ls -al /opt/grobid/grobid-home/pdfalto/lin-64
 
 # Fix Gradle 7 duplicate entries error in installDist
 RUN printf '\n// Added by Docker build to avoid Gradle duplicate entries in installDist\n' >> grobid-service/build.gradle \
