@@ -78,11 +78,12 @@ python -m src.cli.core_collect init-storage
 ./scripts/run_full_pipeline.sh --since-year 2018 --include-workshops
 ```
 
-This runs all 4 stages:
+This runs all 5 stages:
 1. **Collection** - Crawl papers from all sources
 2. **Deduplication** - Remove cross-source duplicates
 3. **Enrichment** - Add citations and abstracts via OpenAlex
 4. **Resolution** - Build citation graph (resolve references to internal IDs)
+5. **Keyword Extraction** - Extract acronyms and semantic keywords for BM25 search
 
 ### Option B: Step by Step
 
@@ -109,9 +110,13 @@ python -m src.cli.core_collect enrich-abstracts --parallel 10
 # 7. Resolve references (build citation graph)
 python -m src.cli.core_collect resolve-refs
 
-# 8. Check final status
+# 8. Extract keywords (for BM25 search)
+python -m src.cli.core_collect extract-keywords
+
+# 9. Check final status
 python -m src.cli.core_collect status
 python -m src.cli.core_collect ref-stats
+python -m src.cli.core_collect keyword-stats
 ```
 
 ---
@@ -194,6 +199,26 @@ python -m src.cli.core_collect collect-openreview --all --since-year 2018
 # Skip enrichment
 ./scripts/run_full_pipeline.sh --skip-enrichment
 ```
+
+### Keyword Extraction Options
+
+```bash
+# Preview without saving
+python -m src.cli.core_collect extract-keywords --dry-run --limit 10
+
+# Regex-only extraction (faster, no KeyBERT model loading)
+python -m src.cli.core_collect extract-keywords --no-keybert
+
+# Re-extract ALL papers (replace existing keywords)
+python -m src.cli.core_collect extract-keywords --force
+
+# Custom batch size
+python -m src.cli.core_collect extract-keywords --batch-size 200
+```
+
+By default, papers with existing keywords are skipped. Use `--force` to re-extract.
+
+See [Keyword Extraction Pipeline](../pipelines/keyword_extraction.md) for detailed documentation.
 
 ---
 
@@ -285,4 +310,14 @@ After pipeline completion:
 
 1. **Verify data quality**: `python -m src.cli.core_collect status`
 2. **Check citation graph**: `python -m src.cli.core_collect ref-stats`
-3. **Start API server**: `uvicorn app.main:app --reload`
+3. **Check keyword coverage**: `python -m src.cli.core_collect keyword-stats`
+4. **Start API server**: `uvicorn app.main:app --reload`
+
+---
+
+## See Also
+
+- [CLI Reference](../reference/cli.md) - Complete CLI command reference
+- [Keyword Extraction Pipeline](../pipelines/keyword_extraction.md) - Keyword/acronym extraction details
+- [Data Model](../architecture/data_model.md) - Qdrant schema and payload fields
+- [Troubleshooting Guide](./troubleshooting.md) - Common issues and solutions

@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-본 문서는 AI/NLP 논문 검색 엔진의 테스트 전략과 품질 보증 방법을 정의합니다.
+This document defines the testing strategy and quality assurance methodology for the AI/NLP paper search engine.
 
 ---
 
@@ -31,6 +31,7 @@
 | Query Planner | 90% | Entity extraction, query expansion |
 | Deduplicator | 95% | DOI matching, fuzzy matching |
 | Score Fusion | 90% | RRF, weighted fusion |
+| Keyword Extractor | 90% | Regex patterns, KeyBERT, stopword filtering |
 | Data Normalizer | 85% | Title normalization, author parsing |
 | API Validators | 95% | Input validation, error handling |
 
@@ -67,7 +68,7 @@ class TestQueryAnalyzer:
 
     def test_handles_korean_query(self):
         analyzer = QueryAnalyzer()
-        result = analyzer.analyze("한국어 LLM 논문")
+        result = analyzer.analyze("Korean LLM papers")
 
         assert result.language == "ko"
 
@@ -173,7 +174,77 @@ class TestDeduplicator:
         assert dedup._normalize_title("KULLM - Korean LLM") == "kullm korean llm"
 ```
 
-### 3.4 Score Fusion Tests
+### 3.4 Keyword Extraction Tests
+
+See [Keyword Extraction Pipeline](../pipelines/keyword_extraction.md) for implementation details.
+
+```python
+# tests/unit/test_keyword_extraction.py
+
+class TestKeywordExtractor:
+    def test_extracts_colon_acronym(self):
+        extractor = KeywordExtractor()
+        keywords = extractor.extract(
+            title="BERT: Pre-training of Deep Bidirectional Transformers",
+            abstract=None
+        )
+        assert "BERT" in keywords
+
+    def test_extracts_parenthesis_acronym(self):
+        extractor = KeywordExtractor()
+        keywords = extractor.extract(
+            title="Retrieval-Augmented Generation (RAG) for NLP",
+            abstract=None
+        )
+        assert "RAG" in keywords
+
+    def test_extracts_from_abstract(self):
+        extractor = KeywordExtractor()
+        keywords = extractor.extract(
+            title="A New Approach",
+            abstract="We introduce HyDE, a method that uses hypothetical documents."
+        )
+        assert "HyDE" in keywords
+
+    def test_filters_stopwords(self):
+        extractor = KeywordExtractor()
+        keywords = extractor.extract(
+            title="IT IS A METHOD",
+            abstract=None
+        )
+        assert "IT" not in keywords
+        assert "IS" not in keywords
+
+    def test_minimum_length_filter(self):
+        extractor = KeywordExtractor(min_keyword_length=2)
+        keywords = extractor.extract(
+            title="A B C Test Model",
+            abstract=None
+        )
+        # Single letters should be filtered
+        assert "A" not in keywords
+        assert "B" not in keywords
+
+    def test_keybert_extraction(self):
+        extractor = KeywordExtractor(use_keybert=True, keybert_top_n=3)
+        keywords = extractor.extract(
+            title="Test Paper",
+            abstract="This paper explores retrieval augmented generation for knowledge-intensive NLP tasks."
+        )
+        # KeyBERT should extract semantic keywords
+        assert len(keywords) >= 1
+
+
+class TestKeywordEnrichmentPipeline:
+    async def test_batch_processing(self, storage_with_papers):
+        pipeline = KeywordEnrichmentPipeline()
+        stats = await pipeline.run(batch_size=10, limit=50)
+
+        assert stats["processed_count"] == 50
+        assert stats["papers_with_keywords"] > 0
+```
+
+### 3.5 Score Fusion Tests
 
 ```python
 # tests/unit/test_score_fusion.py
@@ -194,7 +265,7 @@ class TestScoreFusion:
 
         result = fusion._reciprocal_rank_fusion(bm25_results, semantic_results)
 
-        # p1과 p2가 둘 다 상위에 있으므로 높은 RRF 점수
+        # p1 and p2 both rank high, so they get high RRF scores
         top_ids = [r.paper_id for r in result[:2]]
         assert "p1" in top_ids
         assert "p2" in top_ids
@@ -203,11 +274,11 @@ class TestScoreFusion:
         fusion = ScoreFusion()
         results = [SearchHit(paper_id="p1", score=1.0)]
 
-        # k=60일 때 rank 1의 점수
+        # When k=60, rank 1 score
         rrf_60 = fusion._reciprocal_rank_fusion(results, k=60)
         assert abs(rrf_60[0].score - 1/61) < 0.001
 
-        # k=0일 때 rank 1의 점수
+        # When k=0, rank 1 score
         rrf_0 = fusion._reciprocal_rank_fusion(results, k=0)
         assert abs(rrf_0[0].score - 1.0) < 0.001
 
@@ -233,7 +304,7 @@ class TestScoreFusion:
 
         result = fusion._apply_recency_boost(papers, decay=0.1)
 
-        # 2024 논문이 더 높은 점수
+        # 2024 paper gets higher score
         assert result[0].paper_id == "p2"
 ```
 
@@ -257,16 +328,16 @@ class TestSearchPipeline:
         )
 
     async def test_full_search_flow(self, pipeline):
-        # Given: 인덱싱된 테스트 데이터
+        # Given: indexed test data
         await self._seed_test_data(pipeline)
 
-        # When: 검색 실행
+        # When: execute search
         result = await pipeline.search(
             query="instruction tuning",
             options=SearchOptions(limit=10)
         )
 
-        # Then: 결과 검증
+        # Then: verify results
         assert result.total_count > 0
         assert len(result.papers) <= 10
         assert result.transparency.sources_searched
@@ -281,12 +352,12 @@ class TestSearchPipeline:
             )
         )
 
-        # BM25와 semantic 결과가 모두 포함
+        # Both BM25 and semantic results are included
         assert any(p.scores.bm25 > 0 for p in result.papers)
         assert any(p.scores.semantic > 0 for p in result.papers)
 
     async def test_dedup_works_across_sources(self, pipeline):
-        # 동일 논문이 다른 소스에서 수집된 경우
+        # Same paper collected from different sources
         paper = RawPaper(
             doi="10.1234/test",
             title="Test Paper",
@@ -297,7 +368,7 @@ class TestSearchPipeline:
 
         result = await pipeline.search(query="Test Paper")
 
-        # 중복 제거되어 1개만 반환
+        # Deduplicated to return only 1 result
         assert result.total_count == 1
         assert len(result.papers[0].source_matched) == 2
 
@@ -322,7 +393,7 @@ class TestExternalAPIIntegration:
         assert all(isinstance(r, RawPaper) for r in results)
 
     async def test_handles_api_rate_limit(self, mock_openalex):
-        # 429 응답 시 재시도
+        # Retry on 429 response
         mock_openalex.add(
             responses.GET,
             "https://api.openalex.org/works",
@@ -338,7 +409,7 @@ class TestExternalAPIIntegration:
         client = OpenAlexClient()
         results = await client.search("test")
 
-        # 재시도 후 성공
+        # Success after retry
         assert results is not None
 ```
 
@@ -378,7 +449,7 @@ class TestDatabaseOperations:
         assert db.get_paper(paper_id) is None
 
     def test_dedup_finds_existing(self, db):
-        # DOI로 중복 찾기
+        # Find duplicates by DOI
         paper = CanonicalPaper(doi="10.1234/existing")
         db.create_paper(paper)
 
@@ -447,7 +518,7 @@ class TestSearchAPI:
             assert paper["year"] >= 2023
 
     def test_export_bibtex(self, client):
-        # 먼저 검색
+        # First, search
         search_response = client.post(
             "/v1/search",
             json={"query": "test"},
@@ -469,7 +540,7 @@ class TestSearchAPI:
         assert "@" in response.text  # BibTeX format
 
     def test_rate_limiting(self, client):
-        # 빠르게 여러 요청
+        # Rapid multiple requests
         for _ in range(15):
             client.post(
                 "/v1/search",
@@ -502,7 +573,7 @@ class TestMCPServer:
         assert all("title" in p for p in result["papers"])
 
     async def test_get_paper_details_tool(self, mcp_client):
-        # 검색 후 상세 조회
+        # Search then get details
         search = await mcp_client.call_tool(
             "search_papers",
             {"query": "test", "limit": 1}
@@ -530,7 +601,7 @@ class TestMCPServer:
 @pytest.mark.performance
 class TestSearchPerformance:
     def test_search_latency_p95(self, benchmark):
-        """검색 P95 latency < 2초"""
+        """Search P95 latency < 2 seconds"""
         client = SearchClient()
 
         results = benchmark.pedantic(
@@ -544,7 +615,7 @@ class TestSearchPerformance:
         assert benchmark.stats["p95"] < 3.0
 
     def test_concurrent_searches(self):
-        """동시 검색 100건 처리"""
+        """Handle 100 concurrent searches"""
         client = SearchClient()
 
         async def run_concurrent():
@@ -560,13 +631,13 @@ class TestSearchPerformance:
         elapsed = time.time() - start
 
         assert len(results) == 100
-        assert elapsed < 30  # 30초 이내
+        assert elapsed < 30  # Within 30 seconds
 
 
 @pytest.mark.performance
 class TestIndexPerformance:
     def test_bulk_indexing_throughput(self):
-        """초당 1000 논문 인덱싱"""
+        """Index 1000 papers per second"""
         indexer = PaperIndexer()
         papers = generate_test_papers(10000)
 
@@ -630,11 +701,11 @@ export default function () {
 # tests/quality/test_recall.py
 
 class TestSearchRecall:
-    """Known relevant papers에 대한 recall 측정"""
+    """Measure recall for known relevant papers"""
 
     @pytest.fixture
     def ground_truth(self):
-        """수동으로 레이블링된 테스트 셋"""
+        """Manually labeled test set"""
         return {
             "instruction tuning": [
                 "2304.12345",  # KULLM
@@ -650,7 +721,7 @@ class TestSearchRecall:
         }
 
     def test_recall_at_100(self, search_client, ground_truth):
-        """Top 100 결과에서 recall 측정"""
+        """Measure recall in top 100 results"""
         for query, relevant_ids in ground_truth.items():
             results = search_client.search(query, limit=100)
             result_ids = {p.arxiv_id for p in results.papers}
@@ -661,8 +732,8 @@ class TestSearchRecall:
             assert recall >= 0.7, f"Recall for '{query}': {recall}"
 
     def test_recall_vs_google_scholar(self, search_client):
-        """Google Scholar 대비 recall 비교"""
-        # 사전에 수집된 Scholar 결과와 비교
+        """Compare recall against Google Scholar"""
+        # Compare with pre-collected Scholar results
         scholar_results = load_scholar_baseline()
 
         for query, scholar_papers in scholar_results.items():
@@ -673,9 +744,9 @@ class TestSearchRecall:
             overlap = len(our_ids.intersection(scholar_ids))
             our_unique = len(our_ids - scholar_ids)
 
-            # 최소 80% overlap
+            # Minimum 80% overlap
             assert overlap / len(scholar_ids) >= 0.8
-            # 추가 발견 논문 존재
+            # Additional papers found
             assert our_unique > 0
 ```
 
@@ -686,7 +757,7 @@ class TestSearchRecall:
 
 class TestRankingQuality:
     def test_ndcg_at_10(self, search_client, relevance_judgments):
-        """NDCG@10 측정"""
+        """Measure NDCG@10"""
         for query, judgments in relevance_judgments.items():
             results = search_client.search(query, limit=10)
 
@@ -703,7 +774,7 @@ class TestRankingQuality:
             assert ndcg >= 0.6
 
     def test_relevant_in_top_5(self, search_client, known_relevant):
-        """알려진 관련 논문이 top 5에 포함"""
+        """Known relevant papers should be in top 5"""
         for query, must_include in known_relevant.items():
             results = search_client.search(query, limit=5)
             top_ids = {p.id for p in results.papers}

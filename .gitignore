@@ -68,3 +68,6 @@ __marimo__/
 
 # ruff
 .ruff_cache/
+
+# obsidian
+.obsidian/

@@ -251,8 +251,8 @@ class PaperEnricher:
 | `src/core/citation_enricher.py` | **DELETE** | Merged into enricher.py |
 | `src/core/storage.py` | **MODIFY** | Add abstract and stats methods |
 | `src/cli/core_collect.py` | **MODIFY** | Add new CLI commands |
-| `docs/guides/crawling_howto.md` | **MODIFY** | Document new commands |
-| `docs/design/data_collection.md` | **MODIFY** | Update architecture |
+| `docs/guides/crawling.md` | **MODIFY** | Document new commands |
+| `docs/pipelines/data_collection.md` | **MODIFY** | Update architecture |
 
 ---
 
@@ -276,7 +276,7 @@ class PaperEnricher:
    - Support JSON output and venue breakdown
 
 4. **Phase 4: Update Documentation**
-   - Update crawling_howto.md
+   - Update crawling.md
    - Update data_collection.md
 
 ---
@@ -333,6 +333,62 @@ print(f'Papers with abstracts: {stats[\"by_source\"]}')
 
 ---
 
+---
+
+## 4. Keyword Extraction (NEW)
+
+### Problem
+
+Papers lack searchable keywords/acronyms, making exact paper retrieval difficult (e.g., "give me the HyDE paper").
+
+### Solution
+
+Two-phase extraction pipeline:
+
+1. **Regex-based Acronym Extraction**: Extract explicit acronyms from titles/abstracts
+2. **KeyBERT Semantic Extraction**: Extract semantic keywords from abstracts
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                 Keyword Extraction Pipeline                      │
+├─────────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────────────┐ │
+│  │   Qdrant    │───▶│  Phase 1    │───▶│     Phase 2         │ │
+│  │  (papers)   │    │  Regex      │    │     KeyBERT         │ │
+│  └─────────────┘    │  Extraction │    │     Extraction      │ │
+│                     └──────┬──────┘    └──────────┬──────────┘ │
+│                            │                      │             │
+│                            ▼                      ▼             │
+│                     ┌─────────────────────────────────────┐     │
+│                     │      Filter & Merge Keywords        │     │
+│                     └──────────────────┬──────────────────┘     │
+│                                        │                        │
+│                                        ▼                        │
+│                              ┌─────────────────┐                │
+│                              │  Update Qdrant  │                │
+│                              │   (keywords)    │                │
+│                              └─────────────────┘                │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### CLI Commands
+
+```bash
+# Keyword extraction
+python -m src.cli.core_collect extract-keywords              # Full extraction
+python -m src.cli.core_collect extract-keywords --dry-run    # Preview
+python -m src.cli.core_collect extract-keywords --no-keybert # Regex only
+
+# Statistics
+python -m src.cli.core_collect keyword-stats
+```
+
+See [Keyword Extraction Design](./keyword_extraction.md) for full details.
+
+---
+
 ## Implementation Status (Feb 2026)
 
 All enrichment pipeline enhancements have been implemented:
@@ -363,6 +419,66 @@ python -m src.cli.core_collect enrich-citations-by-title --parallel 5  # Step 2:
 python -m src.cli.core_collect extract-pdf-refs                      # Step 3: PDF extraction
 python -m src.cli.core_collect enrich-abstracts --parallel 10        # Step 4: Abstracts
 
+# Semantic Scholar fallback (for ACM and other blocked sources)
+python -m src.cli.core_collect enrich-s2                            # DOI-based
+python -m src.cli.core_collect enrich-s2 --by-title                 # Title-based
+
 # Data quality
 python -m src.cli.core_collect data-quality
 ```
+
+---
+
+## 5. Semantic Scholar Enrichment
+
+### Overview
+
+Semantic Scholar (S2) provides an alternative API for citation data, particularly useful for:
+- Papers from sources that block PDF downloads (e.g., ACM Digital Library)
+- Papers not indexed by OpenAlex
+- ML/AI conference papers (NeurIPS, ICML, ICLR, ACL)
+
+### API Key (Recommended)
+
+Get a free API key for ~30x faster processing:
+
+1. Register at: https://www.semanticscholar.org/product/api#api-key
+2. Set the environment variable:
+   ```bash
+   export S2_API_KEY=your_key_here
+   ```
+
+### Rate Limits
+
+| Configuration | Requests/sec | Concurrent | Time for 10K papers |
+|--------------|-------------|------------|---------------------|
+| Without API key | 0.3 | 1 | ~9 hours |
+| With API key | 1 | 1 | ~3 hours |
+
+S2 API limit with key: **1 request per second** (cumulative across all endpoints).
+
+Rate limits are **auto-adjusted** based on API key presence.
+
+### Usage
+
+```bash
+# Basic enrichment (auto-detects API key)
+python -m src.cli.core_collect enrich-s2
+
+# With explicit API key
+S2_API_KEY=your_key python -m src.cli.core_collect enrich-s2
+
+# Title-based search (for papers without DOI)
+python -m src.cli.core_collect enrich-s2 --by-title
+
+# Override rate limits manually
+python -m src.cli.core_collect enrich-s2 --delay 0.5 --parallel 3
+```
+
+### Implementation
+
+The S2 enricher (`src/core/enrichment/semantic_scholar.py`) supports:
+- DOI-based lookup via `/graph/v1/paper/DOI:{doi}`
+- Title-based search via `/graph/v1/paper/search`
+- Automatic rate limit handling with retry
+- Checkpoint-based resumption

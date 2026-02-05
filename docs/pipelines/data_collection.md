@@ -2,18 +2,18 @@
 
 ## 1. Overview
 
-본 문서는 **Venue 기반 Core Corpus 수집** 전략과 **On-demand Retrieval** 구현 방법을 정의합니다.
+This document defines the **Venue-based Core Corpus collection** strategy and **On-demand Retrieval** implementation.
 
-### 1.1 수집 전략 요약
+### 1.1 Collection Strategy Summary
 
-| 구분 | 대상 | 시점 | 저장 |
-|------|------|------|------|
-| **Core Corpus** | Tier 0/1/2 venue 전체 논문 | 사전 수집 | 영구 저장 |
-| **On-demand** | arXiv, OpenAlex 검색 결과 | 질의 시점 | 캐시 (선택적 저장) |
+| Type | Target | Timing | Storage |
+|------|--------|--------|---------|
+| **Core Corpus** | All papers from Tier 0/1/2 venues | Pre-collected | Permanent |
+| **On-demand** | arXiv, OpenAlex search results | Query-time | Cache (optional persist) |
 
 ### 1.2 Multi-Source Architecture
 
-OpenAlex만으로는 NLP venue 커버리지가 부족하여 다중 소스 전략 필요:
+OpenAlex alone has insufficient NLP venue coverage, requiring a multi-source strategy:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -42,72 +42,19 @@ OpenAlex만으로는 NLP venue 커버리지가 부족하여 다중 소스 전략
 
 ---
 
-## 2. Venue 분류
+## 2. Venue Classification
 
-### 2.1 Tier 0 — Core Corpus (11 venues)
+See [Venue Reference](../reference/venues.md) for complete venue details.
 
-#### AI / ML General
-| Venue | Full Name | Type | OpenAlex Source ID | Alt IDs |
-|-------|-----------|------|-------------------|---------|
-| NeurIPS | Neural Information Processing Systems | conference | S4306420609 | - |
-| ICML | International Conference on Machine Learning | conference | S4306419644 | - |
-| ICLR | International Conference on Learning Representations | conference | S4306419637 | - |
-| AAAI | AAAI Conference on Artificial Intelligence | conference | S4210191458 | - |
-| IJCAI | International Joint Conference on AI | conference | S4306419999 | S4363608755 |
-| JMLR | Journal of Machine Learning Research | journal | S118988714 | - |
+### 2.1 Tier Summary
 
-#### NLP / Language
-| Venue | Full Name | Type | OpenAlex Source ID | Alt IDs |
-|-------|-----------|------|-------------------|---------|
-| ACL | Annual Meeting of the ACL | conference | S4306420508 | S4363608652 |
-| EMNLP | Empirical Methods in NLP | conference | S4306418267 | S4363608991 |
+| Tier | Count | Description | Primary Source |
+|------|-------|-------------|----------------|
+| Tier 0 | 11 | Core venues (NeurIPS, ICML, ACL, etc.) | OpenAlex, ACL Anthology |
+| Tier 1 | 14 | Extended venues (NAACL, WSDM, etc.) | OpenAlex, ACL Anthology, DBLP |
+| Tier 2 | 3+ | Specialized + 90+ workshops | DBLP, ACL Anthology |
 
-#### Data Mining / Web / IR
-| Venue | Full Name | Type | OpenAlex Source ID | Alt IDs |
-|-------|-----------|------|-------------------|---------|
-| KDD | Knowledge Discovery and Data Mining | conference | S4306420424 | S4363608767 |
-| WWW | The Web Conference | conference | S4363608783 | S4306421067, S4363608846 |
-| SIGIR | ACM SIGIR Conference | conference | S4306418959 | S4363608773 |
-
-### 2.2 Tier 1 — Extended Corpus (13 venues)
-
-#### NLP 확장
-| Venue | Full Name | Type | OpenAlex Source ID | Alt IDs |
-|-------|-----------|------|-------------------|---------|
-| NAACL | North American Chapter of ACL | conference | S4306420633 | S4363608774 |
-| EACL | European Chapter of ACL | conference | S4306418011 | - |
-| COLING | International Conference on Computational Linguistics | conference | S4306419219 | - |
-| Findings | Findings of the ACL | conference | S4363605144 | S4363605604 |
-| TACL | Transactions of the ACL | journal | S2729999759 | - |
-| CoNLL | Conference on Computational Natural Language Learning | conference | S4306418031 | - |
-| LREC | Language Resources and Evaluation Conference | conference | S4306424877 | - |
-
-#### Data Mining / IR 확장
-| Venue | Full Name | Type | OpenAlex Source ID | Alt IDs |
-|-------|-----------|------|-------------------|---------|
-| WSDM | Web Search and Data Mining | conference | S4363608885 | - |
-| CIKM | Conference on Information and Knowledge Management | conference | S4363608762 | - |
-| ICDM | IEEE International Conference on Data Mining | conference | S4363608061 | S4363608104 |
-| ECIR | European Conference on Information Retrieval | conference | S4306418323 | - |
-| RecSys | ACM Conference on Recommender Systems | conference | S4306418092 | - |
-
-#### Journals
-| Venue | Full Name | Type | OpenAlex Source ID |
-|-------|-----------|------|-------------------|
-| TOIS | ACM Transactions on Information Systems | journal | S4394735545 |
-| ESWA | Expert Systems with Applications | journal | S13144211 |
-
-### 2.3 Tier 2 — Specialized Corpus (Legal AI, 3 venues)
-
-| Venue | Full Name | Type | OpenAlex Source ID | Notes |
-|-------|-----------|------|-------------------|-------|
-| AILaw | Artificial Intelligence and Law | journal | S96609033 | Primary Legal AI journal |
-| ICAIL | International Conference on AI and Law | conference | S4306419144 | Limited OpenAlex coverage |
-| JURIX | International Conference on Legal Knowledge Systems | conference | S4306419638 | Limited OpenAlex coverage |
-
-> **Note**: OpenAlex Source ID는 연도별로 다를 수 있음. 수집 시 `primary_location.source.id` OR 조건으로 모든 관련 ID 포함 필요.
-
-### 2.4 Coverage Gap Analysis
+### 2.2 Coverage Gap Analysis
 
 | Source | Papers (2020+) | Coverage |
 |--------|----------------|----------|
@@ -124,16 +71,16 @@ OpenAlex만으로는 NLP venue 커버리지가 부족하여 다중 소스 전략
 
 ### 3.1 Source Summary
 
-| Source | 용도 | API Limit | Priority | Target Venues |
-|--------|------|-----------|----------|---------------|
+| Source | Purpose | API Limit | Priority | Target Venues |
+|--------|---------|-----------|----------|---------------|
 | **OpenAlex** | Core metadata + citation graph | 100K/day (API key) | P0 | ML/AI venues |
-| **ACL Anthology** | NLP venue 수집 (XML 파싱) | Bulk download | P0 | ACL, EMNLP, NAACL, etc. |
+| **ACL Anthology** | NLP venue collection (XML parsing) | Bulk download | P0 | ACL, EMNLP, NAACL, etc. |
 | **OpenReview** | ML conference papers | 1 req/sec | P0 | ICLR, NeurIPS, ICML |
 | **ACM DL** | ACM conferences (open access) | 0.5 req/sec | P1 | KDD, SIGIR, WWW |
-| **DBLP** | IR/Legal venue 보완 | API | P1 | ECIR, ICAIL, JURIX |
+| **DBLP** | IR/Legal venue supplement | API | P1 | ECIR, ICAIL, JURIX |
 | **AAAI OJS** | AAAI proceedings | 1 req/sec | P1 | AAAI, ICWSM |
-| **arXiv** | On-demand 최신 프리프린트 | 3 req/sec | P2 | All categories |
-| **Semantic Scholar** | 추가 메타데이터 보완 | 100/5min (free) | P2 | Fallback |
+| **arXiv** | On-demand latest preprints | 3 req/sec | P2 | All categories |
+| **Semantic Scholar** | Additional metadata supplement | 100/5min (free) | P2 | Fallback |
 
 ### 3.2 Source Selection by Venue
 
@@ -146,19 +93,19 @@ OpenAlex만으로는 NLP venue 커버리지가 부족하여 다중 소스 전략
 | Legal AI (ICAIL, JURIX) | **DBLP** | OpenAlex |
 | Journals (JMLR, TACL, TOIS, ESWA, AILaw) | OpenAlex | - |
 
-### 3.3 Domain Scope (arXiv 카테고리)
+### 3.3 Domain Scope (arXiv Categories)
 
-Core에 포함되지 않은 arXiv 논문 On-demand 검색 시 사용:
+Used for on-demand search of arXiv papers not in Core:
 
-| 카테고리 | 설명 | 포함 |
-|----------|------|------|
-| `cs.CL` | Computation and Language | ✓ |
-| `cs.AI` | Artificial Intelligence | ✓ |
-| `cs.LG` | Machine Learning | ✓ |
-| `cs.IR` | Information Retrieval | ✓ |
-| `cs.CV` | Computer Vision | ✗ (제외) |
-| `cs.RO` | Robotics | ✗ (제외) |
-| `eess.AS` | Audio and Speech | ✗ (제외) |
+| Category | Description | Included |
+|----------|-------------|----------|
+| `cs.CL` | Computation and Language | Yes |
+| `cs.AI` | Artificial Intelligence | Yes |
+| `cs.LG` | Machine Learning | Yes |
+| `cs.IR` | Information Retrieval | Yes |
+| `cs.CV` | Computer Vision | No (excluded) |
+| `cs.RO` | Robotics | No (excluded) |
+| `eess.AS` | Audio and Speech | No (excluded) |
 
 ---
 
@@ -168,11 +115,11 @@ Core에 포함되지 않은 arXiv 논문 On-demand 검색 시 사용:
 
 ```python
 class CoreCorpusCollector:
-    """Tier 0/1 venue 기반 Core Corpus 수집"""
+    """Collect Core Corpus based on Tier 0/1 venues"""
 
     BASE_URL = "https://api.openalex.org/works"
 
-    # Tier 0 venue source IDs (OR 조건으로 결합)
+    # Tier 0 venue source IDs (combined with OR condition)
     TIER_0_SOURCES = {
         "neurips": ["S4306420609"],
         "icml": ["S4306419644"],
@@ -180,17 +127,17 @@ class CoreCorpusCollector:
         "acl": ["S4306420508"],
         "emnlp": ["S4306418267"],
         "sigir": ["S4306418959"],
-        # ... 추가 ID
+        # ... additional IDs
     }
 
     async def collect_venue(self, venue: str, since_year: int = None):
-        """특정 venue의 모든 논문 수집"""
+        """Collect all papers from a specific venue"""
 
         source_ids = self.TIER_0_SOURCES.get(venue, [])
         if not source_ids:
             raise ValueError(f"Unknown venue: {venue}")
 
-        # OR 조건으로 source ID 결합
+        # Combine source IDs with OR condition
         source_filter = "|".join(source_ids)
 
         filter_query = f"primary_location.source.id:{source_filter}"
@@ -246,7 +193,7 @@ class CoreCorpusCollector:
             tier=0 if venue in self.TIER_0_SOURCES else 1,
             is_core=True,
             citation_count=work.get("cited_by_count", 0),
-            referenced_works=work.get("referenced_works", []),  # 인용 그래프용
+            referenced_works=work.get("referenced_works", []),  # For citation graph
             raw_data=work
         )
 ```
@@ -255,16 +202,16 @@ class CoreCorpusCollector:
 
 ```python
 class CitationGraphBuilder:
-    """Core 논문 간 인용 그래프 구축"""
+    """Build citation graph between Core papers"""
 
     async def build_graph(self, papers: List[RawPaper]) -> CitationGraph:
-        """referenced_works 기반 인용 그래프 생성"""
+        """Generate citation graph based on referenced_works"""
 
         graph = CitationGraph()
         core_ids = {p.source_id for p in papers}
 
         for paper in papers:
-            # Core 내부 인용만 추출
+            # Extract only citations within Core
             for ref_id in paper.referenced_works:
                 if ref_id in core_ids:
                     graph.add_edge(paper.source_id, ref_id)
@@ -272,7 +219,7 @@ class CitationGraphBuilder:
         return graph
 
     async def expand_citations(self, paper_id: str) -> List[str]:
-        """특정 논문을 인용하는 논문 조회 (cited_by)"""
+        """Query papers that cite a specific paper (cited_by)"""
 
         url = f"https://api.openalex.org/works"
         params = {
@@ -281,32 +228,32 @@ class CitationGraphBuilder:
             "select": "id,title,publication_year,primary_location"
         }
 
-        # ... 수집 로직
+        # ... collection logic
 ```
 
 ### 4.3 Incremental Updates
 
 ```python
 class CoreCorpusUpdater:
-    """Core Corpus 증분 업데이트"""
+    """Incremental updates for Core Corpus"""
 
     async def update_since(self, since_date: datetime):
-        """마지막 수집 이후 업데이트된 논문 수집"""
+        """Collect papers updated since last collection"""
 
-        # Note: from_updated_date 필터는 API key 필요
+        # Note: from_updated_date filter requires API key
         filter_query = (
             f"primary_location.source.id:{self._all_source_ids()},"
             f"from_updated_date:{since_date.strftime('%Y-%m-%d')}"
         )
 
-        # ... 수집 로직 (collect_venue와 유사)
+        # ... collection logic (similar to collect_venue)
 ```
 
 ---
 
 ## 5. ACL Anthology Collection (NLP Primary Source)
 
-ACL Anthology는 NLP venue의 **primary source**로 사용. OpenAlex 대비 ~87% 더 많은 논문 포함.
+ACL Anthology is used as the **primary source** for NLP venues. It contains ~87% more papers compared to OpenAlex.
 
 ### 5.0 Workshop Support (Feb 2026 Update)
 
@@ -436,7 +383,7 @@ When collecting "ACL 2023", include ALL co-located events:
 
 ```python
 class ACLAnthologyCollector:
-    """ACL Anthology XML 직접 파싱"""
+    """Direct parsing of ACL Anthology XML"""
 
     ANTHOLOGY_REPO = "https://github.com/acl-org/acl-anthology"
 
@@ -511,10 +458,10 @@ class ACLAnthologyCollector:
 
 ```python
 class OnDemandRetriever:
-    """On-demand 검색 (질의 시점)"""
+    """On-demand search (at query time)"""
 
     async def search_arxiv(self, query: str, categories: List[str] = None) -> List[RawPaper]:
-        """arXiv에서 최신 논문 검색"""
+        """Search for latest papers on arXiv"""
 
         if categories is None:
             categories = ["cs.CL", "cs.AI", "cs.LG", "cs.IR"]
@@ -526,7 +473,7 @@ class OnDemandRetriever:
             limit=100
         )
 
-        # Core 연결 여부 확인
+        # Check Core connection status
         for paper in papers:
             paper.is_core = False
             paper.core_connections = await self._find_core_connections(paper)
@@ -534,17 +481,17 @@ class OnDemandRetriever:
         return papers
 
     async def _find_core_connections(self, paper: RawPaper) -> List[str]:
-        """Core Corpus와의 연결 관계 탐색"""
+        """Find connection relationships with Core Corpus"""
 
         connections = []
 
-        # 1. DOI 매칭 (프리프린트 → 출판본)
+        # 1. DOI matching (preprint → published version)
         if paper.doi:
             core_match = await db.find_by_doi(paper.doi)
             if core_match:
                 connections.append(("published_as", core_match.id))
 
-        # 2. 인용 관계
+        # 2. Citation relationship
         for ref in paper.referenced_works:
             if await db.is_core(ref):
                 connections.append(("cites_core", ref))
@@ -560,10 +507,10 @@ class OnDemandRetriever:
 
 ```python
 class OpenAlexOnDemand:
-    """OpenAlex narrow query (Core 외부 논문)"""
+    """OpenAlex narrow query (papers outside Core)"""
 
     async def search(self, query: str, limit: int = 100) -> List[RawPaper]:
-        """키워드 기반 좁은 검색"""
+        """Keyword-based narrow search"""
 
         params = {
             "search": query,
@@ -621,11 +568,11 @@ class OpenAlexOnDemand:
 
 | Task | Schedule | Target | Description |
 |------|----------|--------|-------------|
-| core_initial | Once | Tier 0 + 1 | 초기 전체 수집 |
-| core_incremental | Daily 6AM | Tier 0 + 1 | 증분 업데이트 |
-| acl_sync | Monthly | NLP venues | ACL Anthology 동기화 |
-| embedding_backfill | Weekly | Core | 누락 embedding 생성 |
-| citation_refresh | Weekly | Core | 인용 그래프 갱신 |
+| core_initial | Once | Tier 0 + 1 | Initial full collection |
+| core_incremental | Daily 6AM | Tier 0 + 1 | Incremental updates |
+| acl_sync | Monthly | NLP venues | ACL Anthology sync |
+| embedding_backfill | Weekly | Core | Generate missing embeddings |
+| citation_refresh | Weekly | Core | Refresh citation graph |
 
 ---
 
@@ -648,7 +595,7 @@ DBLP is used for venues with poor OpenAlex coverage, especially IR and Legal AI 
 
 ```python
 class DBLPCollector:
-    """DBLP API를 통한 논문 수집"""
+    """Collect papers via DBLP API"""
 
     BASE_URL = "https://dblp.org/search/publ/api"
 
@@ -729,7 +676,7 @@ class DBLPCollector:
 | Citation graph refresh | ~1,000 | Weekly |
 | **Monthly Total** | ~10,000 | - |
 
-> 100,000 daily credits는 충분함.
+> 100,000 daily credits is sufficient.
 
 ---
 
@@ -739,7 +686,7 @@ class DBLPCollector:
 
 ```python
 class CoreDeduplicator:
-    """Core Corpus 중복 제거"""
+    """Core Corpus deduplication"""
 
     def find_duplicates(self, paper: RawPaper) -> Optional[RawPaper]:
         # 1. DOI exact match
@@ -841,6 +788,15 @@ core_coverage = Gauge('core_coverage', 'Core coverage by venue', ['venue'])
 | Graph Analyzer | `src/core/citation_graph/analyzer.py` | ✅ Complete |
 
 See [Citation Graph Design](./citation_graph.md) for details.
+
+---
+
+## Related Documents
+
+- [Venue Reference](../reference/venues.md)
+- [CLI Reference](../reference/cli.md)
+- [Quick Start Guide](../guides/quickstart.md)
+- [Enrichment Pipeline](./enrichment.md)
 
 ### 11.3 CLI Commands Available
 

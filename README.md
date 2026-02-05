@@ -10,6 +10,8 @@ AI Research Insights Engine - Core Corpus collection and semantic search for top
 - **Cross-source Deduplication**: Automatic duplicate detection
 - **Checkpoint Resume**: Resumable collection with progress tracking
 - **Qdrant Integration**: Vector database storage for semantic search
+- **Keyword Extraction**: Acronym + semantic keyword extraction for BM25 search
+- **Citation Graph**: Reference resolution and GraphRAG support
 
 ## Quick Start
 
@@ -130,12 +132,18 @@ python -m src.cli.core_collect build-citation-graph -o graph.json
 python -m src.cli.core_collect analyze-citation-graph --all --top-n 10
 python -m src.cli.core_collect get-citing-papers <paper_id>
 python -m src.cli.core_collect build-cited-by  # Required for GraphRAG
+
+# Keyword Extraction (for BM25 search)
+python -m src.cli.core_collect extract-keywords              # Full extraction
+python -m src.cli.core_collect extract-keywords --dry-run    # Preview mode
+python -m src.cli.core_collect extract-keywords --no-keybert # Regex only (faster)
+python -m src.cli.core_collect keyword-stats                 # Show statistics
 ```
 
 ## Documentation
 
-- [Crawling HOWTO](docs/guides/crawling_howto.md) - Detailed collection guide
-- [Data Collection Design](docs/design/data_collection.md) - Architecture and strategy
+- [Crawling Guide](docs/guides/crawling.md) - Detailed collection guide
+- [Data Collection Design](docs/pipelines/data_collection.md) - Architecture and strategy
 - [Full Documentation](docs/README.md) - Complete documentation index
 
 ## Project Structure
@@ -161,9 +169,13 @@ lexiconarxiv/
 │   │   │   ├── openalex.py      # Citation/abstract via OpenAlex
 │   │   │   ├── semantic_scholar.py  # S2 fallback
 │   │   │   └── pdf.py           # PDF reference extraction
-│   │   └── resolution/          # Reference resolution
-│   │       ├── normalizer.py    # ID normalization (DOI, arXiv, OpenAlex)
-│   │       └── resolver.py      # Citation graph builder
+│   │   ├── resolution/          # Reference resolution
+│   │   │   ├── normalizer.py    # ID normalization (DOI, arXiv, OpenAlex)
+│   │   │   └── resolver.py      # Citation graph builder
+│   │   └── keyword/             # Keyword extraction (NEW)
+│   │       ├── extractor.py     # Main KeywordExtractor class
+│   │       ├── patterns.py      # Regex patterns for acronyms
+│   │       └── stopwords.py     # Stopword filtering
 │   └── models/
 │       └── paper.py             # Paper data model
 ├── docs/                        # Documentation

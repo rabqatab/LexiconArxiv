@@ -2,14 +2,14 @@
 
 ## 1. Overview
 
-본 문서는 AI 연구 인사이트 엔진의 데이터 모델과 스키마를 정의합니다.
+This document defines the data model and schema for the AI Research Insights Engine.
 
-### 1.1 Core vs On-demand 구분
+### 1.1 Core vs On-demand Distinction
 
-| 구분 | 설명 | 저장 |
-|------|------|------|
-| **Core** | Tier 0/1 venue 논문 | 영구 저장, 인용 그래프 포함 |
-| **On-demand** | 질의 시점 검색 결과 | 캐시 저장, Core 연결 정보 포함 |
+| Type | Description | Storage |
+|------|-------------|---------|
+| **Core** | Tier 0/1/2 venue papers | Permanent storage, includes citation graph |
+| **On-demand** | Query-time search results | Cache storage, includes Core connection info |
 
 ---
 
@@ -20,7 +20,7 @@
 ```
 ┌─────────────────┐       ┌─────────────────┐
 │  CanonicalPaper │───────│  SourceRecord   │
-│  (논문 정규화)   │ 1   n │  (소스별 원본)   │
+│  (Normalized)   │ 1   n │  (Per-source)   │
 └────────┬────────┘       └─────────────────┘
          │
          │ n
@@ -28,12 +28,12 @@
          │ n
 ┌────────┴────────┐       ┌─────────────────┐
 │ CitationEdge    │       │     Author      │
-│ (인용 그래프)    │       │    (저자)       │
+│ (Citation Graph)│       │    (Author)     │
 └─────────────────┘       └─────────────────┘
 
 ┌─────────────────┐       ┌─────────────────┐
 │     Venue       │       │   CoreConnection│
-│   (학회/저널)   │       │  (Core 연결)    │
+│ (Conf/Journal)  │       │(Core Connection)│
 └─────────────────┘       └─────────────────┘
 ```
 
@@ -41,50 +41,12 @@
 
 ## 3. Venue Classification
 
-### 3.1 Tier 0 — Core Corpus (11 venues)
+See [Venue Reference](../reference/venues.md) for complete venue details including:
+- Tier 0: 11 core venues (NeurIPS, ICML, ICLR, ACL, EMNLP, etc.)
+- Tier 1: 14 extended venues (NAACL, EACL, COLING, WSDM, etc.)
+- Tier 2: 3+ specialized venues (Legal AI, workshops)
 
-| Venue | Full Name | Field | Type | OpenAlex Source IDs | Alt IDs |
-|-------|-----------|-------|------|---------------------|---------|
-| NeurIPS | Neural Information Processing Systems | ML | conference | S4306420609 | - |
-| ICML | International Conference on Machine Learning | ML | conference | S4306419644 | - |
-| ICLR | International Conference on Learning Representations | ML | conference | S4306419637 | - |
-| AAAI | AAAI Conference on Artificial Intelligence | AI | conference | S4210191458 | - |
-| IJCAI | International Joint Conference on AI | AI | conference | S4306419999 | S4363608755 |
-| ACL | Annual Meeting of the ACL | NLP | conference | S4306420508 | S4363608652 |
-| EMNLP | Empirical Methods in NLP | NLP | conference | S4306418267 | S4363608991 |
-| KDD | Knowledge Discovery and Data Mining | DM | conference | S4306420424 | S4363608767 |
-| WWW | The Web Conference | Web | conference | S4363608783 | S4306421067, S4363608846 |
-| SIGIR | ACM SIGIR Conference | IR | conference | S4306418959 | S4363608773 |
-| JMLR | Journal of Machine Learning Research | ML | journal | S118988714 | - |
-
-### 3.2 Tier 1 — Extended Corpus (13 venues)
-
-| Venue | Full Name | Field | Type | OpenAlex Source IDs | Alt IDs |
-|-------|-----------|-------|------|---------------------|---------|
-| NAACL | North American Chapter of ACL | NLP | conference | S4306420633 | S4363608774 |
-| EACL | European Chapter of ACL | NLP | conference | S4306418011 | - |
-| COLING | International Conference on Computational Linguistics | NLP | conference | S4306419219 | - |
-| Findings | Findings of the ACL | NLP | conference | S4363605144 | S4363605604 |
-| TACL | Transactions of the ACL | NLP | journal | S2729999759 | - |
-| CoNLL | Conference on Computational Natural Language Learning | NLP | conference | S4306418031 | - |
-| LREC | Language Resources and Evaluation Conference | NLP | conference | S4306424877 | - |
-| WSDM | Web Search and Data Mining | IR | conference | S4363608885 | - |
-| CIKM | Conference on Information and Knowledge Management | IR | conference | S4363608762 | - |
-| ICDM | IEEE International Conference on Data Mining | DM | conference | S4363608061 | S4363608104 |
-| ECIR | European Conference on Information Retrieval | IR | conference | S4306418323 | - |
-| RecSys | ACM Conference on Recommender Systems | IR | conference | S4306418092 | - |
-| TOIS | ACM Transactions on Information Systems | IR | journal | S4394735545 | - |
-| ESWA | Expert Systems with Applications | AI | journal | S13144211 | - |
-
-### 3.3 Tier 2 — Specialized Corpus (Legal AI, 3 venues)
-
-| Venue | Full Name | Field | Type | OpenAlex Source IDs | Notes |
-|-------|-----------|-------|------|---------------------|-------|
-| AILaw | Artificial Intelligence and Law | Legal | journal | S96609033 | Primary Legal AI journal |
-| ICAIL | International Conference on AI and Law | Legal | conference | S4306419144 | Limited OpenAlex coverage |
-| JURIX | International Conference on Legal Knowledge Systems | Legal | conference | S4306419638 | Limited OpenAlex coverage |
-
-> **Note**: Alt IDs는 OpenAlex에서 연도별로 분리된 Source ID. 수집 시 OR 조건으로 결합 필요.
+> **Note**: Alt IDs are year-specific Source IDs in OpenAlex. Use OR condition when collecting.
 
 ---
 
@@ -92,28 +54,28 @@
 
 ### 4.1 canonical_papers
 
-정규화된 논문 레코드 (Core + 캐시된 On-demand)
+Normalized paper records (Core + cached On-demand)
 
 ```sql
 CREATE TABLE canonical_papers (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
-    -- 기본 정보
+    -- Basic info
     title           TEXT NOT NULL,
     title_normalized TEXT NOT NULL,
     abstract        TEXT,
     year            INTEGER,
     month           INTEGER,
 
-    -- 논문 분류
+    -- Paper classification
     paper_type      VARCHAR(50),     -- method, dataset, survey, benchmark
     venue_id        UUID REFERENCES venues(id),
 
-    -- Core 관련 필드 (NEW)
+    -- Core-related fields (NEW)
     tier            SMALLINT,        -- 0 = Tier 0, 1 = Tier 1, NULL = On-demand
     is_core         BOOLEAN DEFAULT FALSE,
 
-    -- 식별자
+    -- Identifiers
     doi             VARCHAR(255) UNIQUE,
     arxiv_id        VARCHAR(50) UNIQUE,
     acl_id          VARCHAR(100) UNIQUE,
@@ -125,12 +87,12 @@ CREATE TABLE canonical_papers (
     abstract_url    TEXT,
     code_url        TEXT,
 
-    -- 메타데이터
+    -- Metadata
     citation_count  INTEGER DEFAULT 0,
     is_preprint     BOOLEAN DEFAULT FALSE,
     has_published_version BOOLEAN DEFAULT FALSE,
 
-    -- 시스템 필드
+    -- System fields
     created_at      TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at      TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     last_synced_at  TIMESTAMP WITH TIME ZONE,
@@ -143,7 +105,7 @@ CREATE TABLE canonical_papers (
     )
 );
 
--- 인덱스
+-- Indexes
 CREATE INDEX idx_papers_year ON canonical_papers(year);
 CREATE INDEX idx_papers_venue ON canonical_papers(venue_id);
 CREATE INDEX idx_papers_type ON canonical_papers(paper_type);
@@ -163,13 +125,13 @@ CREATE TABLE venues (
     name_short      VARCHAR(100),      -- ACL, EMNLP, etc.
     venue_type      VARCHAR(50),       -- conference, journal, workshop, preprint
 
-    -- Tier 분류 (NEW)
+    -- Tier classification (NEW)
     tier            SMALLINT,          -- 0 = Tier 0, 1 = Tier 1, NULL = other
     field           VARCHAR(50),       -- NLP, ML, AI, DM, IR, Web
 
-    -- 식별자
+    -- Identifiers
     dblp_id         VARCHAR(100),
-    openalex_ids    TEXT[],            -- 여러 source ID 가능 (NEW)
+    openalex_ids    TEXT[],            -- Multiple source IDs possible (NEW)
 
     UNIQUE(name)
 );
@@ -177,7 +139,7 @@ CREATE TABLE venues (
 CREATE INDEX idx_venues_tier ON venues(tier);
 CREATE INDEX idx_venues_field ON venues(field);
 
--- Tier 0 Venue 초기 데이터
+-- Tier 0 Venue initial data
 INSERT INTO venues (name_short, name, tier, field, venue_type, openalex_ids) VALUES
     ('NeurIPS', 'Neural Information Processing Systems', 0, 'ML', 'conference', ARRAY['S4306420609']),
     ('ICML', 'International Conference on Machine Learning', 0, 'ML', 'conference', ARRAY['S4306419644']),
@@ -211,21 +173,21 @@ INSERT INTO venues (name_short, name, tier, field, venue_type, openalex_ids) VAL
     ('JURIX', 'International Conference on Legal Knowledge Systems', 2, 'Legal', 'conference', ARRAY['S4306419638']);
 ```
 
-### 4.3 citation_edges (NEW)
+### 4.3 citation_edges
 
-인용 그래프 엣지 테이블
+Citation graph edge table
 
 ```sql
 CREATE TABLE citation_edges (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
-    -- 인용 관계: citing_paper -> cited_paper
+    -- Citation relationship: citing_paper -> cited_paper
     citing_paper_id UUID NOT NULL REFERENCES canonical_papers(id),
     cited_paper_id  UUID NOT NULL REFERENCES canonical_papers(id),
 
-    -- 메타데이터
-    citation_context TEXT,           -- 인용 맥락 (있는 경우)
-    is_core_to_core BOOLEAN,         -- Core 내부 인용 여부
+    -- Metadata
+    citation_context TEXT,           -- Citation context (if available)
+    is_core_to_core BOOLEAN,         -- Whether citation is within Core
 
     created_at      TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 
@@ -237,26 +199,26 @@ CREATE INDEX idx_citation_cited ON citation_edges(cited_paper_id);
 CREATE INDEX idx_citation_core ON citation_edges(is_core_to_core);
 ```
 
-### 4.4 core_connections (NEW)
+### 4.4 core_connections
 
-On-demand 논문의 Core Corpus 연결 관계
+Core Corpus connection relationships for on-demand papers
 
 ```sql
 CREATE TABLE core_connections (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
-    -- 연결 관계: on-demand paper -> core paper
+    -- Connection relationship: on-demand paper -> core paper
     ondemand_paper_id   UUID NOT NULL REFERENCES canonical_papers(id),
     core_paper_id       UUID NOT NULL REFERENCES canonical_papers(id),
 
-    -- 연결 유형
+    -- Connection type
     connection_type     VARCHAR(50) NOT NULL,
-    -- 'cites_core': Core 논문을 인용
-    -- 'cited_by_core': Core 논문에 인용됨
-    -- 'published_as': 프리프린트 → 출판본 관계
-    -- 'similar_to': Semantic 유사도 기반
+    -- 'cites_core': Cites a Core paper
+    -- 'cited_by_core': Cited by a Core paper
+    -- 'published_as': Preprint to published version relationship
+    -- 'similar_to': Based on semantic similarity
 
-    -- 신뢰도
+    -- Confidence
     confidence          FLOAT,        -- 0-1
 
     created_at          TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -271,24 +233,24 @@ CREATE INDEX idx_core_conn_type ON core_connections(connection_type);
 
 ### 4.5 source_records
 
-각 소스별 원본 레코드
+Original records per source
 
 ```sql
 CREATE TABLE source_records (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     canonical_id    UUID REFERENCES canonical_papers(id),
 
-    -- 소스 정보
+    -- Source info
     source          VARCHAR(50) NOT NULL,  -- openalex, arxiv, acl
     source_id       VARCHAR(255) NOT NULL,
 
-    -- 원본 데이터
+    -- Raw data
     raw_data        JSONB NOT NULL,
 
-    -- OpenAlex 인용 정보 (referenced_works)
+    -- OpenAlex citation info (referenced_works)
     referenced_work_ids TEXT[],       -- OpenAlex work IDs
 
-    -- 메타데이터
+    -- Metadata
     fetched_at      TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at      TIMESTAMP WITH TIME ZONE,
 
@@ -336,7 +298,7 @@ CREATE INDEX idx_paper_authors_author ON paper_authors(author_id);
 
 ### 4.8 paper_versions
 
-프리프린트 ↔ 출판본 연결
+Preprint ↔ Publication connection
 
 ```sql
 CREATE TABLE paper_versions (
@@ -372,6 +334,7 @@ CREATE TABLE paper_versions (
     "source": "keyword",        // openalex, acl_anthology, dblp
     "source_id": "keyword",
     "title": "text",
+    "abstract": "text",
     "year": "integer",
     "venue": "keyword",
     "tier": "integer",         // 0, 1, 2, or null
@@ -382,7 +345,9 @@ CREATE TABLE paper_versions (
     "citation_count": "integer",
     "field": "keyword",
     "doi": "keyword",
-    "referenced_works": "keyword[]"
+    "referenced_works": "keyword[]",
+    "keywords": "keyword[]",   // Extracted keywords/acronyms (acronyms + KeyBERT)
+    "keywords_source": "keyword"  // "regex", "keybert", "both"
   },
   "optimizers_config": {
     "indexing_threshold": 20000
@@ -397,7 +362,7 @@ CREATE TABLE paper_versions (
 ### 5.2 Qdrant Filters for Core-first Search
 
 ```python
-# Core 논문 우선 검색
+# Core papers priority search
 core_filter = Filter(
     should=[
         FieldCondition(key="is_core", match=MatchValue(value=True)),
@@ -411,7 +376,7 @@ tier0_filter = Filter(
     ]
 )
 
-# 특정 field 내 검색
+# Search within specific field
 nlp_filter = Filter(
     must=[
         FieldCondition(key="field", match=MatchValue(value="NLP")),
@@ -428,41 +393,41 @@ nlp_filter = Filter(
 
 | Value | Description | Venues |
 |-------|-------------|--------|
-| `0` | Tier 0 — Core Corpus (필수 수집) | 11 venues (NeurIPS, ICML, ACL, etc.) |
-| `1` | Tier 1 — Extended Corpus (선택 수집) | 13 venues (NAACL, EACL, RecSys, etc.) |
+| `0` | Tier 0 — Core Corpus (required collection) | 11 venues (NeurIPS, ICML, ACL, etc.) |
+| `1` | Tier 1 — Extended Corpus (optional collection) | 13 venues (NAACL, EACL, RecSys, etc.) |
 | `2` | Tier 2 — Specialized Corpus (Legal AI) | 3 venues (AILaw, ICAIL, JURIX) |
-| `NULL` | On-demand — 질의 시점 수집 | - |
+| `NULL` | On-demand — collected at query time | - |
 
 ### 6.2 Core Connection Types
 
 | Value | Description |
 |-------|-------------|
-| `cites_core` | On-demand 논문이 Core 논문을 인용 |
-| `cited_by_core` | On-demand 논문이 Core 논문에 인용됨 |
-| `published_as` | 프리프린트 → Core 출판본 관계 |
-| `similar_to` | Semantic 유사도 기반 연결 |
+| `cites_core` | On-demand paper cites a Core paper |
+| `cited_by_core` | On-demand paper is cited by a Core paper |
+| `published_as` | Preprint to Core published version relationship |
+| `similar_to` | Connection based on semantic similarity |
 
 ### 6.3 Paper Types
 
 | Value | Description |
 |-------|-------------|
-| `method` | 새로운 방법론/모델 제안 |
-| `dataset` | 데이터셋 공개 |
-| `benchmark` | 벤치마크/평가 |
-| `survey` | 서베이/리뷰 논문 |
-| `analysis` | 분석/실험 연구 |
-| `application` | 응용/사례 연구 |
-| `position` | 포지션 페이퍼 |
-| `demo` | 시스템 데모 |
+| `method` | New method/model proposal |
+| `dataset` | Dataset release |
+| `benchmark` | Benchmark/evaluation |
+| `survey` | Survey/review paper |
+| `analysis` | Analysis/experimental study |
+| `application` | Application/case study |
+| `position` | Position paper |
+| `demo` | System demo |
 
 ### 6.4 Venue Types
 
 | Value | Description |
 |-------|-------------|
-| `conference` | 학회 본회의 |
-| `workshop` | 워크숍 |
-| `journal` | 저널 |
-| `preprint` | 프리프린트 (arXiv 등) |
+| `conference` | Main conference |
+| `workshop` | Workshop |
+| `journal` | Journal |
+| `preprint` | Preprint (arXiv, etc.) |
 
 ### 6.5 Field Categories
 
@@ -482,25 +447,25 @@ nlp_filter = Filter(
 
 ### 7.1 Core Corpus Rules
 
-1. **Tier 0/1 논문은 is_core = TRUE**
-2. **Tier 0/1 논문은 citation_edges 구축 필수**
-3. **On-demand 논문은 core_connections 있으면 캐시 저장**
+1. **Tier 0/1/2 papers have is_core = TRUE**
+2. **Tier 0/1/2 papers require citation_edges construction**
+3. **On-demand papers with core_connections are cached**
 
 ### 7.2 Deduplication Rules
 
-1. **DOI Match**: DOI가 동일하면 같은 논문
-2. **arXiv ID Match**: arXiv ID가 동일하면 같은 논문
-3. **Title+Year Match**: 정규화된 제목 + 연도 + 첫 저자가 동일하면 같은 논문
+1. **DOI Match**: Same DOI = same paper
+2. **arXiv ID Match**: Same arXiv ID = same paper
+3. **Title+Year Match**: Normalized title + year + first author match = same paper
 
 ### 7.3 Citation Graph Rules
 
-1. **Core 내부 인용**: `is_core_to_core = TRUE`
-2. **인용 방향**: `citing_paper_id` → `cited_paper_id`
-3. **OpenAlex referenced_works 기반 구축**
+1. **Core internal citations**: `is_core_to_core = TRUE`
+2. **Citation direction**: `citing_paper_id` → `cited_paper_id`
+3. **Built from OpenAlex referenced_works**
 
 ### 7.4 Normalization Rules
 
-**제목 정규화**:
+**Title normalization**:
 ```python
 def normalize_title(title: str) -> str:
     title = title.lower()
@@ -509,7 +474,7 @@ def normalize_title(title: str) -> str:
     return title
 ```
 
-**저자 이름 정규화**:
+**Author name normalization**:
 ```python
 def normalize_author(name: str) -> str:
     parts = name.replace(',', ' ').split()
@@ -522,16 +487,16 @@ def normalize_author(name: str) -> str:
 
 ### 8.1 From v1 to v2
 
-기존 데이터 마이그레이션:
+Existing data migration:
 
 ```sql
--- 기존 논문에 tier 할당
+-- Assign tier to existing papers
 UPDATE canonical_papers p
 SET tier = v.tier, is_core = (v.tier IS NOT NULL)
 FROM venues v
 WHERE p.venue_id = v.id AND v.tier IN (0, 1);
 
--- Citation edges 생성 (source_records의 referenced_work_ids 기반)
+-- Create citation edges (based on referenced_work_ids from source_records)
 INSERT INTO citation_edges (citing_paper_id, cited_paper_id, is_core_to_core)
 SELECT
     sr.canonical_id,

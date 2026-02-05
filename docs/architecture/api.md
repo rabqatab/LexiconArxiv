@@ -2,11 +2,11 @@
 
 ## 1. Overview
 
-본 문서는 AI/NLP 논문 검색 엔진의 REST API 및 MCP 인터페이스를 정의합니다.
+This document defines the REST API and MCP interface for the AI/NLP paper search engine.
 
 **Base URL**: `https://api.lexiconarxiv.io/v1`
 
-**인증**: API Key (Header: `X-API-Key`)
+**Authentication**: API Key (Header: `X-API-Key`)
 
 ---
 
@@ -16,7 +16,7 @@
 
 #### POST /search
 
-자연어 기반 논문 검색
+Natural language paper search
 
 **Request**:
 ```json
@@ -41,29 +41,29 @@
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `query` | string | Yes | 자연어 검색 쿼리 |
-| `options.sources` | string[] | No | 검색 소스 (기본: 전체) |
-| `options.year_from` | int | No | 시작 연도 필터 |
-| `options.year_to` | int | No | 종료 연도 필터 |
-| `options.venues` | string[] | No | 학회/저널 필터 |
-| `options.paper_types` | string[] | No | 논문 타입 필터 |
-| `options.preprint_only` | bool | No | 프리프린트만 |
-| `options.published_only` | bool | No | 출판본만 |
-| `options.limit` | int | No | 결과 수 (기본: 50, 최대: 500) |
-| `options.offset` | int | No | 페이지네이션 오프셋 |
-| `options.ranking` | string | No | 랭킹 방식 |
+| `query` | string | Yes | Natural language search query |
+| `options.sources` | string[] | No | Search sources (default: all) |
+| `options.year_from` | int | No | Start year filter |
+| `options.year_to` | int | No | End year filter |
+| `options.venues` | string[] | No | Venue/journal filter |
+| `options.paper_types` | string[] | No | Paper type filter |
+| `options.preprint_only` | bool | No | Preprints only |
+| `options.published_only` | bool | No | Published papers only |
+| `options.limit` | int | No | Result count (default: 50, max: 500) |
+| `options.offset` | int | No | Pagination offset |
+| `options.ranking` | string | No | Ranking method |
 
 **Search Mode Options** (NEW):
-- `core_only`: Core Corpus (Tier 0/1)만 검색
-- `core_first`: Core 우선 + On-demand 확장 (기본)
-- `balanced`: Core + On-demand 동일 가중치
-- `monitoring`: 최신 arXiv 강조
+- `core_only`: Search Core Corpus (Tier 0/1) only
+- `core_first`: Core priority + On-demand expansion (default)
+- `balanced`: Core + On-demand equal weight
+- `monitoring`: Emphasize recent arXiv papers
 
 **Ranking Options**:
-- `relevance`: 관련성 점수 (기본, Core boost 포함)
-- `recency`: 최신순
-- `citation`: 인용수 순
-- `venue_tier`: 학회 티어 순 (Tier 0 > Tier 1 > others)
+- `relevance`: Relevance score (default, includes Core boost)
+- `recency`: Most recent first
+- `citation`: Citation count order
+- `venue_tier`: Venue tier order (Tier 0 > Tier 1 > others)
 - `hybrid_rrf`: Reciprocal Rank Fusion
 
 **Response**:
@@ -122,7 +122,7 @@
     },
     "after_dedup": 623,
     "search_strategy": "hybrid_bm25_semantic",
-    "coverage_note": "Google Scholar/Semantic Scholar는 포함되지 않음",
+    "coverage_note": "Google Scholar/Semantic Scholar not included",
     "execution_time_ms": 1250
   },
   "pagination": {
@@ -137,7 +137,7 @@
 
 #### GET /search/suggest
 
-쿼리 자동완성 및 제안
+Query autocomplete and suggestions
 
 **Request**:
 ```
@@ -168,7 +168,7 @@ GET /search/suggest?q=instruction+tun&limit=5
 
 #### GET /papers/{paper_id}
 
-단일 논문 상세 정보
+Single paper details
 
 **Response**:
 ```json
@@ -224,7 +224,7 @@ GET /search/suggest?q=instruction+tun&limit=5
 
 #### GET /papers/{paper_id}/versions
 
-논문의 모든 버전 (프리프린트, 카메라레디, 저널 등)
+All versions of a paper (preprint, camera-ready, journal, etc.)
 
 **Response**:
 ```json
@@ -258,7 +258,7 @@ GET /search/suggest?q=instruction+tun&limit=5
 
 #### POST /export
 
-검색 결과 내보내기
+Export search results
 
 **Request**:
 ```json
@@ -296,12 +296,12 @@ GET /search/suggest?q=instruction+tun&limit=5
 
 #### POST /queries
 
-저장된 검색 쿼리 생성
+Create saved search query
 
 **Request**:
 ```json
 {
-  "name": "RAG Evaluation 모니터링",
+  "name": "RAG Evaluation Monitoring",
   "query": "RAG evaluation benchmark",
   "options": {
     "sources": ["arxiv"],
@@ -316,21 +316,21 @@ GET /search/suggest?q=instruction+tun&limit=5
 
 #### GET /queries
 
-저장된 검색 쿼리 목록
+List saved search queries
 
 #### GET /queries/{query_id}/results
 
-저장된 쿼리의 최신 결과
+Latest results for saved query
 
 #### DELETE /queries/{query_id}
 
-저장된 쿼리 삭제
+Delete saved query
 
 ---
 
 ## 3. MCP Server Interface
 
-MCP(Model Context Protocol) 서버로 AI Agent와 통합
+MCP (Model Context Protocol) server for AI Agent integration
 
 ### 3.1 Tools
 
@@ -449,12 +449,12 @@ MCP(Model Context Protocol) 서버로 AI Agent와 통합
 
 | Code | HTTP Status | Description |
 |------|-------------|-------------|
-| `INVALID_QUERY` | 400 | 잘못된 검색 쿼리 |
-| `INVALID_FILTER` | 400 | 잘못된 필터 값 |
-| `UNAUTHORIZED` | 401 | API 키 누락/유효하지 않음 |
-| `RATE_LIMITED` | 429 | 요청 한도 초과 |
-| `SOURCE_UNAVAILABLE` | 503 | 외부 소스 일시 장애 |
-| `INTERNAL_ERROR` | 500 | 내부 서버 오류 |
+| `INVALID_QUERY` | 400 | Invalid search query |
+| `INVALID_FILTER` | 400 | Invalid filter value |
+| `UNAUTHORIZED` | 401 | API key missing or invalid |
+| `RATE_LIMITED` | 429 | Request rate limit exceeded |
+| `SOURCE_UNAVAILABLE` | 503 | External source temporarily unavailable |
+| `INTERNAL_ERROR` | 500 | Internal server error |
 
 ---
 
@@ -471,22 +471,22 @@ MCP(Model Context Protocol) 서버로 AI Agent와 통합
 
 ## 6. Versioning
 
-- API 버전은 URL path에 포함 (`/v1/`, `/v2/`)
-- Breaking change 시 새 버전 릴리스
-- 이전 버전은 최소 12개월 지원
+- API version included in URL path (`/v1/`, `/v2/`)
+- New version release for breaking changes
+- Previous versions supported for minimum 12 months
 
 ---
 
 ## 7. SDK Support
 
-### Python SDK (예정)
+### Python SDK (planned)
 
 ```python
 from lexiconarxiv import Client
 
 client = Client(api_key="your_api_key")
 
-# 검색
+# Search
 results = client.search(
     query="instruction tuning Korean",
     year_from=2023,
@@ -496,7 +496,7 @@ results = client.search(
 for paper in results.papers:
     print(f"{paper.title} ({paper.year})")
 
-# 내보내기
+# Export
 bibtex = client.export(
     paper_ids=[p.id for p in results.papers[:10]],
     format="bibtex"

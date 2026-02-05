@@ -1236,3 +1236,182 @@ class QdrantStorage:
                 break
 
         return None
+
+    # =========================================================================
+    # Keyword Extraction Methods
+    # =========================================================================
+
+    def get_papers_for_keyword_extraction(
+        self,
+        limit: int = 100,
+        offset: str | None = None,
+        skip_existing: bool = True,
+    ) -> tuple[list[tuple[str, dict]], str | None]:
+        """Get papers for keyword extraction.
+
+        Args:
+            limit: Maximum number of papers to return.
+            offset: Scroll offset for pagination.
+            skip_existing: If True, only return papers without keywords.
+
+        Returns:
+            Tuple of (list of (point_id, payload), next_offset).
+        """
+        filter_conditions = []
+
+        if skip_existing:
+            # Papers without keywords (empty list or null)
+            filter_conditions.append(
+                models.IsEmptyCondition(
+                    is_empty=models.PayloadField(key="keywords"),
+                )
+            )
+
+        scroll_filter = models.Filter(must=filter_conditions) if filter_conditions else None
+
+        results, next_offset = self.client.scroll(
+            collection_name=self.collection_name,
+            scroll_filter=scroll_filter,
+            limit=limit,
+            offset=offset,
+            with_payload=["title", "abstract", "keywords"],
+        )
+
+        return [(str(p.id), p.payload) for p in results], next_offset
+
+    def batch_update_keywords(
+        self,
+        updates: list[tuple[str, list[str]]],  # [(point_id, keywords), ...]
+    ) -> int:
+        """Batch update keywords for multiple papers.
+
+        Args:
+            updates: List of (point_id, keywords) tuples.
+
+        Returns:
+            Number of papers updated.
+        """
+        for point_id, keywords in updates:
+            self.client.set_payload(
+                collection_name=self.collection_name,
+                payload={"keywords": keywords},
+                points=[point_id],
+            )
+        return len(updates)
+
+    def batch_update_keywords_with_source(
+        self,
+        updates: list[tuple[str, list[str], str]],  # [(point_id, keywords, source), ...]
+    ) -> int:
+        """Batch update keywords and extraction source for multiple papers.
+
+        Args:
+            updates: List of (point_id, keywords, keywords_source) tuples.
+                     keywords_source is one of: "regex", "keybert", "both", "none"
+
+        Returns:
+            Number of papers updated.
+        """
+        for point_id, keywords, source in updates:
+            self.client.set_payload(
+                collection_name=self.collection_name,
+                payload={
+                    "keywords": keywords,
+                    "keywords_source": source,
+                },
+                points=[point_id],
+            )
+        return len(updates)
+
+    def get_keyword_stats(self) -> dict[str, Any]:
+        """Get statistics about keyword extraction.
+
+        Returns:
+            Dictionary with keyword extraction metrics including:
+            - total_papers: Total paper count
+            - papers_with_keywords: Papers that have keywords
+            - papers_without_keywords: Papers missing keywords
+            - total_keywords: Total number of keywords across all papers
+            - avg_keywords_per_paper: Average keywords per paper
+            - by_source: Breakdown by extraction source
+        """
+        stats: dict[str, Any] = {
+            "total_papers": 0,
+            "papers_with_keywords": 0,
+            "papers_without_keywords": 0,
+            "total_keywords": 0,
+            "by_source": {
+                "regex": 0,
+                "keybert": 0,
+                "both": 0,
+                "none": 0,
+            },
+        }
+
+        offset = None
+        while True:
+            results, offset = self.client.scroll(
+                collection_name=self.collection_name,
+                limit=1000,
+                offset=offset,
+                with_payload=["keywords", "keywords_source"],
+            )
+
+            for point in results:
+                payload = point.payload
+                stats["total_papers"] += 1
+
+                keywords = payload.get("keywords", [])
+                if keywords:
+                    stats["papers_with_keywords"] += 1
+                    stats["total_keywords"] += len(keywords)
+                else:
+                    stats["papers_without_keywords"] += 1
+
+                # Count by source
+                source = payload.get("keywords_source", "none")
+                if source in stats["by_source"]:
+                    stats["by_source"][source] += 1
+
+            if offset is None:
+                break
+
+        # Calculate average
+        if stats["papers_with_keywords"] > 0:
+            stats["avg_keywords_per_paper"] = (
+                stats["total_keywords"] / stats["papers_with_keywords"]
+            )
+        else:
+            stats["avg_keywords_per_paper"] = 0.0
+
+        return stats
+
+    def clear_all_keywords(self) -> int:
+        """Clear keywords from all papers.
+
+        Returns:
+            Number of papers cleared.
+        """
+        cleared = 0
+        offset = None
+
+        while True:
+            results, offset = self.client.scroll(
+                collection_name=self.collection_name,
+                limit=1000,
+                offset=offset,
+                with_payload=False,
+            )
+
+            for point in results:
+                self.client.set_payload(
+                    collection_name=self.collection_name,
+                    payload={"keywords": [], "keywords_source": None},
+                    points=[str(point.id)],
+                )
+                cleared += 1
+
+            if offset is None:
+                break
+
+        return cleared

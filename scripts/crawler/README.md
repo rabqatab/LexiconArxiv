@@ -221,5 +221,5 @@ Crawler implementations are in `src/core/crawler/`:
 
 ## See Also
 
-- [Crawling HOWTO](../../docs/guides/crawling_howto.md) - Detailed guide
-- [CLI Reference](../../docs/guides/crawling_howto.md#cli-commands-reference)
+- [Crawling Guide](../../docs/guides/crawling.md) - Detailed guide
+- [CLI Reference](../../docs/reference/cli.md) - Complete CLI command reference

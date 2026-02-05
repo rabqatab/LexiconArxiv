@@ -2,14 +2,14 @@
 
 ## 1. Overview
 
-본 문서는 **Core-first 하이브리드 검색 파이프라인**의 상세 설계를 정의합니다.
+This document defines the detailed design of the **Core-first hybrid search pipeline**.
 
 ### 1.1 Key Principles
 
-- **Core-first**: Top-tier venue 논문을 우선 검색하고 가중치 부여
-- **On-demand Extension**: 필요 시 arXiv/OpenAlex로 확장 검색
-- **Connection-aware**: On-demand 논문의 Core 연결 관계 표시
-- **Transparent**: 검색 범위와 누락 가능성 명시
+- **Core-first**: Prioritize top-tier venue papers and apply weighting
+- **On-demand Extension**: Extend search to arXiv/OpenAlex when needed
+- **Connection-aware**: Display Core connections for on-demand papers
+- **Transparent**: Explicitly state search scope and potential gaps
 
 ---
 
@@ -75,11 +75,11 @@ class SearchStrategySelector:
         base = SearchStrategy(
             search_core=True,
             search_ondemand=True,
-            core_boost=2.0,  # Core 논문 점수 2배
+            core_boost=2.0,  # Core paper score 2x
             fusion_method="rrf"
         )
 
-        # Discovery query: Core + On-demand 모두 활용
+        # Discovery query: Use both Core + On-demand
         if analysis.query_type == QueryType.DISCOVERY:
             return base.with_updates(
                 ondemand_sources=["arxiv", "openalex"],
@@ -87,7 +87,7 @@ class SearchStrategySelector:
                 max_ondemand_results=100
             )
 
-        # Monitoring query: 최신 arXiv 강조
+        # Monitoring query: Emphasize latest arXiv
         elif analysis.query_type == QueryType.MONITORING:
             return base.with_updates(
                 ondemand_sources=["arxiv"],
@@ -112,14 +112,14 @@ class SearchStrategySelector:
 
 ```python
 class CoreSearchExecutor:
-    """Core Corpus 내 검색 (Qdrant hybrid)"""
+    """Search within Core Corpus (Qdrant hybrid)"""
 
     async def search(self, query: ExpandedQuery, strategy: SearchStrategy) -> List[CoreHit]:
         # 1. Hybrid search (vector + BM25)
         results = await self.qdrant.search(
             collection_name="paper_embeddings",
             query_vector=self.encode(query.primary),
-            query_text=query.primary,  # BM25용
+            query_text=query.primary,  # For BM25
             limit=strategy.max_core_results,
             query_filter=self._build_core_filter(query),
             search_params=SearchParams(
@@ -169,7 +169,7 @@ class CoreSearchExecutor:
 
 ```python
 class OnDemandSearchExecutor:
-    """On-demand 검색 (arXiv, OpenAlex)"""
+    """On-demand search (arXiv, OpenAlex)"""
 
     async def search(
         self,
@@ -198,10 +198,10 @@ class OnDemandSearchExecutor:
         return papers
 
     async def _search_arxiv(self, query: ExpandedQuery) -> List[OnDemandHit]:
-        """arXiv API 검색 (cs.CL, cs.AI, cs.LG, cs.IR only)"""
+        """arXiv API search (cs.CL, cs.AI, cs.LG, cs.IR only)"""
         papers = await self.arxiv_client.search(
             query=query.primary,
-            categories=["cs.CL", "cs.AI", "cs.LG", "cs.IR"],  # Vision, Robotics 제외
+            categories=["cs.CL", "cs.AI", "cs.LG", "cs.IR"],  # Exclude Vision, Robotics
             max_results=100
         )
 
@@ -212,7 +212,7 @@ class OnDemandSearchExecutor:
                 title=p.title,
                 year=p.year,
                 is_core=False,
-                core_connections=[]  # 후에 채움
+                core_connections=[]  # Filled later
             )
             for p in papers
         ]
@@ -242,12 +242,12 @@ class OnDemandSearchExecutor:
 
 ```python
 class CoreConnectionDetector:
-    """On-demand 논문의 Core 연결 관계 탐지"""
+    """Detect Core connection relationships for on-demand papers"""
 
     async def detect(self, paper: OnDemandHit) -> List[CoreConnection]:
         connections = []
 
-        # 1. DOI 매칭 (프리프린트 → 출판본)
+        # 1. DOI matching (preprint → publication)
         if paper.doi:
             core_match = await self.db.find_core_by_doi(paper.doi)
             if core_match:
@@ -257,7 +257,7 @@ class CoreConnectionDetector:
                     confidence=1.0
                 ))
 
-        # 2. 인용 관계 탐지
+        # 2. Citation relationship detection
         if paper.referenced_works:
             for ref_id in paper.referenced_works:
                 if await self.db.is_core(ref_id):
@@ -296,7 +296,7 @@ class CoreConnectionDetector:
 
 ```python
 class CoreFirstScoreFusion:
-    """Core-first 점수 융합"""
+    """Core-first score fusion"""
 
     def fuse(
         self,
@@ -305,31 +305,31 @@ class CoreFirstScoreFusion:
         strategy: SearchStrategy
     ) -> List[RankedPaper]:
 
-        # 1. RRF 기반 기본 점수 계산
+        # 1. Calculate base score with RRF
         all_results = core_results + ondemand_results
         rrf_scores = self._reciprocal_rank_fusion(all_results)
 
-        # 2. Core boost 적용
+        # 2. Apply Core boost
         for paper in rrf_scores:
             if paper.is_core:
-                paper.score *= strategy.core_boost  # 기본 2.0배
+                paper.score *= strategy.core_boost  # Default 2.0x
 
-            # Tier 0은 추가 boost
+            # Additional boost for Tier 0
             if paper.tier == 0:
                 paper.score *= 1.2
 
-        # 3. Recency boost (옵션)
+        # 3. Recency boost (optional)
         if strategy.recency_boost:
             rrf_scores = self._apply_recency_boost(rrf_scores, strategy.recency_decay)
 
         # 4. Connection count boost for on-demand
         for paper in rrf_scores:
             if not paper.is_core and paper.core_connections:
-                # Core 연결이 많을수록 점수 상승
+                # More Core connections = higher score
                 connection_boost = 1 + 0.1 * len(paper.core_connections)
                 paper.score *= connection_boost
 
-        # 5. 최종 정렬
+        # 5. Final sort
         return sorted(rrf_scores, key=lambda x: x.score, reverse=True)
 
     def _reciprocal_rank_fusion(
@@ -380,7 +380,7 @@ class Deduplicator:
         unmatched = [p for p in papers if not self._is_matched(p)]
         fuzzy_groups = self._fuzzy_match_titles(unmatched)
 
-        # Phase 3: Merge - Core 버전 우선
+        # Phase 3: Merge - prefer Core version
         canonical = []
         for group in self._all_groups(by_doi, by_arxiv, fuzzy_groups):
             canonical.append(self._merge_prefer_core(group))
@@ -388,13 +388,13 @@ class Deduplicator:
         return canonical
 
     def _merge_prefer_core(self, group: List[RawPaper]) -> CanonicalPaper:
-        """Core 버전을 primary로 선택"""
-        # Core 논문 우선
+        """Select Core version as primary"""
+        # Prefer Core papers
         core_papers = [p for p in group if p.is_core]
         if core_papers:
             primary = core_papers[0]
         else:
-            # 가장 완전한 메타데이터를 가진 것 선택
+            # Select the one with most complete metadata
             primary = max(group, key=lambda p: self._completeness_score(p))
 
         return CanonicalPaper(
@@ -412,7 +412,7 @@ class Deduplicator:
 
 ```python
 class GraphSearchExtension:
-    """인용 그래프 기반 검색 확장"""
+    """Citation graph-based search extension"""
 
     async def expand_by_citations(
         self,
@@ -421,12 +421,12 @@ class GraphSearchExtension:
         direction: str = "both"  # "references", "citations", "both"
     ) -> List[RelatedPaper]:
         """
-        seed_papers를 기반으로 인용 그래프 탐색
+        Traverse citation graph from seed_papers
 
         Args:
-            seed_papers: 시작 논문 ID 리스트
-            depth: 탐색 깊이 (1 = 직접 인용만)
-            direction: 탐색 방향
+            seed_papers: Starting paper ID list
+            depth: Traversal depth (1 = direct citations only)
+            direction: Traversal direction
         """
         visited = set(seed_papers)
         related = []
@@ -436,7 +436,7 @@ class GraphSearchExtension:
             next_level = []
 
             for paper_id in current_level:
-                # 이 논문이 인용한 Core 논문들
+                # Core papers this paper cites
                 if direction in ("references", "both"):
                     refs = await self.db.get_references(paper_id, core_only=True)
                     for ref in refs:
@@ -450,7 +450,7 @@ class GraphSearchExtension:
                                 depth=d+1
                             ))
 
-                # 이 논문을 인용한 Core 논문들
+                # Core papers that cite this paper
                 if direction in ("citations", "both"):
                     cites = await self.db.get_citations(paper_id, core_only=True)
                     for cite in cites:
@@ -473,7 +473,7 @@ class GraphSearchExtension:
 
 ```python
 class SimilarPaperFinder:
-    """유사 논문 탐색 (Core 내)"""
+    """Find similar papers (within Core)"""
 
     async def find_similar(
         self,
@@ -481,9 +481,9 @@ class SimilarPaperFinder:
         limit: int = 20,
         core_only: bool = True
     ) -> List[SimilarPaper]:
-        """특정 논문과 유사한 Core 논문 탐색"""
+        """Find Core papers similar to a specific paper"""
 
-        # 1. 해당 논문의 embedding 조회
+        # 1. Get embedding of target paper
         paper = await self.db.get_paper(paper_id)
         if not paper or not paper.embedding:
             return []
@@ -498,7 +498,7 @@ class SimilarPaperFinder:
         results = await self.qdrant.search(
             collection_name="paper_embeddings",
             query_vector=paper.embedding,
-            limit=limit + 1,  # 자기 자신 제외용
+            limit=limit + 1,  # Exclude self
             query_filter=Filter(must=filter_conditions) if filter_conditions else None
         )
 
@@ -525,7 +525,7 @@ class TransparencyInfo:
     after_dedup: int
     core_count: int
     ondemand_count: int
-    connected_ondemand: int  # Core 연결이 있는 on-demand 수
+    connected_ondemand: int  # On-demand count with Core connection
     search_strategy: str
     execution_time_ms: int
     coverage_notes: List[str]
@@ -554,14 +554,14 @@ class TransparencyGenerator:
             connected_ondemand=len(connected),
             search_strategy="Core-first hybrid",
             coverage_notes=[
-                f"Core Corpus: {len(core_results)}개 (Tier 0/1 venue)",
-                f"On-demand: {len(ondemand_results)}개 (arXiv + OpenAlex)",
-                f"Core 연결된 On-demand: {len(connected)}개"
+                f"Core Corpus: {len(core_results)} papers (Tier 0/1 venue)",
+                f"On-demand: {len(ondemand_results)} papers (arXiv + OpenAlex)",
+                f"Core-connected On-demand: {len(connected)} papers"
             ],
             potential_gaps=[
-                "Google Scholar는 포함되지 않음",
-                "Vision/Robotics/Speech venue는 제외됨",
-                "Core 연결 없는 최신 arXiv는 하위 랭킹"
+                "Google Scholar is not included",
+                "Vision/Robotics/Speech venues are excluded",
+                "Latest arXiv without Core connection ranked lower"
             ]
         )
 ```
@@ -576,15 +576,15 @@ class TransparencyGenerator:
 class SearchCache:
     def __init__(self, redis: Redis):
         self.redis = redis
-        self.core_ttl = 3600      # Core 결과: 1시간
-        self.ondemand_ttl = 300   # On-demand: 5분
+        self.core_ttl = 3600      # Core results: 1 hour
+        self.ondemand_ttl = 300   # On-demand: 5 minutes
 
     async def get_or_compute(
         self,
         query: ExpandedQuery,
         compute_fn: Callable
     ) -> SearchResult:
-        # Core 결과 캐시 확인
+        # Check Core results cache
         core_key = f"core:{query.hash()}"
         cached_core = await self.redis.get(core_key)
 
@@ -594,7 +594,7 @@ class SearchCache:
             core_results = await compute_fn.core_search(query)
             await self.redis.setex(core_key, self.core_ttl, serialize(core_results))
 
-        # On-demand는 별도 캐시 (더 짧은 TTL)
+        # On-demand has separate cache (shorter TTL)
         ondemand_key = f"ondemand:{query.hash()}"
         # ...
 
@@ -604,28 +604,52 @@ class SearchCache:
 ### 8.2 Index Optimization
 
 - **Qdrant**:
-  - Core 컬렉션: m=16, ef_construct=128
-  - Payload indexing: tier, field, year, is_core
-  - Quantization: scalar (메모리 50% 절약)
+  - Core collection: m=16, ef_construct=128
+  - Payload indexing: tier, field, year, is_core, keywords
+  - BM25 text fields: title, abstract, keywords
+  - Quantization: scalar (50% memory savings)
 
-### 8.3 Query Timeout
+### 8.3 Keyword-Enhanced BM25
+
+Using keyword field for exact paper retrieval:
+
+```python
+# Example: "HyDE paper" query
+# keywords field contains ["HyDE", "dense retrieval", ...]
+
+# BM25 search searches title + abstract + keywords
+results = qdrant.search(
+    collection_name="lexicon_arxiv",
+    query_text="HyDE",  # BM25: matches title, abstract, keywords
+    query_vector=embed("HyDE"),  # Dense: semantic similarity
+    fusion="rrf",  # Reciprocal Rank Fusion
+)
+```
+
+Keyword extraction methods:
+- **Regex patterns**: Extract explicit acronyms from title/abstract (e.g., "BERT:", "(RAG)")
+- **KeyBERT**: Extract semantic key keywords from abstracts
+
+See [Keyword Extraction Design](./keyword_extraction.md) for details.
+
+### 8.4 Query Timeout
 
 ```python
 TIMEOUTS = {
-    "core_search": 3.0,      # 3초
-    "arxiv": 10.0,           # 10초
-    "openalex": 8.0,         # 8초
-    "connection_detect": 2.0  # 2초
+    "core_search": 3.0,      # 3 seconds
+    "arxiv": 10.0,           # 10 seconds
+    "openalex": 8.0,         # 8 seconds
+    "connection_detect": 2.0  # 2 seconds
 }
 
 async def search_with_fallback(tasks, timeout):
-    """일부 실패해도 Core 결과는 항상 반환"""
+    """Always return Core results even if some fail"""
     done, pending = await asyncio.wait(tasks, timeout=timeout)
 
     for task in pending:
         task.cancel()
 
-    # Core 결과가 있으면 항상 반환
+    # Always return if Core results exist
     results = [t.result() for t in done if not t.exception()]
     return results
 ```
@@ -636,7 +660,16 @@ async def search_with_fallback(tasks, timeout):
 
 | Mode | Core Search | On-demand | Core Boost | Use Case |
 |------|-------------|-----------|------------|----------|
-| **Core-only** | ✓ | ✗ | 1.0 | Precision, verified results |
-| **Core-first** | ✓ | ✓ | 2.0 | Default, balanced |
-| **Balanced** | ✓ | ✓ | 1.0 | Discovery, maximum recall |
-| **Monitoring** | ✓ | ✓ (arXiv only) | 1.5 + recency | Latest papers tracking |
+| **Core-only** | Yes | No | 1.0 | Precision, verified results |
+| **Core-first** | Yes | Yes | 2.0 | Default, balanced |
+| **Balanced** | Yes | Yes | 1.0 | Discovery, maximum recall |
+| **Monitoring** | Yes | Yes (arXiv only) | 1.5 + recency | Latest papers tracking |
+
+---
+
+## Related Documents
+
+- [Architecture Overview](../architecture/overview.md)
+- [Keyword Extraction](./keyword_extraction.md)
+- [Citation Graph](./citation_graph.md)
+- [Data Collection](./data_collection.md)

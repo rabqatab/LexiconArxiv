@@ -2,15 +2,15 @@
 
 ## 1. System Overview
 
-본 문서는 AI 연구 인사이트 엔진의 기술 아키텍처를 정의합니다.
+This document defines the technical architecture of the AI Research Insights Engine.
 
 ### 1.1 Architecture Principles
 
-- **Core-first**: Top-tier venue 논문을 기준점(anchor)으로 활용
-- **On-demand Extension**: 질의 시점에 최신 논문 확장 검색
-- **Graph-aware**: 인용 그래프 기반 연결 관계 탐색
-- **Graceful Degradation**: 외부 API 장애 시에도 Core Corpus 기반 검색 유지
-- **Observability First**: 모든 파이프라인에 메트릭/로깅 내장
+- **Core-first**: Use top-tier venue papers as anchors
+- **On-demand Extension**: Extend search with latest papers at query time
+- **Graph-aware**: Explore connections based on citation graph
+- **Graceful Degradation**: Maintain Core Corpus-based search even during external API failures
+- **Observability First**: Built-in metrics/logging for all pipelines
 
 ---
 
@@ -21,7 +21,7 @@
 │                         Client Layer                                │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────┐    │
 │  │   Web    │  │   CLI    │  │   API    │  │   MCP Server     │    │
-│  │   App    │  │  Client  │  │  Client  │  │   (Agent용)      │    │
+│  │   App    │  │  Client  │  │  Client  │  │   (for Agents)   │    │
 │  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────────┬─────────┘    │
 └───────┼─────────────┼─────────────┼─────────────────┼──────────────┘
         │             │             │                 │
@@ -69,6 +69,10 @@
 │ │ Citation   │ │  │                │  │ │  Embedding │ │
 │ │  Graph     │ │  │                │  │ │  Pipeline  │ │
 │ └────────────┘ │  │                │  │ └────────────┘ │
+│                │  │                │  │ ┌────────────┐ │
+│                │  │                │  │ │  Keyword   │ │
+│                │  │                │  │ │ Extraction │ │
+│                │  │                │  │ └────────────┘ │
 └────────────────┘  └────────────────┘  └────────────────┘
 ```
 
@@ -78,7 +82,7 @@
 
 ### 3.1 Core Corpus Layer
 
-**사전 수집된 Top-tier venue 논문** (Tier 0 + Tier 1 + Tier 2)
+**Pre-collected top-tier venue papers** (Tier 0 + Tier 1 + Tier 2)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -86,8 +90,9 @@
 ├─────────────────────────────────────────────────────────────┤
 │  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐     │
 │  │ Tier 0      │    │ Tier 1      │    │ Tier 2      │     │
-│  │ (11 venues) │───▶│ (13 venues) │───▶│ (3 venues)  │     │
-│  │ ML/AI/NLP   │    │ Extended    │    │ Legal AI    │     │
+│  │ (11 venues) │───▶│ (14 venues) │───▶│ (3+ venues) │     │
+│  │ ML/AI/NLP   │    │ Extended    │    │ Legal AI +  │     │
+│  │             │    │             │    │ Workshops   │     │
 │  └─────────────┘    └─────────────┘    └─────────────┘     │
 │         │                  │                  │             │
 │         └──────────────────┴──────────────────┘             │
@@ -99,19 +104,24 @@
 │                                                              │
 │  Data Sources:                                               │
 │  - OpenAlex: ML/AI venues (~40K papers)                     │
-│  - ACL Anthology: NLP venues (~20K papers)                  │
+│  - ACL Anthology: NLP venues (~30K papers)                  │
 │  - DBLP: IR/Legal venues (~5K papers)                       │
+│  - OpenReview: ICLR, NeurIPS, ICML (~15K papers)           │
+│  - ACM DL: KDD, SIGIR, WWW (~10K papers)                   │
+│  - AAAI OJS: AAAI (2020-2023) (~8K papers)                 │
 │                                                              │
 │  Storage:                                                    │
-│  - PostgreSQL: 메타데이터, 인용 관계                          │
+│  - PostgreSQL: Metadata, citation relationships              │
 │  - Qdrant: Embedding + BM25 hybrid index                    │
-│  - ~65K papers (2020-2024)                                  │
+│  - ~100K papers (2020-present)                              │
 └─────────────────────────────────────────────────────────────┘
 ```
 
+See [Venue Reference](../reference/venues.md) for complete venue details.
+
 ### 3.2 On-demand Retrieval Layer
 
-**질의 시점에 확장 검색**
+**Extended search at query time**
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -126,10 +136,10 @@
 │  └─────────────┘    └─────────────┘    └─────────────┘     │
 │                                                              │
 │  Connection Types:                                           │
-│  - cites_core: arXiv 논문이 Core 인용                        │
-│  - cited_by_core: Core가 arXiv 인용                          │
-│  - published_as: 프리프린트 → Core 출판본                     │
-│  - similar_to: Semantic 유사도                               │
+│  - cites_core: arXiv paper cites Core                       │
+│  - cited_by_core: Core cites arXiv                          │
+│  - published_as: Preprint → Core publication                │
+│  - similar_to: Semantic similarity                          │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -139,7 +149,7 @@
 
 ### 4.1 Query Service
 
-**책임**: 사용자 자연어 질의를 검색 가능한 구조로 변환
+**Responsibility**: Transform user natural language query into searchable structure
 
 ```python
 class QueryService:
@@ -151,58 +161,58 @@ class QueryService:
         pass
 ```
 
-**주요 기능**:
-- 자연어 파싱 (한국어/영어 지원)
-- 연도/venue/field 추출
-- 쿼리 확장 (동의어, 관련 용어)
-- 검색 전략 결정 (Core-only, Core-first, Balanced)
+**Key Features**:
+- Natural language parsing (English/Korean support)
+- Year/venue/field extraction
+- Query expansion (synonyms, related terms)
+- Search strategy decision (Core-only, Core-first, Balanced)
 
 ### 4.2 Search Orchestrator
 
-**책임**: Core + On-demand 검색 조율 및 결과 통합
+**Responsibility**: Coordinate Core + On-demand search and integrate results
 
 ```python
 class SearchOrchestrator:
     async def search(self, intent: SearchIntent) -> SearchResult:
-        # 1. Core Corpus 검색 (primary)
+        # 1. Core Corpus search (primary)
         core_results = await self.core_index.search(intent)
 
-        # 2. On-demand 확장 (필요 시)
+        # 2. On-demand extension (if needed)
         if intent.include_ondemand:
             ondemand_results = await asyncio.gather(
                 self.arxiv_client.search(intent),
                 self.openalex_client.narrow_search(intent),
             )
 
-            # 3. Core 연결 탐지
+            # 3. Core connection detection
             for paper in ondemand_results:
                 paper.core_connections = await self.detect_connections(paper)
 
-        # 4. 결과 통합 및 랭킹
+        # 4. Result integration and ranking
         merged = self.merger.merge(core_results, ondemand_results)
         ranked = self.ranker.rank(merged, intent.ranking_strategy)
 
-        # 5. Core-first 가중치 적용
+        # 5. Apply Core-first weighting
         ranked = self.apply_core_boost(ranked)
 
         return SearchResult(papers=ranked, core_count=len(core_results))
 ```
 
-### 4.3 Graph Service (NEW)
+### 4.3 Graph Service
 
-**책임**: 인용 그래프 탐색 및 트렌드 분석
+**Responsibility**: Citation graph exploration and trend analysis
 
 ```python
 class GraphService:
     async def get_citation_network(self, paper_id: str, depth: int = 2) -> CitationGraph:
-        """특정 논문의 인용 네트워크 반환"""
-        # 1. 해당 논문이 인용한 Core 논문들
+        """Return citation network for a specific paper"""
+        # 1. Core papers this paper cites
         references = await self.db.get_references(paper_id, core_only=True)
 
-        # 2. 해당 논문을 인용한 논문들
+        # 2. Papers that cite this paper
         citations = await self.db.get_citations(paper_id, core_only=True)
 
-        # 3. 그래프 구축
+        # 3. Build graph
         return CitationGraph(
             center=paper_id,
             references=references,
@@ -211,22 +221,22 @@ class GraphService:
         )
 
     async def get_field_trends(self, field: str, years: int = 5) -> TrendAnalysis:
-        """분야별 트렌드 분석"""
-        # 1. 연도별 논문 수
-        # 2. 주요 키워드 변화
-        # 3. Notable 논문 선정 (높은 인용, 최근 급상승)
+        """Analyze trends by field"""
+        # 1. Paper count by year
+        # 2. Keyword changes
+        # 3. Notable paper selection (high citations, recent surge)
         pass
 
     async def find_notable_papers(self, field: str, limit: int = 20) -> List[Paper]:
-        """Notable 논문 자동 선정"""
-        # 기준: 인용 수, venue tier, 최신성, citation velocity
+        """Automatic notable paper selection"""
+        # Criteria: citation count, venue tier, recency, citation velocity
         pass
 ```
 
 ### 4.4 Core Corpus Layer
 
 #### PostgreSQL (Metadata + Graph Store)
-- Core paper records (tier 0/1)
+- Core paper records (tier 0/1/2)
 - Citation edges (referenced_works)
 - Core connections for on-demand papers
 - Authors and venues
@@ -234,7 +244,7 @@ class GraphService:
 #### Qdrant (Hybrid Index)
 - Vector search (768-dim embeddings)
 - BM25 keyword search
-- Payload filtering (tier, field, year)
+- Payload filtering (tier, field, year, keywords)
 - Core-first boosting
 
 ### 4.5 On-demand Retrieval
@@ -242,7 +252,7 @@ class GraphService:
 ```python
 class OnDemandRetriever:
     async def search_arxiv(self, query: str) -> List[Paper]:
-        """arXiv 최신 논문 검색 + Core 연결 탐지"""
+        """Search arXiv latest papers + Core connection detection"""
         papers = await self.arxiv_api.search(query, categories=["cs.CL", "cs.AI", "cs.LG"])
 
         for paper in papers:
@@ -254,13 +264,13 @@ class OnDemandRetriever:
     async def detect_core_connections(self, paper: Paper) -> List[CoreConnection]:
         connections = []
 
-        # 1. DOI 매칭 (프리프린트 → 출판본)
+        # 1. DOI matching (preprint → publication)
         if paper.doi:
             match = await self.db.find_core_by_doi(paper.doi)
             if match:
                 connections.append(CoreConnection("published_as", match.id))
 
-        # 2. 인용 관계
+        # 2. Citation relationship
         for ref in paper.references:
             if await self.db.is_core(ref):
                 connections.append(CoreConnection("cites_core", ref))
@@ -277,7 +287,7 @@ class OnDemandRetriever:
 
 ## 5. Data Flow
 
-### 5.1 검색 요청 흐름
+### 5.1 Search Request Flow
 
 ```
 User Query: "Recent LLM evaluation benchmarks"
@@ -325,7 +335,7 @@ User Query: "Recent LLM evaluation benchmarks"
                - 20 On-demand (connection shown)
 ```
 
-### 5.2 Core Corpus 수집 흐름
+### 5.2 Core Corpus Collection Flow
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -335,7 +345,7 @@ User Query: "Recent LLM evaluation benchmarks"
 ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
 │   OpenAlex API  │  │  ACL Anthology  │  │    DBLP API     │
 │ (ML/AI venues)  │  │  (NLP venues)   │  │ (IR/Legal)      │
-│   ~40K papers   │  │   ~20K papers   │  │   ~5K papers    │
+│   ~40K papers   │  │   ~30K papers   │  │   ~5K papers    │
 └────────┬────────┘  └────────┬────────┘  └────────┬────────┘
          │                    │                    │
          └────────────────────┼────────────────────┘
@@ -368,12 +378,9 @@ User Query: "Recent LLM evaluation benchmarks"
 
 | Data Type | Estimated Size |
 |-----------|----------------|
-| Core Papers (Tier 0+1+2) | ~65K records |
-| - OpenAlex source | ~40K |
-| - ACL Anthology source | ~20K |
-| - DBLP source | ~5K |
-| Citation Edges (Core) | ~2M edges |
-| Vector Index (Core) | ~250MB |
+| Core Papers (Tier 0+1+2) | ~100K records |
+| Citation Edges (Core) | ~3M edges |
+| Vector Index (Core) | ~400MB |
 | On-demand Cache | ~50K records (LRU) |
 
 ### 6.2 Horizontal Scaling
@@ -410,17 +417,18 @@ User Query: "Recent LLM evaluation benchmarks"
 
 ### 7.4 ML/NLP
 - **Embeddings**: sentence-transformers (all-MiniLM-L6-v2 or SPECTER2)
-- **NL Processing**: spaCy, KoNLPy (한국어)
+- **Keyword Extraction**: KeyBERT
+- **NL Processing**: spaCy
 
 ---
 
 ## 8. Security Considerations
 
-- API 인증: API Key 기반
-- Rate limiting: 사용자별/IP별
-- 입력 검증: Query injection 방지
-- 외부 API 키: Secret manager 사용 (.env)
-- 로깅: PII 제외
+- API authentication: API Key based
+- Rate limiting: Per user/IP
+- Input validation: Query injection prevention
+- External API keys: Use secret manager (.env)
+- Logging: Exclude PII
 
 ---
 
@@ -428,7 +436,16 @@ User Query: "Recent LLM evaluation benchmarks"
 
 | Failure | Impact | Recovery |
 |---------|--------|----------|
-| External API down | On-demand 검색 불가 | Core-only 모드로 fallback |
-| Qdrant down | 검색 불가 | PostgreSQL BM25 fallback |
-| Citation graph incomplete | 연결 누락 | Incremental rebuild |
-| Embedding pipeline lag | 새 논문 검색 누락 | Priority queue for Core |
+| External API down | On-demand search unavailable | Fallback to Core-only mode |
+| Qdrant down | Search unavailable | PostgreSQL BM25 fallback |
+| Citation graph incomplete | Missing connections | Incremental rebuild |
+| Embedding pipeline lag | New papers not searchable | Priority queue for Core |
+
+---
+
+## Related Documents
+
+- [Data Model](./data_model.md)
+- [API Specification](./api.md)
+- [Search Pipeline](../pipelines/search.md)
+- [Data Collection](../pipelines/data_collection.md)

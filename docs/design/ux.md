@@ -4,48 +4,48 @@
 
 ### 1.1 Core Principles
 
-1. **연구자 신뢰 우선 (Researcher Trust First)**
-   - "AI가 판단"이 아니라 "AI가 수집"
-   - 모든 결과에 출처와 이유를 명시
-   - 숨겨진 필터링 없음
+1. **Researcher Trust First**
+   - "AI collects" not "AI judges"
+   - Show source and reasoning for all results
+   - No hidden filtering
 
-2. **투명성 (Transparency)**
-   - 검색 범위가 어디까지인지 항상 표시
-   - 누락 가능성을 사전에 안내
-   - 랭킹 로직을 이해할 수 있도록
+2. **Transparency**
+   - Always display search scope
+   - Notify about potential gaps upfront
+   - Make ranking logic understandable
 
-3. **효율성 (Efficiency)**
-   - 클릭 수 최소화
-   - 필터는 즉각 반응
-   - 키보드 단축키 지원
+3. **Efficiency**
+   - Minimize clicks
+   - Instant filter response
+   - Keyboard shortcut support
 
-4. **Core-first 접근 (Core-first Approach)**
-   - Top-tier venue 논문을 기준점(anchor)으로 표시
-   - On-demand 논문의 Core 연결 관계 명시
-   - 연구 흐름과 트렌드를 그래프로 시각화
+4. **Core-first Approach**
+   - Display top-tier venue papers as anchors
+   - Show Core connections for on-demand papers
+   - Visualize research flow and trends with graphs
 
 ---
 
 ## 2. User Flows
 
-### 2.1 Discovery Flow (문헌 조사)
+### 2.1 Discovery Flow (Literature Survey)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  1. 검색 입력                                                    │
+│  1. Search Input                                                 │
 │  ┌─────────────────────────────────────────────────────────┐   │
 │  │ Korean LLM instruction tuning datasets                   │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                           │                                     │
 │                           ▼                                     │
-│  2. 검색 옵션 (선택적)                                          │
+│  2. Search Options (optional)                                   │
 │  ┌─────────────────────────────────────────────────────────┐   │
 │  │ Sources: [✓] OpenAlex [✓] arXiv [✓] ACL Anthology       │   │
 │  │ Year: 2022 ~ 2024    Venue: [Any]    Type: [dataset]    │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                           │                                     │
 │                           ▼                                     │
-│  3. 결과 (투명성 패널 포함)                                     │
+│  3. Results (with transparency panel)                           │
 │  ┌─────────────────────────────────────────────────────────┐   │
 │  │ 📊 623 papers found (1,250 raw → 623 after dedup)       │   │
 │  │ Sources: OpenAlex (450) + arXiv (580) + ACL (220)       │   │
@@ -53,7 +53,7 @@
 │  └─────────────────────────────────────────────────────────┘   │
 │                           │                                     │
 │                           ▼                                     │
-│  4. 결과 목록 + 필터 패널                                       │
+│  4. Result List + Filter Panel                                  │
 │  ┌──────────────────┬──────────────────────────────────────┐   │
 │  │ Filters          │ Results                              │   │
 │  │ ────────────     │ ─────────────────────────────────    │   │
@@ -74,7 +74,7 @@
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### 2.2 Monitoring Flow (최신 논문 추적)
+### 2.2 Monitoring Flow (Latest Paper Tracking)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -90,7 +90,7 @@
 │                                                                 │
 │  ┌─────────────────────────────────────────────────────────┐   │
 │  │ 🔔 Korean NLP                                            │   │
-│  │    "Korean language model OR 한국어 LLM"                 │   │
+│  │    "Korean language model OR multilingual LLM"           │   │
 │  │    📅 Weekly | 🆕 45 new papers this month               │   │
 │  │    [View Results] [Edit] [Pause]                         │   │
 │  └─────────────────────────────────────────────────────────┘   │
@@ -124,10 +124,10 @@
 ```
 
 **Behavior**:
-- 타이핑 시 300ms debounce 후 자동완성
-- Enter: 검색 실행
-- Arrow keys: 제안 항목 탐색
-- Esc: 제안 닫기
+- Autocomplete triggers after 300ms debounce while typing
+- Enter: Execute search
+- Arrow keys: Navigate through suggestions
+- Esc: Close suggestions
 
 ### 3.2 Transparency Panel
 
@@ -285,11 +285,11 @@
 
 ### 6.1 Requirements
 
-- WCAG 2.1 AA 준수
-- Screen reader 지원 (ARIA labels)
-- 키보드 네비게이션 완전 지원
-- 고대비 모드 지원
-- 최소 터치 타겟: 44x44px
+- WCAG 2.1 AA compliant
+- Screen reader support (ARIA labels)
+- Full keyboard navigation support
+- High contrast mode support
+- Minimum touch target: 44x44px
 
 ### 6.2 ARIA Implementation
 
@@ -418,7 +418,7 @@
 
 ## 9. Dark Mode
 
-전체 인터페이스는 Light/Dark 모드 지원:
+The entire interface supports Light/Dark mode:
 
 | Element | Light | Dark |
 |---------|-------|------|

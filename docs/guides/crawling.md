@@ -1070,8 +1070,114 @@ After resolution, papers have:
 
 ---
 
+## Keyword Extraction
+
+After collecting and enriching papers, extract keywords for improved BM25 search.
+
+### Why Keyword Extraction?
+
+Keywords enable exact paper retrieval:
+- "give me the HyDE paper" → matches `keywords: ["HyDE"]`
+- "BERT paper" → matches `keywords: ["BERT"]`
+
+Without keywords, these queries rely solely on title/abstract text matching.
+
+### Two-Phase Extraction
+
+1. **Regex Extraction**: Explicit acronyms from titles/abstracts
+   - `"BERT: Pre-training..."` → `["BERT"]`
+   - `"...(RAG)..."` → `["RAG"]`
+
+2. **KeyBERT Extraction**: Semantic keywords from abstracts
+   - `"...retrieval augmented generation..."` → `["retrieval augmented", "generation"]`
+
+### Running Keyword Extraction
+
+```bash
+# Check statistics first
+python -m src.cli.core_collect keyword-stats
+
+# Preview extraction (dry run)
+python -m src.cli.core_collect extract-keywords --dry-run
+
+# Full extraction (regex + KeyBERT)
+python -m src.cli.core_collect extract-keywords
+
+# Regex only (faster, no ML model)
+python -m src.cli.core_collect extract-keywords --no-keybert
+
+# Limit for testing
+python -m src.cli.core_collect extract-keywords --limit 1000
+```
+
+### Checkpoint Management
+
+```bash
+# Clear checkpoint to start fresh
+python -m src.cli.core_collect clear-keyword-checkpoint
+```
+
+### Expected Results
+
+| Metric | Expected Value |
+|--------|----------------|
+| Papers with keywords | ~90% of corpus |
+| Avg keywords per paper | 3-5 |
+| Acronym precision | >95% |
+
+### Dependencies
+
+KeyBERT requires additional dependencies:
+
+```bash
+pip install keybert sentence-transformers
+```
+
+### Schema Changes
+
+After extraction, papers have:
+
+```python
+{
+    "keywords": ["BERT", "language model", "pre-training"],
+    "keywords_source": "both"  # "regex", "keybert", or "both"
+}
+```
+
+---
+
+## Recommended Full Pipeline
+
+For a complete corpus with all enrichments:
+
+```bash
+# 1. Collect from all sources
+python -m src.cli.core_collect collect-all-sources --since-year 2020 --include-workshops
+
+# 2. Deduplicate
+python -m src.cli.core_collect deduplicate
+
+# 3. Enrich citations and abstracts
+python -m src.cli.core_collect enrich-citations --parallel 10
+python -m src.cli.core_collect enrich-abstracts --parallel 10
+
+# 4. Resolve references (build citation graph)
+python -m src.cli.core_collect resolve-refs
+
+# 5. Build citation graph metrics
+python -m src.cli.core_collect build-cited-by
+
+# 6. Extract keywords (for BM25 search)
+python -m src.cli.core_collect extract-keywords
+```
+
+---
+
 ## See Also
 
-- [Data Collection Design](../design/data_collection.md)
-- [Architecture Overview](../design/architecture.md)
-- [Data Model](../design/data_model.md)
+- [Data Collection Design](../pipelines/data_collection.md)
+- [Keyword Extraction Design](../pipelines/keyword_extraction.md)
+- [Architecture Overview](../architecture/overview.md)
+- [Data Model](../architecture/data_model.md)
+- [CLI Reference](../reference/cli.md)
+- [Venue Reference](../reference/venues.md)

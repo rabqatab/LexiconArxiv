@@ -4,6 +4,17 @@ Semantic Scholar often has better coverage for ML/AI papers than OpenAlex,
 especially for recent conference papers (NeurIPS, ICML, ICLR, ACL).
 
 API Documentation: https://api.semanticscholar.org/api-docs/
+
+Authentication:
+    Set one of these environment variables for higher rate limits:
+    - S2_API_KEY: Semantic Scholar API key
+    - SEMANTIC_SCHOLAR_API_KEY: Alternative env var name
+
+    Get a free API key at: https://www.semanticscholar.org/product/api#api-key
+
+Rate Limits:
+    - Without API key: 100 requests per 5 minutes (~0.33 req/sec)
+    - With API key: 1 request per second (cumulative across all endpoints)
 """
 
 import asyncio
@@ -45,31 +56,48 @@ class S2EnrichmentProgress:
 class SemanticScholarEnricher:
     """Enrich papers with citation data from Semantic Scholar."""
 
+    # Rate limit defaults
+    # S2 API limit with key: 1 req/sec cumulative across all endpoints
+    DEFAULT_DELAY_NO_KEY = 3.0  # ~20 req/min without key (conservative)
+    DEFAULT_DELAY_WITH_KEY = 1.1  # 1 req/sec with key (slightly under limit for safety)
+    DEFAULT_CONCURRENT_NO_KEY = 1
+    DEFAULT_CONCURRENT_WITH_KEY = 1  # Must be 1 due to cumulative rate limit
+
     def __init__(
         self,
         storage: QdrantStorage | None = None,
         api_key: str | None = None,
         checkpoint_dir: Path | str | None = None,
         batch_size: int = 100,
-        delay: float = 1.0,  # S2 has stricter rate limits
-        max_concurrent: int = 1,
+        delay: float | None = None,  # Auto-set based on API key
+        max_concurrent: int | None = None,  # Auto-set based on API key
     ):
         """Initialize SemanticScholarEnricher.
 
         Args:
             storage: QdrantStorage instance.
             api_key: S2 API key for higher rate limits.
+                     If not provided, checks S2_API_KEY or SEMANTIC_SCHOLAR_API_KEY env vars.
                      Get one at: https://www.semanticscholar.org/product/api#api-key
             checkpoint_dir: Directory for checkpoint files.
             batch_size: Papers per batch.
-            delay: Delay between requests (S2 needs ~1s without key).
-            max_concurrent: Max concurrent requests (keep low for S2).
+            delay: Delay between requests in seconds.
+                   If None, auto-set: 0.1s with key, 3.0s without.
+            max_concurrent: Max concurrent requests.
+                            If None, auto-set: 5 with key, 1 without.
         """
         self.storage = storage or QdrantStorage()
         self.api_key = api_key or os.getenv("S2_API_KEY") or os.getenv("SEMANTIC_SCHOLAR_API_KEY")
+
+        # Auto-adjust rate limits based on API key presence
+        if self.api_key:
+            self.delay = delay if delay is not None else self.DEFAULT_DELAY_WITH_KEY
+            self.max_concurrent = max_concurrent if max_concurrent is not None else self.DEFAULT_CONCURRENT_WITH_KEY
+        else:
+            self.delay = delay if delay is not None else self.DEFAULT_DELAY_NO_KEY
+            self.max_concurrent = max_concurrent if max_concurrent is not None else self.DEFAULT_CONCURRENT_NO_KEY
+
         self.batch_size = batch_size
-        self.delay = delay
-        self.max_concurrent = max_concurrent
 
         self.checkpoint_dir = Path(checkpoint_dir or "data/core/checkpoints")
         self._checkpoint_file_doi = self.checkpoint_dir / "s2_doi_enrichment.json"
@@ -79,12 +107,24 @@ class SemanticScholarEnricher:
 
     async def __aenter__(self) -> "SemanticScholarEnricher":
         """Enter async context."""
-        headers = {}
+        headers = {
+            "User-Agent": "LexiconArxiv/1.0 (Academic paper indexing; https://github.com/your-repo)"
+        }
+
         if self.api_key:
             headers["x-api-key"] = self.api_key
-            logger.info("Using Semantic Scholar API key")
+            # Mask API key for logging (show first 4 and last 4 chars)
+            masked_key = f"{self.api_key[:4]}...{self.api_key[-4:]}" if len(self.api_key) > 8 else "***"
+            logger.info(
+                f"Using Semantic Scholar API key ({masked_key}). "
+                f"Rate: {1/self.delay:.1f} req/sec, {self.max_concurrent} concurrent"
+            )
         else:
-            logger.warning("No S2 API key - rate limits will be strict (100 req/5min)")
+            logger.warning(
+                f"No S2 API key set. Using conservative rate limits: "
+                f"{1/self.delay:.2f} req/sec, {self.max_concurrent} concurrent. "
+                f"Set S2_API_KEY env var for faster processing."
+            )
 
         self._client = httpx.AsyncClient(timeout=30.0, headers=headers)
         self._semaphore = asyncio.Semaphore(self.max_concurrent)
