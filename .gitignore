@@ -69,5 +69,7 @@ __marimo__/
 # ruff
 .ruff_cache/
 
-# obsidian
+# claude code related files
 .obsidian/
+.claude/
+.serena/

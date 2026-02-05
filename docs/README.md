@@ -38,6 +38,7 @@
 |----------|-------------|
 | [Quick Start](./guides/quickstart.md) | Complete setup and pipeline execution |
 | [Crawling](./guides/crawling.md) | Detailed crawling guide |
+| [BM25 Migration](./guides/bm25_migration.md) | Enable hybrid search (dense + BM25) |
 | [Troubleshooting](./guides/troubleshooting.md) | Common issues and solutions |
 
 ### Reference
