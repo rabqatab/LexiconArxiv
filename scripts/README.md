@@ -75,7 +75,7 @@ Runs all 5 stages in sequence (payload-only, no vectors required):
 | 4 | Resolution | Resolve references to internal IDs |
 | 5 | Graph | Build citation graph (cited_by) |
 
-> **Note**: These stages use **payload-only storage** (no embeddings). Vectors can be added later using Qdrant's named vectors feature. See [Data Model](../docs/architecture/data_model.md#5-qdrant-collection-schema) for details.
+> **Note**: These stages use **payload-only storage** (points upserted with `vector={}`). Vectors can be added later using Qdrant's named vectors feature. See [Data Model](../docs/architecture/data_model.md#5-qdrant-collection-schema) for details.
 
 ```bash
 ./scripts/run_full_pipeline.sh [OPTIONS]

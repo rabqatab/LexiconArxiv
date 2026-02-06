@@ -338,6 +338,22 @@ The collection uses **payload-only storage** to decouple metadata from embedding
 - **Named vectors**: Support multiple embedding types (title, abstract, full-text)
 - **No wasted storage**: No placeholder zero vectors during collection phase
 
+**Implementation Note**: When upserting points, the `qdrant-client` library requires the `vector` field in `PointStruct`. Pass an empty dict `{}` for payload-only storage:
+
+```python
+# Upserting without actual vectors (payload-only)
+client.upsert(
+    collection_name="lexicon_arxiv",
+    points=[
+        models.PointStruct(
+            id="point-uuid",
+            vector={},  # Empty dict required by qdrant-client
+            payload={"title": "Paper Title", ...},
+        )
+    ],
+)
+```
+
 ### 5.2 Adding Vectors Later (Named Vectors)
 
 After collection/enrichment, add vectors using Qdrant's named vectors feature:

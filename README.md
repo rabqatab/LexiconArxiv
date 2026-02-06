@@ -230,6 +230,8 @@ Collection → Enrichment → Resolution → Graph   (payload-only, no vectors)
 | **Multiple vectors** | Support different embedding models via named vectors |
 | **No wasted storage** | No placeholder zero vectors during collection |
 
+> **Note**: When upserting, pass `vector={}` (empty dict) to satisfy `qdrant-client` validation.
+
 ### Adding Embeddings Later
 
 After collection/enrichment, add vectors using Qdrant's named vectors:
