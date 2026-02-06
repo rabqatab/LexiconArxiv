@@ -127,6 +127,7 @@ class QdrantStorage:
             points=[
                 models.PointStruct(
                     id=point_id,
+                    vector={},  # Empty for payload-only storage
                     payload=payload,
                 )
             ],
@@ -150,6 +151,7 @@ class QdrantStorage:
             points = [
                 models.PointStruct(
                     id=str(uuid4()),
+                    vector={},  # Empty for payload-only storage
                     payload=self._paper_to_payload(paper),
                 )
                 for paper in batch
@@ -1500,6 +1502,7 @@ class QdrantStorage:
                 points=[
                     models.PointStruct(
                         id=stub_id,
+                        vector={},  # Empty for payload-only storage
                         payload=payload,
                     )
                 ],
@@ -1579,6 +1582,7 @@ class QdrantStorage:
                     points=[
                         models.PointStruct(
                             id=stub_id,
+                            vector={},  # Empty for payload-only storage
                             payload=payload,
                         )
                     ],
