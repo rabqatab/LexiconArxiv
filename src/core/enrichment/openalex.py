@@ -185,7 +185,7 @@ class PaperEnricher(BaseEnricher, OpenAlexMixin):
                         if doi:
                             doi = doi.replace("https://doi.org/", "")
 
-                        abstract = self._reconstruct_abstract(
+                        abstract = self.reconstruct_abstract(
                             result.get("abstract_inverted_index")
                         )
 

@@ -1,6 +1,13 @@
 #!/bin/bash
-# Paper enrichment script
-# 3-step enrichment: DOI lookup -> Title lookup -> PDF extraction
+# Paper enrichment script (Orchestrator)
+# Calls individual enrichment step scripts
+#
+# Steps:
+#   3.1 OpenAlex DOI    - Papers WITH DOIs via OpenAlex
+#   3.2 CrossRef        - Additional citations from CrossRef
+#   3.3 Title Lookup    - Papers WITHOUT DOIs via title search
+#   3.4 Abstracts       - Fill missing abstracts
+#   3.5 Stubs           - Stub paper metadata (optional, expensive)
 
 set -e
 
@@ -12,10 +19,11 @@ cd "$PROJECT_ROOT"
 # Default values
 PARALLEL=${PARALLEL:-10}
 BATCH_SIZE=${BATCH_SIZE:-50}
-SKIP_CITATIONS=${SKIP_CITATIONS:-false}
+SKIP_OPENALEX=${SKIP_OPENALEX:-false}
+SKIP_CROSSREF=${SKIP_CROSSREF:-false}
 SKIP_TITLE=${SKIP_TITLE:-false}
-SKIP_PDF=${SKIP_PDF:-false}
 SKIP_ABSTRACTS=${SKIP_ABSTRACTS:-false}
+ENRICH_STUBS=${ENRICH_STUBS:-false}
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -28,20 +36,24 @@ while [[ $# -gt 0 ]]; do
             BATCH_SIZE="$2"
             shift 2
             ;;
-        --skip-citations)
-            SKIP_CITATIONS=true
+        --skip-openalex)
+            SKIP_OPENALEX=true
+            shift
+            ;;
+        --skip-crossref)
+            SKIP_CROSSREF=true
             shift
             ;;
         --skip-title)
             SKIP_TITLE=true
             shift
             ;;
-        --skip-pdf)
-            SKIP_PDF=true
-            shift
-            ;;
         --skip-abstracts)
             SKIP_ABSTRACTS=true
+            shift
+            ;;
+        --enrich-stubs)
+            ENRICH_STUBS=true
             shift
             ;;
         --citations-only)
@@ -49,30 +61,34 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --abstracts-only)
-            SKIP_CITATIONS=true
+            SKIP_OPENALEX=true
+            SKIP_CROSSREF=true
             SKIP_TITLE=true
-            SKIP_PDF=true
             shift
             ;;
         --help)
             echo "Usage: $0 [OPTIONS]"
             echo ""
+            echo "Enrich papers with citations and abstracts"
+            echo ""
             echo "Options:"
             echo "  --parallel N       Concurrent requests (default: 10)"
             echo "  --batch-size N     Batch size for updates (default: 50)"
-            echo "  --skip-citations   Skip DOI-based citation enrichment"
-            echo "  --skip-title       Skip title-based citation enrichment"
-            echo "  --skip-pdf         Skip PDF reference extraction"
+            echo "  --skip-openalex    Skip OpenAlex DOI enrichment"
+            echo "  --skip-crossref    Skip CrossRef enrichment"
+            echo "  --skip-title       Skip title-based enrichment"
             echo "  --skip-abstracts   Skip abstract enrichment"
+            echo "  --enrich-stubs     Also enrich stub papers (expensive)"
             echo "  --citations-only   Only enrich citations (skip abstracts)"
             echo "  --abstracts-only   Only enrich abstracts"
             echo "  --help             Show this help message"
             echo ""
-            echo "Enrichment Steps:"
-            echo "  1. DOI lookup     - Papers WITH DOIs via OpenAlex"
-            echo "  2. Title lookup   - Papers WITHOUT DOIs via OpenAlex title search"
-            echo "  3. PDF extraction - Papers still missing refs via GROBID"
-            echo "  4. Abstracts      - Fill missing abstracts via OpenAlex"
+            echo "Individual scripts:"
+            echo "  ./scripts/enrichment/enrich_openalex.sh"
+            echo "  ./scripts/enrichment/enrich_crossref.sh"
+            echo "  ./scripts/enrichment/enrich_by_title.sh"
+            echo "  ./scripts/enrichment/enrich_abstracts.sh"
+            echo "  ./scripts/enrichment/enrich_stubs.sh"
             exit 0
             ;;
         *)
@@ -82,61 +98,69 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Calculate total steps
+TOTAL_STEPS=4
+if [ "$ENRICH_STUBS" = true ]; then
+    TOTAL_STEPS=5
+fi
+
 echo "=========================================="
 echo "LexiconArxiv Paper Enrichment"
 echo "=========================================="
 echo "Parallel: $PARALLEL"
 echo "Batch Size: $BATCH_SIZE"
-echo "Skip Citations (DOI): $SKIP_CITATIONS"
+echo "Skip OpenAlex: $SKIP_OPENALEX"
+echo "Skip CrossRef: $SKIP_CROSSREF"
 echo "Skip Title Lookup: $SKIP_TITLE"
-echo "Skip PDF Extraction: $SKIP_PDF"
 echo "Skip Abstracts: $SKIP_ABSTRACTS"
+echo "Enrich Stubs: $ENRICH_STUBS"
 echo "=========================================="
 echo ""
 
-# Step 1: DOI-based citation enrichment
-if [ "$SKIP_CITATIONS" = false ]; then
-    echo "[1/4] Enriching citations (papers WITH DOIs)..."
-    uv run python -m src.cli.core_collect enrich-citations --parallel "$PARALLEL" --batch-size "$BATCH_SIZE"
+# Step 3.1: OpenAlex DOI-based enrichment
+if [ "$SKIP_OPENALEX" = false ]; then
+    echo "--- [3.1/$TOTAL_STEPS] OpenAlex (DOI) ---"
+    "$SCRIPT_DIR/enrich_openalex.sh" --parallel "$PARALLEL" --batch-size "$BATCH_SIZE"
     echo ""
 else
-    echo "[1/4] DOI-based enrichment (SKIPPED)"
+    echo "--- [3.1/$TOTAL_STEPS] OpenAlex (SKIPPED) ---"
     echo ""
 fi
 
-# Step 2: Title-based citation enrichment
+# Step 3.2: CrossRef enrichment
+if [ "$SKIP_CROSSREF" = false ]; then
+    echo "--- [3.2/$TOTAL_STEPS] CrossRef ---"
+    "$SCRIPT_DIR/enrich_crossref.sh" --parallel 5 --batch-size "$BATCH_SIZE"
+    echo ""
+else
+    echo "--- [3.2/$TOTAL_STEPS] CrossRef (SKIPPED) ---"
+    echo ""
+fi
+
+# Step 3.3: Title-based enrichment
 if [ "$SKIP_TITLE" = false ]; then
-    echo "[2/4] Enriching citations by title (papers WITHOUT DOIs)..."
-    uv run python -m src.cli.core_collect enrich-citations-by-title --parallel 5
+    echo "--- [3.3/$TOTAL_STEPS] Title Lookup ---"
+    "$SCRIPT_DIR/enrich_by_title.sh" --parallel 5
     echo ""
 else
-    echo "[2/4] Title-based enrichment (SKIPPED)"
+    echo "--- [3.3/$TOTAL_STEPS] Title Lookup (SKIPPED) ---"
     echo ""
 fi
 
-# Step 3: PDF reference extraction
-if [ "$SKIP_PDF" = false ]; then
-    if curl -s http://localhost:8070/api/isalive > /dev/null 2>&1; then
-        echo "[3/4] Extracting references from PDFs (GROBID available)..."
-        uv run python -m src.cli.core_collect extract-pdf-refs
-        echo ""
-    else
-        echo "[3/4] PDF extraction (SKIPPED - GROBID not running)"
-        echo "    To enable: docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.0"
-        echo ""
-    fi
-else
-    echo "[3/4] PDF extraction (SKIPPED)"
-    echo ""
-fi
-
-# Step 4: Abstract enrichment
+# Step 3.4: Abstract enrichment
 if [ "$SKIP_ABSTRACTS" = false ]; then
-    echo "[4/4] Enriching abstracts..."
-    uv run python -m src.cli.core_collect enrich-abstracts --parallel "$PARALLEL" --batch-size "$BATCH_SIZE"
+    echo "--- [3.4/$TOTAL_STEPS] Abstracts ---"
+    "$SCRIPT_DIR/enrich_abstracts.sh" --parallel "$PARALLEL" --batch-size "$BATCH_SIZE"
     echo ""
 else
-    echo "[4/4] Abstract enrichment (SKIPPED)"
+    echo "--- [3.4/$TOTAL_STEPS] Abstracts (SKIPPED) ---"
+    echo ""
+fi
+
+# Step 3.5: Stub enrichment (optional)
+if [ "$ENRICH_STUBS" = true ]; then
+    echo "--- [3.5/$TOTAL_STEPS] Stubs ---"
+    "$SCRIPT_DIR/enrich_stubs.sh" --parallel 5
     echo ""
 fi
 

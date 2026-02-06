@@ -1,6 +1,11 @@
 #!/bin/bash
-# Full pipeline script
-# Runs: Collection -> Deduplication -> Enrichment -> Resolution
+# Full pipeline script (Orchestrator)
+# Runs all 5 stages in sequence:
+#   Stage 1: Collection    - Collect papers from all sources
+#   Stage 2: Deduplication - Remove duplicate papers
+#   Stage 3: Enrichment    - Enrich with citations and abstracts
+#   Stage 4: Resolution    - Resolve references to internal IDs
+#   Stage 5: Graph         - Build citation graph (cited_by)
 
 set -e
 
@@ -16,6 +21,7 @@ SKIP_COLLECTION=${SKIP_COLLECTION:-false}
 SKIP_DEDUP=${SKIP_DEDUP:-false}
 SKIP_ENRICHMENT=${SKIP_ENRICHMENT:-false}
 SKIP_RESOLUTION=${SKIP_RESOLUTION:-false}
+SKIP_GRAPH=${SKIP_GRAPH:-false}
 PARALLEL=${PARALLEL:-10}
 
 # Parse arguments
@@ -45,6 +51,10 @@ while [[ $# -gt 0 ]]; do
             SKIP_RESOLUTION=true
             shift
             ;;
+        --skip-graph)
+            SKIP_GRAPH=true
+            shift
+            ;;
         --parallel)
             PARALLEL="$2"
             shift 2
@@ -52,15 +62,35 @@ while [[ $# -gt 0 ]]; do
         --help)
             echo "Usage: $0 [OPTIONS]"
             echo ""
+            echo "Run the full 5-stage pipeline"
+            echo ""
+            echo "Stages:"
+            echo "  1. Collection    - Collect papers from all sources"
+            echo "  2. Deduplication - Remove duplicate papers"
+            echo "  3. Enrichment    - Enrich with citations and abstracts"
+            echo "  4. Resolution    - Resolve references to internal IDs"
+            echo "  5. Graph         - Build citation graph (cited_by)"
+            echo ""
             echo "Options:"
             echo "  --since-year YEAR     Start year (default: 2020)"
             echo "  --include-workshops   Include ACL workshop papers"
-            echo "  --skip-collection     Skip data collection step"
-            echo "  --skip-dedup          Skip deduplication step"
-            echo "  --skip-enrichment     Skip enrichment step"
-            echo "  --skip-resolution     Skip resolution step"
+            echo "  --skip-collection     Skip Stage 1: Collection"
+            echo "  --skip-dedup          Skip Stage 2: Deduplication"
+            echo "  --skip-enrichment     Skip Stage 3: Enrichment"
+            echo "  --skip-resolution     Skip Stage 4: Resolution"
+            echo "  --skip-graph          Skip Stage 5: Graph"
             echo "  --parallel N          Concurrent requests (default: 10)"
             echo "  --help                Show this help message"
+            echo ""
+            echo "Examples:"
+            echo "  # Full pipeline"
+            echo "  $0 --since-year 2020"
+            echo ""
+            echo "  # Skip collection (post-processing only)"
+            echo "  $0 --skip-collection"
+            echo ""
+            echo "  # Only enrichment and resolution"
+            echo "  $0 --skip-collection --skip-dedup --skip-graph"
             exit 0
             ;;
         *)
@@ -79,72 +109,62 @@ echo "Skip Collection: $SKIP_COLLECTION"
 echo "Skip Dedup: $SKIP_DEDUP"
 echo "Skip Enrichment: $SKIP_ENRICHMENT"
 echo "Skip Resolution: $SKIP_RESOLUTION"
+echo "Skip Graph: $SKIP_GRAPH"
 echo "Parallel: $PARALLEL"
 echo "=========================================="
 echo ""
 
-# Step 1: Collection
+# Stage 1: Collection
 if [ "$SKIP_COLLECTION" = false ]; then
-    echo "============ [1/4] COLLECTION ============"
-    CMD="uv run python -m src.cli.core_collect collect-all-sources --since-year $SINCE_YEAR"
+    echo "============ [1/5] COLLECTION ============"
+    CMD="$SCRIPT_DIR/crawler/run_full_collection.sh --since-year $SINCE_YEAR"
     if [ "$INCLUDE_WORKSHOPS" = true ]; then
         CMD="$CMD --include-workshops"
     fi
-    echo "Running: $CMD"
     $CMD
     echo ""
 else
-    echo "============ [1/4] COLLECTION (SKIPPED) ============"
+    echo "============ [1/5] COLLECTION (SKIPPED) ============"
     echo ""
 fi
 
-# Step 2: Deduplication
+# Stage 2: Deduplication
 if [ "$SKIP_DEDUP" = false ]; then
-    echo "============ [2/4] DEDUPLICATION ============"
-    uv run python -m src.cli.core_collect deduplicate
+    echo "============ [2/5] DEDUPLICATION ============"
+    "$SCRIPT_DIR/maintenance/run_deduplication.sh" --apply
     echo ""
 else
-    echo "============ [2/4] DEDUPLICATION (SKIPPED) ============"
+    echo "============ [2/5] DEDUPLICATION (SKIPPED) ============"
     echo ""
 fi
 
-# Step 3: Enrichment
+# Stage 3: Enrichment
 if [ "$SKIP_ENRICHMENT" = false ]; then
-    echo "============ [3/4] ENRICHMENT ============"
-
-    # 3a. Enrich papers WITH DOIs via OpenAlex
-    echo "[3a] Enriching citations (papers with DOIs)..."
-    uv run python -m src.cli.core_collect enrich-citations --parallel "$PARALLEL"
-
-    # 3b. Enrich papers WITHOUT DOIs via title search
-    echo "[3b] Enriching citations by title (papers without DOIs)..."
-    uv run python -m src.cli.core_collect enrich-citations-by-title --parallel 5
-
-    # 3c. Extract refs from PDFs (if GROBID is running)
-    if curl -s http://localhost:8070/api/isalive > /dev/null 2>&1; then
-        echo "[3c] Extracting references from PDFs (GROBID available)..."
-        uv run python -m src.cli.core_collect extract-pdf-refs
-    else
-        echo "[3c] GROBID not running - skipping PDF extraction"
-        echo "    To enable: docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.0"
-    fi
-
-    # 3d. Enrich abstracts
-    echo "[3d] Enriching abstracts..."
-    uv run python -m src.cli.core_collect enrich-abstracts --parallel "$PARALLEL"
+    echo "============ [3/5] ENRICHMENT ============"
+    "$SCRIPT_DIR/enrichment/run_enrichment.sh" --parallel "$PARALLEL"
     echo ""
 else
-    echo "============ [3/4] ENRICHMENT (SKIPPED) ============"
+    echo "============ [3/5] ENRICHMENT (SKIPPED) ============"
     echo ""
 fi
 
-# Step 4: Reference Resolution
+# Stage 4: Resolution
 if [ "$SKIP_RESOLUTION" = false ]; then
-    echo "============ [4/4] RESOLUTION ============"
-    uv run python -m src.cli.core_collect resolve-refs
+    echo "============ [4/5] RESOLUTION ============"
+    "$SCRIPT_DIR/resolution/run_resolution.sh"
     echo ""
 else
-    echo "============ [4/4] RESOLUTION (SKIPPED) ============"
+    echo "============ [4/5] RESOLUTION (SKIPPED) ============"
+    echo ""
+fi
+
+# Stage 5: Graph
+if [ "$SKIP_GRAPH" = false ]; then
+    echo "============ [5/5] GRAPH ============"
+    "$SCRIPT_DIR/graph/build_cited_by.sh"
+    echo ""
+else
+    echo "============ [5/5] GRAPH (SKIPPED) ============"
     echo ""
 fi
 

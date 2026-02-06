@@ -1,11 +1,11 @@
 # LexiconArxiv Scripts
 
-Shell scripts for running data pipelines.
+Shell scripts for running the 5-stage data pipeline.
 
 ## Quick Start
 
 ```bash
-# Run full pipeline (collection → dedup → enrichment → resolution)
+# Run full pipeline (collection → dedup → enrichment → resolution → graph)
 ./scripts/run_full_pipeline.sh --since-year 2020
 
 # Or run individual stages
@@ -13,6 +13,7 @@ Shell scripts for running data pipelines.
 ./scripts/maintenance/run_deduplication.sh --apply
 ./scripts/enrichment/run_enrichment.sh
 ./scripts/resolution/run_resolution.sh
+./scripts/graph/build_cited_by.sh
 ```
 
 ---
@@ -21,31 +22,58 @@ Shell scripts for running data pipelines.
 
 ```
 scripts/
-├── run_full_pipeline.sh      # Full 4-stage pipeline
-├── crawler/                  # Data collection scripts
-│   ├── run_full_collection.sh
-│   ├── run_incremental.sh
-│   ├── check_status.sh
-│   ├── count_papers.sh
-│   └── setup_crontab.sh
-├── enrichment/               # Citation/abstract enrichment
-│   └── run_enrichment.sh
-├── resolution/               # Reference resolution (citation graph)
-│   └── run_resolution.sh
-├── graph/                    # Citation graph & GraphRAG
-│   ├── run_graph_pipeline.sh # Full graph pipeline
-│   ├── build_cited_by.sh     # Build reverse citations (GraphRAG)
-│   ├── export_graph.sh       # Export to CSV/JSON/GraphML
-│   └── analyze_graph.sh      # PageRank, HITS, communities
-└── maintenance/              # Deduplication, cleanup
-    └── run_deduplication.sh
+├── run_full_pipeline.sh              # Orchestrator: 5-stage pipeline
+│
+├── crawler/                          # Stage 1: Collection
+│   ├── run_full_collection.sh        # Orchestrator: all sources
+│   ├── collect_openalex.sh           # Step 1.1: OpenAlex (ML/AI venues)
+│   ├── collect_acl.sh                # Step 1.2: ACL Anthology (NLP)
+│   ├── collect_dblp.sh               # Step 1.3: DBLP (IR/Legal)
+│   ├── collect_openreview.sh         # Step 1.4: OpenReview (ICLR, NeurIPS, ICML)
+│   ├── collect_acm.sh                # Step 1.5: ACM Digital Library
+│   ├── collect_aaai.sh               # Step 1.6: AAAI OJS
+│   ├── run_incremental.sh            # Incremental (current year)
+│   ├── check_status.sh               # Status check
+│   ├── count_papers.sh               # Estimate papers
+│   └── setup_crontab.sh              # Crontab helper
+│
+├── maintenance/                      # Stage 2: Deduplication
+│   └── run_deduplication.sh
+│
+├── enrichment/                       # Stage 3: Enrichment
+│   ├── run_enrichment.sh             # Orchestrator: all enrichment
+│   ├── enrich_openalex.sh            # Step 3.1: DOI-based via OpenAlex
+│   ├── enrich_crossref.sh            # Step 3.2: CrossRef citations
+│   ├── enrich_by_title.sh            # Step 3.3: Title-based lookup
+│   ├── enrich_abstracts.sh           # Step 3.4: Abstract enrichment
+│   └── enrich_stubs.sh               # Step 3.5: Stub paper metadata
+│
+├── resolution/                       # Stage 4: Resolution
+│   ├── run_resolution.sh             # Orchestrator: all resolution
+│   ├── resolve_normalize.sh          # Step 4.1: Fix identifier formats
+│   ├── resolve_arxiv.sh              # Step 4.2: arXiv to DOI
+│   └── resolve_internal.sh           # Step 4.3: Internal ID resolution
+│
+└── graph/                            # Stage 5: Graph
+    ├── run_graph_pipeline.sh         # Orchestrator: full graph pipeline
+    ├── build_cited_by.sh             # Step 5.1: Build cited_by links
+    ├── analyze_graph.sh              # Step 5.2: PageRank, communities
+    └── export_graph.sh               # Step 5.3: Export to files
 ```
 
 ---
 
 ## Full Pipeline
 
-Runs all 4 stages in sequence:
+Runs all 5 stages in sequence:
+
+| Stage | Name | Description |
+|-------|------|-------------|
+| 1 | Collection | Collect papers from 6 sources |
+| 2 | Deduplication | Remove duplicate papers |
+| 3 | Enrichment | Enrich citations and abstracts |
+| 4 | Resolution | Resolve references to internal IDs |
+| 5 | Graph | Build citation graph (cited_by) |
 
 ```bash
 ./scripts/run_full_pipeline.sh [OPTIONS]
@@ -53,10 +81,11 @@ Runs all 4 stages in sequence:
 Options:
   --since-year YEAR     Start year (default: 2020)
   --include-workshops   Include ACL workshop papers
-  --skip-collection     Skip data collection step
-  --skip-dedup          Skip deduplication step
-  --skip-enrichment     Skip enrichment step
-  --skip-resolution     Skip resolution step
+  --skip-collection     Skip Stage 1
+  --skip-dedup          Skip Stage 2
+  --skip-enrichment     Skip Stage 3
+  --skip-resolution     Skip Stage 4
+  --skip-graph          Skip Stage 5
   --parallel N          Concurrent requests (default: 10)
 ```
 
@@ -67,49 +96,79 @@ Options:
 
 ---
 
-## Crawler Scripts
+## Stage 1: Collection
 
-### Full Collection
+Collect papers from 6 sources.
+
+### Orchestrator
+
 ```bash
 ./scripts/crawler/run_full_collection.sh [OPTIONS]
 
 Options:
   --since-year YEAR    Start year (default: 2020)
-  --skip-openalex      Skip OpenAlex collection
-  --skip-acl           Skip ACL Anthology collection
-  --skip-dblp          Skip DBLP collection
+  --include-workshops  Include ACL workshop papers
+  --skip-openalex      Skip Step 1.1: OpenAlex
+  --skip-acl           Skip Step 1.2: ACL Anthology
+  --skip-dblp          Skip Step 1.3: DBLP
+  --skip-openreview    Skip Step 1.4: OpenReview
+  --skip-acm           Skip Step 1.5: ACM
+  --skip-aaai          Skip Step 1.6: AAAI
 ```
 
-### Incremental Collection
-```bash
-./scripts/crawler/run_incremental.sh
-```
-Collects papers from the current year only.
+### Individual Steps
 
-### Check Status
+| Script | Source | Venues |
+|--------|--------|--------|
+| `collect_openalex.sh` | OpenAlex | ML/AI conferences (ICML, NeurIPS, ICLR, etc.) |
+| `collect_acl.sh` | ACL Anthology | NLP conferences (ACL, EMNLP, NAACL, etc.) |
+| `collect_dblp.sh` | DBLP | IR/Legal venues (SIGIR, ECIR, JURIX, etc.) |
+| `collect_openreview.sh` | OpenReview | ICLR, NeurIPS, ICML (accepted papers) |
+| `collect_acm.sh` | ACM DL | ACM conferences |
+| `collect_aaai.sh` | AAAI OJS | AAAI proceedings |
+
+**Example**: Collect only ACL papers since 2023:
 ```bash
+./scripts/crawler/collect_acl.sh --since-year 2023
+```
+
+### Utilities
+
+```bash
+# Check status and venue listings
 ./scripts/crawler/check_status.sh
-```
 
-### Setup Cron Job (Weekly Full Pipeline)
-```bash
-# Install weekly cron job (Sunday 2 AM)
+# Estimate paper count
+./scripts/crawler/count_papers.sh --since-year 2020
+
+# Incremental collection (current year only)
+./scripts/crawler/run_incremental.sh
+
+# Setup cron job (weekly)
 ./scripts/crawler/setup_crontab.sh --install
-
-# Custom schedule (e.g., daily at 3 AM)
-CRON_SCHEDULE="0 3 * * *" ./scripts/crawler/setup_crontab.sh --install
-
-# Show/remove
-./scripts/crawler/setup_crontab.sh --show
-./scripts/crawler/setup_crontab.sh --remove
 ```
-Runs full pipeline (collection → dedup → enrichment → resolution) for current year.
 
 ---
 
-## Enrichment Scripts
+## Stage 2: Deduplication
 
-4-step enrichment: DOI lookup → Title lookup → PDF extraction → Abstracts
+Remove duplicate papers based on DOI/title matching.
+
+```bash
+./scripts/maintenance/run_deduplication.sh [OPTIONS]
+
+Options:
+  --dry-run    Preview duplicates without removing (default)
+  --apply      Actually remove duplicates
+```
+
+---
+
+## Stage 3: Enrichment
+
+Enrich papers with citations and abstracts from external APIs.
+
+### Orchestrator
 
 ```bash
 ./scripts/enrichment/run_enrichment.sh [OPTIONS]
@@ -117,61 +176,97 @@ Runs full pipeline (collection → dedup → enrichment → resolution) for curr
 Options:
   --parallel N       Concurrent requests (default: 10)
   --batch-size N     Batch size for updates (default: 50)
-  --skip-citations   Skip DOI-based citation enrichment
-  --skip-title       Skip title-based citation enrichment
-  --skip-pdf         Skip PDF reference extraction
-  --skip-abstracts   Skip abstract enrichment
+  --skip-openalex    Skip Step 3.1: OpenAlex DOI
+  --skip-crossref    Skip Step 3.2: CrossRef
+  --skip-title       Skip Step 3.3: Title lookup
+  --skip-abstracts   Skip Step 3.4: Abstracts
+  --enrich-stubs     Include Step 3.5: Stub enrichment (expensive)
   --citations-only   Only enrich citations (skip abstracts)
   --abstracts-only   Only enrich abstracts
 ```
 
-**Steps**:
-1. DOI lookup - Papers WITH DOIs via OpenAlex
-2. Title lookup - Papers WITHOUT DOIs via OpenAlex title search
-3. PDF extraction - Papers still missing refs via GROBID (requires GROBID running)
-4. Abstracts - Fill missing abstracts via OpenAlex
+### Individual Steps
 
-**GROBID Setup** (for PDF extraction):
+| Script | Step | Description |
+|--------|------|-------------|
+| `enrich_openalex.sh` | 3.1 | Enrich papers WITH DOIs via OpenAlex |
+| `enrich_crossref.sh` | 3.2 | Additional citations from CrossRef |
+| `enrich_by_title.sh` | 3.3 | Enrich papers WITHOUT DOIs via title search |
+| `enrich_abstracts.sh` | 3.4 | Fill missing abstracts via OpenAlex |
+| `enrich_stubs.sh` | 3.5 | Fetch metadata for stub papers (optional) |
+
+**Example**: Only enrich abstracts:
 ```bash
-# x86_64 (Intel/AMD)
-docker run -d --rm --name grobid -p 8070:8070 lfoppiano/grobid:0.8.0
-
-# ARM64 (Apple Silicon)
-docker build --no-cache -t grobid-arm64 ./docker/grobid-arm64
-docker run -d --rm --name grobid -p 8070:8070 grobid-arm64
+./scripts/enrichment/run_enrichment.sh --abstracts-only
 ```
+
+**Note**: Step 3.5 (stubs) is expensive (~187K papers) and not included by default.
 
 ---
 
-## Resolution Scripts
+## Stage 4: Resolution
 
-Builds citation graph by resolving references to internal paper IDs:
+Build citation graph by resolving references to internal paper IDs.
+
+### Orchestrator
 
 ```bash
 ./scripts/resolution/run_resolution.sh [OPTIONS]
 
 Options:
-  --step STEP      Run specific step: normalize, arxiv, internal, all
   --dry-run        Preview changes without applying
   --limit N        Limit papers to process (0 = unlimited)
+  --skip-normalize Skip Step 4.1: Normalize
+  --skip-arxiv     Skip Step 4.2: arXiv resolution
+  --skip-internal  Skip Step 4.3: Internal resolution
 ```
 
-**Steps**:
-1. `normalize` - Fix identifier formats (e.g., `arXiv:arXiv:` → `arXiv:`)
-2. `arxiv` - Resolve arXiv IDs to DOIs via OpenAlex
-3. `internal` - Resolve all refs to internal Qdrant point IDs
+### Individual Steps
+
+| Script | Step | Description |
+|--------|------|-------------|
+| `resolve_normalize.sh` | 4.1 | Fix identifier formats (e.g., `arXiv:arXiv:` → `arXiv:`) |
+| `resolve_arxiv.sh` | 4.2 | Resolve arXiv IDs to DOIs via OpenAlex |
+| `resolve_internal.sh` | 4.3 | Resolve all refs to internal Qdrant point IDs |
+
+**Example**: Only run internal resolution:
+```bash
+./scripts/resolution/resolve_internal.sh
+```
 
 ---
 
-## Maintenance Scripts
+## Stage 5: Graph
 
-### Deduplication
+Build and analyze the citation graph.
+
+### Build cited_by links
+
 ```bash
-./scripts/maintenance/run_deduplication.sh [OPTIONS]
+./scripts/graph/build_cited_by.sh
+```
+
+Creates reverse citation links (who cites this paper).
+
+### Analyze graph
+
+```bash
+./scripts/graph/analyze_graph.sh [OPTIONS]
 
 Options:
-  --dry-run    Preview duplicates without removing (default)
-  --apply      Actually remove duplicates
+  --metrics        Compute PageRank and HITS (default)
+  --communities    Detect communities
+  --output FILE    Output file for results
+```
+
+### Export graph
+
+```bash
+./scripts/graph/export_graph.sh [OPTIONS]
+
+Options:
+  --format FORMAT  Output format: csv, json, graphml
+  --output DIR     Output directory
 ```
 
 ---
@@ -184,4 +279,36 @@ Set these in `.env` or export before running:
 export OPENALEX_EMAIL=your-email@example.com  # Required for polite pool
 export QDRANT_URL=http://localhost:6333
 export QDRANT_COLLECTION=lexicon_arxiv
+```
+
+---
+
+## Examples
+
+### Full pipeline from 2020
+
+```bash
+./scripts/run_full_pipeline.sh --since-year 2020
+```
+
+### Collect specific sources only
+
+```bash
+# Only OpenReview and ACL
+./scripts/crawler/run_full_collection.sh \
+  --skip-openalex --skip-dblp --skip-acm --skip-aaai
+```
+
+### Enrich stubs separately
+
+```bash
+# Stubs are expensive, run separately
+./scripts/enrichment/enrich_stubs.sh --parallel 5 --limit 1000
+```
+
+### Post-processing only
+
+```bash
+# Skip collection, run enrichment → resolution → graph
+./scripts/run_full_pipeline.sh --skip-collection --skip-dedup
 ```
