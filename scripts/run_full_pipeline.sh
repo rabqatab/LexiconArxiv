@@ -23,6 +23,7 @@ SKIP_ENRICHMENT=${SKIP_ENRICHMENT:-false}
 SKIP_RESOLUTION=${SKIP_RESOLUTION:-false}
 SKIP_GRAPH=${SKIP_GRAPH:-false}
 PARALLEL=${PARALLEL:-10}
+LOG_FILE=${LOG_FILE:-""}
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -59,6 +60,10 @@ while [[ $# -gt 0 ]]; do
             PARALLEL="$2"
             shift 2
             ;;
+        --log)
+            LOG_FILE="$2"
+            shift 2
+            ;;
         --help)
             echo "Usage: $0 [OPTIONS]"
             echo ""
@@ -80,11 +85,15 @@ while [[ $# -gt 0 ]]; do
             echo "  --skip-resolution     Skip Stage 4: Resolution"
             echo "  --skip-graph          Skip Stage 5: Graph"
             echo "  --parallel N          Concurrent requests (default: 10)"
+            echo "  --log FILE            Save output to log file (also prints to terminal)"
             echo "  --help                Show this help message"
             echo ""
             echo "Examples:"
             echo "  # Full pipeline"
             echo "  $0 --since-year 2020"
+            echo ""
+            echo "  # With logging"
+            echo "  $0 --since-year 2017 --log logs/pipeline.log"
             echo ""
             echo "  # Skip collection (post-processing only)"
             echo "  $0 --skip-collection"
@@ -100,6 +109,19 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Setup logging if --log is specified
+if [ -n "$LOG_FILE" ]; then
+    # Create log directory if needed
+    LOG_DIR=$(dirname "$LOG_FILE")
+    if [ "$LOG_DIR" != "." ] && [ ! -d "$LOG_DIR" ]; then
+        mkdir -p "$LOG_DIR"
+    fi
+    # Redirect all output to both terminal and log file
+    exec > >(tee -a "$LOG_FILE") 2>&1
+    echo "Logging to: $LOG_FILE"
+    echo ""
+fi
+
 echo "=========================================="
 echo "LexiconArxiv Full Pipeline"
 echo "=========================================="
@@ -111,6 +133,7 @@ echo "Skip Enrichment: $SKIP_ENRICHMENT"
 echo "Skip Resolution: $SKIP_RESOLUTION"
 echo "Skip Graph: $SKIP_GRAPH"
 echo "Parallel: $PARALLEL"
+echo "Log File: ${LOG_FILE:-"(none)"}"
 echo "=========================================="
 echo ""
 

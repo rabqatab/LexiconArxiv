@@ -89,6 +89,12 @@ Options:
   --skip-resolution     Skip Stage 4
   --skip-graph          Skip Stage 5
   --parallel N          Concurrent requests (default: 10)
+  --log FILE            Save output to log file (also prints to terminal)
+```
+
+**Example**: Run with logging:
+```bash
+./scripts/run_full_pipeline.sh --since-year 2017 --log logs/pipeline.log
 ```
 
 **Example**: Run only post-processing (skip collection):
