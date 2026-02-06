@@ -401,6 +401,7 @@ All enrichment pipeline enhancements have been implemented:
 | Citation Enrichment (DOI) | ✅ Complete | `enrich-citations` command |
 | Citation Enrichment (Title) | ✅ Complete | `enrich-citations-by-title` command |
 | PDF Reference Extraction | ✅ Complete | `extract-pdf-refs` (requires GROBID) |
+| CrossRef Enrichment | ✅ Complete | `enrich-crossref` command |
 
 ### Additional Enrichment (Added Feb 2026)
 
@@ -409,19 +410,25 @@ All enrichment pipeline enhancements have been implemented:
 | Title-based OpenAlex lookup | ✅ Complete | For papers without DOI |
 | PDF extraction via GROBID | ✅ Complete | Extracts refs from PDF for papers with no DOI match |
 | GROBID ARM64 support | ✅ Complete | Native build for Apple Silicon |
+| CrossRef enrichment | ✅ Complete | 97% success rate for ACM papers (vs 0% for S2) |
 
 ### CLI Commands
 
 ```bash
-# 4-step enrichment pipeline
-python -m src.cli.core_collect enrich-citations --parallel 10       # Step 1: DOI lookup
-python -m src.cli.core_collect enrich-citations-by-title --parallel 5  # Step 2: Title lookup
-python -m src.cli.core_collect extract-pdf-refs                      # Step 3: PDF extraction
-python -m src.cli.core_collect enrich-abstracts --parallel 10        # Step 4: Abstracts
+# Multi-source enrichment pipeline (recommended order)
+python -m src.cli.core_collect enrich-citations --parallel 10       # Step 1: OpenAlex DOI lookup
+python -m src.cli.core_collect enrich-crossref --parallel 10        # Step 2: CrossRef (ACM/Springer)
+python -m src.cli.core_collect enrich-citations-by-title --parallel 5  # Step 3: Title lookup
+python -m src.cli.core_collect extract-pdf-refs                      # Step 4: PDF extraction
+python -m src.cli.core_collect enrich-abstracts --parallel 10        # Step 5: Abstracts
 
-# Semantic Scholar fallback (for ACM and other blocked sources)
+# Semantic Scholar fallback (alternative for papers not in CrossRef)
 python -m src.cli.core_collect enrich-s2                            # DOI-based
 python -m src.cli.core_collect enrich-s2 --by-title                 # Title-based
+
+# CrossRef enrichment (excellent for ACM papers - 97% success rate)
+python -m src.cli.core_collect enrich-crossref                      # DOI-based
+python -m src.cli.core_collect enrich-crossref --dry-run            # Preview only
 
 # Data quality
 python -m src.cli.core_collect data-quality
@@ -482,3 +489,222 @@ The S2 enricher (`src/core/enrichment/semantic_scholar.py`) supports:
 - Title-based search via `/graph/v1/paper/search`
 - Automatic rate limit handling with retry
 - Checkpoint-based resumption
+
+---
+
+## 6. CrossRef Enrichment
+
+### Overview
+
+CrossRef is the authoritative source for DOI metadata and provides excellent reference data for ACM and other publisher papers. It serves as a primary enrichment source where other APIs (S2, OpenAlex) fail.
+
+### Why CrossRef?
+
+| Source | ACM Paper Success Rate | References Per Paper |
+|--------|----------------------|---------------------|
+| Semantic Scholar | ~0% (papers found, no refs) | - |
+| OpenAlex | Partial | ~25 |
+| **CrossRef** | **97%** | **33** |
+
+CrossRef is particularly valuable for:
+- **ACM Digital Library papers** - Blocked by Cloudflare (403) for direct access, but CrossRef has full metadata
+- **Springer papers** - Similar access restrictions
+- **Any DOI-registered paper** - CrossRef is the canonical DOI registry
+
+### API Rate Limits
+
+CrossRef provides generous rate limits:
+
+| Pool | Rate Limit | Access |
+|------|------------|--------|
+| Public | 50 req/sec | Anonymous |
+| Polite | 50 req/sec | With `mailto` parameter (recommended) |
+
+To access the polite pool (better reliability), include your email:
+```bash
+export CROSSREF_EMAIL=your@email.com
+```
+
+### Reference Format
+
+CrossRef returns references in two formats:
+1. **Structured** - With DOI, title, authors (resolvable)
+2. **Unstructured** - Raw citation string (for later resolution)
+
+Typical breakdown: ~67% of references have DOIs.
+
+### Usage
+
+```bash
+# Basic enrichment (targets papers with DOI but no refs)
+python -m src.cli.core_collect enrich-crossref
+
+# Dry run to see what would be enriched
+python -m src.cli.core_collect enrich-crossref --dry-run
+
+# Limit number of papers to process
+python -m src.cli.core_collect enrich-crossref --limit 500
+
+# Adjust concurrent requests (default: 10)
+python -m src.cli.core_collect enrich-crossref --parallel 20
+
+# Clear checkpoint to restart from beginning
+python -m src.cli.core_collect clear-crossref-checkpoint
+```
+
+### Implementation
+
+The CrossRef enricher (`src/core/enrichment/crossref.py`) provides:
+
+```python
+class CrossRefEnricher:
+    """Enrich papers with citation data from CrossRef."""
+
+    async def enrich_by_doi(
+        self,
+        dry_run: bool = False,
+        limit: int | None = None,
+    ) -> CrossRefEnrichmentProgress:
+        """Enrich papers that have DOI but no referenced_works."""
+```
+
+Features:
+- DOI-based lookup via `https://api.crossref.org/works/{doi}`
+- Polite pool access with mailto header
+- Checkpoint-based resumption
+- Automatic rate limit handling
+- Reference format conversion (DOI → `doi:X`, unstructured → `title:X`)
+
+### Enrichment Pipeline Order
+
+For maximum coverage, run enrichment sources in this order:
+
+```bash
+# 1. OpenAlex (primary source, highest quality)
+python -m src.cli.core_collect enrich-citations --parallel 10
+
+# 2. CrossRef (excellent for ACM/Springer papers)
+python -m src.cli.core_collect enrich-crossref --parallel 10
+
+# 3. Semantic Scholar (fallback for remaining papers)
+python -m src.cli.core_collect enrich-s2
+
+# 4. GROBID PDF extraction (for papers with accessible PDFs)
+python -m src.cli.core_collect extract-pdf-refs
+
+# 5. Resolve references to internal IDs (with stub paper creation)
+python -m src.cli.core_collect resolve-refs --create-stubs
+
+# 6. Build cited_by index
+python -m src.cli.core_collect build-cited-by
+
+# 7. (Optional) Enrich stub papers with metadata
+python -m src.cli.core_collect enrich-stubs --limit 1000
+
+# 8. (Optional) Check most-cited external papers
+python -m src.cli.core_collect stub-stats
+```
+
+### Expected Coverage Impact
+
+Based on PoC testing (Feb 2026):
+
+| Metric | Before CrossRef | After CrossRef |
+|--------|-----------------|----------------|
+| Papers with refs | 73.4% | ~88% |
+| ACM papers with refs | ~0% | ~97% |
+
+CrossRef can enrich approximately 1,360 of the 1,401 ACM papers that were previously unreachable.
+
+---
+
+## 7. Stub Paper Enrichment & Deduplication
+
+### Overview
+
+Stub papers are external references that don't exist in the corpus. During enrichment, we:
+1. Fetch metadata (title, authors, year, venue, abstract) from OpenAlex/CrossRef
+2. **Detect and merge duplicates** when the same paper is referenced with different identifiers
+
+### The Deduplication Problem
+
+The same external paper can be referenced with different identifiers:
+```
+Paper A cites "Adam" via DOI:10.48550/arXiv.1412.6980
+Paper B cites "Adam" via arXiv:1412.6980
+Paper C cites "Adam" via W1522301498 (OpenAlex)
+```
+
+Without deduplication, these create 3 separate stubs with split citation counts.
+
+### Cross-Reference Merge
+
+When enriching a stub, we discover all its identifiers from OpenAlex:
+
+```python
+# OpenAlex returns multiple identifiers for the same paper
+{
+    "doi": "10.48550/arXiv.1412.6980",
+    "arxiv_id": "1412.6980",
+    "openalex_id": "W1522301498"
+}
+```
+
+The enricher then:
+1. Checks if stubs exist with any of these identifiers
+2. If found, merges the current stub into the existing one
+3. Combines `cited_by` lists and stores all identifiers
+
+### Result
+
+```
+Before: 3 stubs × 5 citations each = 15 total (split)
+After:  1 stub × 15 citations = accurate count
+```
+
+### CLI Commands
+
+```bash
+# Enrich stubs with automatic deduplication
+python -m src.cli.core_collect enrich-stubs --limit 1000
+
+# Filter by identifier type
+python -m src.cli.core_collect enrich-stubs --type doi --limit 500
+python -m src.cli.core_collect enrich-stubs --type arxiv --limit 500
+
+# Only enrich highly-cited stubs
+python -m src.cli.core_collect enrich-stubs --min-citations 5
+
+# Check results
+python -m src.cli.core_collect stub-stats
+```
+
+### Output Example
+
+```
+Stub Enrichment Results:
+  Processed:    100
+  Enriched:     45
+  Merged:       12    ← Duplicates detected and merged
+  Not found:    43
+  Errors:       0
+```
+
+### Stub Schema After Enrichment
+
+```json
+{
+  "is_stub": true,
+  "identifier": "W1522301498",
+  "identifier_type": "openalex",
+  "title": "Adam: A Method for Stochastic Optimization",
+  "year": 2014,
+  "authors": ["Diederik P. Kingma", "Jimmy Ba"],
+  "venue": "ICLR",
+  "cited_by_count_internal": 15,
+  "alternate_identifiers": {
+    "doi": "10.48550/arxiv.1412.6980",
+    "arxiv": "1412.6980"
+  }
+}
+```

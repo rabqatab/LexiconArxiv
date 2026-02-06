@@ -63,6 +63,7 @@
 - **On-demand**: Real-time arXiv/OpenAlex search at query time
 - **Core Connection**: Display citation/similarity relationships between on-demand papers and Core
 - **Research Graph**: Citation network visualization between papers
+- **Stub Papers**: External papers referenced by corpus papers but not crawled (for complete citation graph)
 
 ### Venue Summary
 
@@ -146,6 +147,8 @@ Infra:       Docker / Kubernetes
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.6.1 | Feb 2026 | Stub enrichment with cross-reference deduplication |
+| 0.6.0 | Feb 2026 | Stub papers for complete citation graph, CrossRef enrichment |
 | 0.5.0 | Feb 2026 | Keyword extraction (Regex + KeyBERT) for BM25 search |
 | 0.4.1 | Feb 2026 | ACL workshop support, OpenReview API v2 fix |
 | 0.4.0 | Feb 2026 | Multi-source crawlers (OpenReview, ACM, AAAI) |

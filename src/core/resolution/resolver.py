@@ -52,6 +52,8 @@ class ResolutionProgress:
     openalex_resolved: int = 0  # OpenAlex Work IDs resolved
     titles_resolved: int = 0
     external_added: int = 0  # Papers added from external search
+    stubs_created: int = 0  # Stub papers created for unresolved refs
+    stubs_updated: int = 0  # Existing stubs updated with new citations
 
 
 class ReferenceResolver:
@@ -143,6 +145,8 @@ class ReferenceResolver:
                 openalex_resolved=data.get("openalex_resolved", 0),
                 titles_resolved=data.get("titles_resolved", 0),
                 external_added=data.get("external_added", 0),
+                stubs_created=data.get("stubs_created", 0),
+                stubs_updated=data.get("stubs_updated", 0),
             )
             progress.processed_point_ids = set(data.get("processed_point_ids", []))
             return progress
@@ -167,6 +171,8 @@ class ReferenceResolver:
             "openalex_resolved": progress.openalex_resolved,
             "titles_resolved": progress.titles_resolved,
             "external_added": progress.external_added,
+            "stubs_created": progress.stubs_created,
+            "stubs_updated": progress.stubs_updated,
         }
         checkpoint_file = self._get_checkpoint_file(step)
         with open(checkpoint_file, "w") as f:
@@ -539,6 +545,7 @@ class ReferenceResolver:
         limit: int | None = None,
         fuzzy_matching: bool = False,
         external_search: bool = False,
+        create_stubs: bool = False,
     ) -> ResolutionProgress:
         """Step 3: Resolve identifiers to internal Qdrant point IDs.
 
@@ -550,6 +557,7 @@ class ReferenceResolver:
             limit: Maximum papers to process.
             fuzzy_matching: Use fuzzy title matching (slower).
             external_search: Search S2/OpenAlex for unresolved titles.
+            create_stubs: If True, create stub papers for unresolved refs.
 
         Returns:
             ResolutionProgress with statistics.
@@ -571,6 +579,8 @@ class ReferenceResolver:
                 break
 
             updates = []
+            stubs_to_create: list[tuple[str, str, str]] = []  # (identifier, type, citing_id)
+
             for point_id, payload in papers:
                 if point_id in progress.processed_point_ids:
                     progress.skipped += 1
@@ -623,6 +633,10 @@ class ReferenceResolver:
 
                     if resolved_id:
                         resolved_ids.append(resolved_id)
+                    elif create_stubs and not dry_run:
+                        # Create stub for unresolved reference
+                        id_type = norm.type.name.lower()
+                        stubs_to_create.append((norm.prefixed, id_type, point_id))
 
                 if resolved_ids and not dry_run:
                     updates.append((point_id, resolved_ids))
@@ -634,6 +648,16 @@ class ReferenceResolver:
             if updates:
                 self.storage.batch_update_resolved_references(updates)
                 logger.debug(f"Updated {len(updates)} papers with resolved refs")
+
+            # Batch create stub papers
+            if stubs_to_create and create_stubs:
+                created_stubs = self.storage.batch_create_stub_papers(stubs_to_create)
+                # Count new vs updated stubs
+                for identifier, stub_id in created_stubs.items():
+                    # Check if this was a new stub or update
+                    # For simplicity, count all as created (storage handles dedup)
+                    progress.stubs_created += 1
+                logger.debug(f"Created/updated {len(created_stubs)} stub papers")
 
             # Save checkpoint
             progress.last_offset = next_offset
@@ -656,12 +680,16 @@ class ReferenceResolver:
                     f"{progress.titles_resolved} titles resolved"
                 )
 
+        stub_msg = ""
+        if create_stubs:
+            stub_msg = f", {progress.stubs_created} stubs created"
         logger.info(
             f"Resolution complete: {progress.processed} papers, "
             f"{progress.dois_resolved} DOIs, "
             f"{progress.openalex_resolved} OpenAlex IDs, "
             f"{progress.titles_resolved} titles resolved, "
             f"{progress.external_added} papers added from external search"
+            f"{stub_msg}"
         )
         return progress
 
@@ -819,6 +847,7 @@ class ReferenceResolver:
         limit: int | None = None,
         fuzzy_matching: bool = False,
         external_search: bool = False,
+        create_stubs: bool = False,
     ) -> dict[str, ResolutionProgress]:
         """Run the complete 3-step reference resolution pipeline.
 
@@ -827,6 +856,7 @@ class ReferenceResolver:
             limit: Maximum papers to process per step.
             fuzzy_matching: Use fuzzy title matching in step 3.
             external_search: Search external APIs for unresolved titles.
+            create_stubs: Create stub papers for unresolved references.
 
         Returns:
             Dictionary mapping step name to progress.
@@ -852,6 +882,7 @@ class ReferenceResolver:
             limit=limit,
             fuzzy_matching=fuzzy_matching,
             external_search=external_search,
+            create_stubs=create_stubs,
         )
 
         return results

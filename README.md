@@ -12,6 +12,7 @@ AI Research Insights Engine - Core Corpus collection and semantic search for top
 - **Qdrant Integration**: Vector database storage for semantic search
 - **Keyword Extraction**: Acronym + semantic keyword extraction for BM25 search
 - **Citation Graph**: Reference resolution and GraphRAG support
+- **Stub Papers**: Store external references with automatic deduplication for complete citation graph
 
 ## Quick Start
 
@@ -119,12 +120,15 @@ python -m src.cli.core_collect deduplicate --dry-run
 python -m src.cli.core_collect clear-checkpoint
 
 # Enrichment (add citations/abstracts)
-python -m src.cli.core_collect enrich-citations --parallel 10
-python -m src.cli.core_collect enrich-abstracts --parallel 10
+python -m src.cli.core_collect enrich-citations --parallel 10    # OpenAlex
+python -m src.cli.core_collect enrich-crossref --parallel 5      # CrossRef (ACM/Springer)
+python -m src.cli.core_collect enrich-s2                         # Semantic Scholar
+python -m src.cli.core_collect enrich-abstracts --parallel 10    # Abstracts
 
 # Reference Resolution (build citation graph)
 python -m src.cli.core_collect ref-stats
 python -m src.cli.core_collect resolve-refs
+python -m src.cli.core_collect resolve-refs --create-stubs       # Create stub papers
 
 # Citation Graph Analysis
 python -m src.cli.core_collect citation-graph-stats
@@ -132,6 +136,10 @@ python -m src.cli.core_collect build-citation-graph -o graph.json
 python -m src.cli.core_collect analyze-citation-graph --all --top-n 10
 python -m src.cli.core_collect get-citing-papers <paper_id>
 python -m src.cli.core_collect build-cited-by  # Required for GraphRAG
+
+# Stub Papers (external references)
+python -m src.cli.core_collect stub-stats                        # Most-cited external papers
+python -m src.cli.core_collect enrich-stubs --limit 1000         # Fetch metadata for stubs
 
 # Keyword Extraction (for BM25 search)
 python -m src.cli.core_collect extract-keywords              # Full extraction
@@ -167,7 +175,9 @@ lexiconarxiv/
 │   │   │   └── aaai_ojs.py
 │   │   ├── enrichment/          # Enrichment pipelines
 │   │   │   ├── openalex.py      # Citation/abstract via OpenAlex
+│   │   │   ├── crossref.py      # CrossRef (ACM/Springer papers)
 │   │   │   ├── semantic_scholar.py  # S2 fallback
+│   │   │   ├── stub.py          # Stub paper enrichment with dedup
 │   │   │   └── pdf.py           # PDF reference extraction
 │   │   ├── resolution/          # Reference resolution
 │   │   │   ├── normalizer.py    # ID normalization (DOI, arXiv, OpenAlex)
@@ -185,6 +195,11 @@ lexiconarxiv/
 
 ## Recent Updates (Feb 2026)
 
+- **Stub Papers**: Store external references for complete citation graph (no embedding)
+- **Stub Deduplication**: Auto-merge duplicate stubs referenced with different identifiers (DOI/arXiv/OpenAlex)
+- **Stub Enrichment**: Fetch metadata for external papers from OpenAlex/CrossRef
+- **CrossRef Enrichment**: 97% success rate for ACM papers (vs 0% for Semantic Scholar)
+- **Coverage Improvement**: Reference coverage increased from 73% to 89%
 - **Workshop Support**: ACL workshops now collected dynamically (90+ venues)
 - **OpenReview API v2**: Fixed support for ICLR 2024+, NeurIPS 2023+, ICML 2023+
 - **XML Parser Fix**: Proper handling of `<fixed-case>` tags in ACL titles
@@ -194,6 +209,7 @@ lexiconarxiv/
 
 ```env
 OPENALEX_EMAIL=your-email@example.com  # Required for polite pool
+CROSSREF_EMAIL=your-email@example.com  # Recommended for CrossRef polite pool
 QDRANT_URL=http://localhost:6333
 QDRANT_COLLECTION=lexicon_arxiv        # Optional, default collection name
 ```
