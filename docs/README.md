@@ -64,6 +64,7 @@
 - **Core Connection**: Display citation/similarity relationships between on-demand papers and Core
 - **Research Graph**: Citation network visualization between papers
 - **Stub Papers**: External papers referenced by corpus papers but not crawled (for complete citation graph)
+- **Payload-Only Storage**: Decouple metadata from embeddings; add vectors later with any dimension
 
 ### Venue Summary
 
@@ -147,6 +148,7 @@ Infra:       Docker / Kubernetes
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.7.0 | Feb 2026 | Payload-only architecture, named vectors support |
 | 0.6.3 | Feb 2026 | Crawler base class, centralized API constants, checkpoint mixin |
 | 0.6.2 | Feb 2026 | Refactored enrichment modules with shared base classes |
 | 0.6.1 | Feb 2026 | Stub enrichment with cross-reference deduplication |

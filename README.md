@@ -9,7 +9,7 @@ AI Research Insights Engine - Core Corpus collection and semantic search for top
 - **90+ Workshops**: ACL-affiliated workshop papers
 - **Cross-source Deduplication**: Automatic duplicate detection
 - **Checkpoint Resume**: Resumable collection with progress tracking
-- **Qdrant Integration**: Vector database storage for semantic search
+- **Qdrant Integration**: Payload-only storage with optional named vectors
 - **Keyword Extraction**: Acronym + semantic keyword extraction for BM25 search
 - **Citation Graph**: Reference resolution and GraphRAG support
 - **Stub Papers**: Store external references with automatic deduplication for complete citation graph
@@ -199,6 +199,7 @@ lexiconarxiv/
 
 ## Recent Updates (Feb 2026)
 
+- **Payload-Only Architecture**: Decouple enrichment from embeddings (see below)
 - **Code Refactoring**: BaseCrawler class, BaseEnricher with mixins, centralized constants
 - **Stub Papers**: Store external references for complete citation graph (no embedding)
 - **Stub Deduplication**: Auto-merge duplicate stubs referenced with different identifiers (DOI/arXiv/OpenAlex)
@@ -209,6 +210,65 @@ lexiconarxiv/
 - **OpenReview API v2**: Fixed support for ICLR 2024+, NeurIPS 2023+, ICML 2023+
 - **XML Parser Fix**: Proper handling of `<fixed-case>` tags in ACL titles
 - **venue_type Field**: Papers now tagged as conference/workshop/journal
+
+## Payload-Only Architecture
+
+LexiconArxiv uses **payload-only storage** in Qdrant, decoupling metadata collection from embeddings:
+
+```
+Collection → Enrichment → Resolution → Graph   (payload-only, no vectors)
+                                        ↓
+                              Add Embeddings   (named vectors, any dimension)
+```
+
+### Benefits
+
+| Benefit | Description |
+|---------|-------------|
+| **Decouple pipelines** | Run full collection + enrichment without vectors |
+| **Flexible dimensions** | Add embeddings later with any dimension (384, 768, 1536) |
+| **Multiple vectors** | Support different embedding models via named vectors |
+| **No wasted storage** | No placeholder zero vectors during collection |
+
+### Adding Embeddings Later
+
+After collection/enrichment, add vectors using Qdrant's named vectors:
+
+```python
+from qdrant_client import QdrantClient
+from qdrant_client.http import models
+
+client = QdrantClient(url="http://localhost:6333")
+
+# Step 1: Add vector config to existing collection
+client.update_collection(
+    collection_name="lexicon_arxiv",
+    vectors_config={
+        "abstract_embed": models.VectorParams(
+            size=1536,  # OpenAI ada-002
+            distance=models.Distance.COSINE,
+        ),
+    },
+)
+
+# Step 2: Update points with vectors (batch)
+client.update_vectors(
+    collection_name="lexicon_arxiv",
+    points=[
+        models.PointVectors(id="uuid-1", vector={"abstract_embed": embedding_1}),
+        models.PointVectors(id="uuid-2", vector={"abstract_embed": embedding_2}),
+    ]
+)
+
+# Step 3: Search using named vector
+results = client.search(
+    collection_name="lexicon_arxiv",
+    query_vector=("abstract_embed", query_embedding),
+    limit=10,
+)
+```
+
+See [Data Model](docs/architecture/data_model.md#5-qdrant-collection-schema) for full details.
 
 ## Environment Variables
 

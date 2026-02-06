@@ -320,15 +320,92 @@ CREATE TABLE paper_versions (
 
 ## 5. Qdrant Collection Schema
 
-### 5.1 paper_embeddings collection
+### 5.1 Payload-Only Architecture
+
+The collection uses **payload-only storage** to decouple metadata from embeddings:
 
 ```json
 {
-  "collection_name": "paper_embeddings",
-  "vectors": {
-    "size": 768,
-    "distance": "Cosine"
-  },
+  "collection_name": "lexicon_arxiv",
+  "vectors": {},  // Empty - payload-only storage
+  ...
+}
+```
+
+**Benefits**:
+- **Decouple enrichment from embeddings**: Run collection + enrichment pipeline without vectors
+- **Flexible dimensions**: Add embeddings later with any dimension (384, 768, 1536, etc.)
+- **Named vectors**: Support multiple embedding types (title, abstract, full-text)
+- **No wasted storage**: No placeholder zero vectors during collection phase
+
+### 5.2 Adding Vectors Later (Named Vectors)
+
+After collection/enrichment, add vectors using Qdrant's named vectors feature:
+
+```python
+from qdrant_client import QdrantClient
+from qdrant_client.http import models
+
+client = QdrantClient(url="http://localhost:6333")
+
+# Step 1: Add vector configuration to existing collection
+client.update_collection(
+    collection_name="lexicon_arxiv",
+    vectors_config={
+        "abstract_embed": models.VectorParams(
+            size=1536,  # e.g., OpenAI ada-002
+            distance=models.Distance.COSINE,
+        ),
+    },
+)
+
+# Step 2: Update points with vectors
+client.update_vectors(
+    collection_name="lexicon_arxiv",
+    points=[
+        models.PointVectors(
+            id="point-uuid-here",
+            vector={"abstract_embed": [0.1, 0.2, ...]}  # 1536-dim vector
+        )
+    ]
+)
+
+# Step 3: Search using named vector
+results = client.search(
+    collection_name="lexicon_arxiv",
+    query_vector=("abstract_embed", query_embedding),
+    limit=10,
+)
+```
+
+### 5.3 Multiple Embedding Types (Future)
+
+Support for multiple embedding models:
+
+```python
+# Add multiple named vectors
+client.update_collection(
+    collection_name="lexicon_arxiv",
+    vectors_config={
+        "title_embed": models.VectorParams(size=384, distance=models.Distance.COSINE),
+        "abstract_embed": models.VectorParams(size=1536, distance=models.Distance.COSINE),
+        "full_embed": models.VectorParams(size=768, distance=models.Distance.COSINE),
+    },
+)
+```
+
+| Vector Name | Model | Dimension | Use Case |
+|-------------|-------|-----------|----------|
+| `title_embed` | all-MiniLM-L6-v2 | 384 | Fast title search |
+| `abstract_embed` | text-embedding-ada-002 | 1536 | High-quality semantic |
+| `full_embed` | SPECTER2 | 768 | Scientific papers |
+
+### 5.4 paper_embeddings collection (Payload Schema)
+
+```json
+{
+  "collection_name": "lexicon_arxiv",
+  "vectors": {},  // Payload-only, vectors added via update_collection
   "payload_schema": {
     "paper_id": "keyword",
     "source": "keyword",        // openalex, acl_anthology, dblp
@@ -339,6 +416,7 @@ CREATE TABLE paper_versions (
     "venue": "keyword",
     "tier": "integer",         // 0, 1, 2, or null
     "is_core": "bool",
+    "is_stub": "bool",         // true for external reference papers
     "paper_type": "keyword",
     "venue_type": "keyword",   // conference, journal, workshop
     "is_preprint": "bool",
@@ -346,17 +424,15 @@ CREATE TABLE paper_versions (
     "field": "keyword",
     "doi": "keyword",
     "referenced_works": "keyword[]",
+    "cited_by": "keyword[]",   // Internal paper IDs that cite this paper
+    "cited_by_count_internal": "integer",
     "keywords": "keyword[]",   // Extracted keywords/acronyms (acronyms + KeyBERT)
     "keywords_source": "keyword"  // "regex", "keybert", "both"
-  },
-  "optimizers_config": {
-    "indexing_threshold": 20000
-  },
-  "hnsw_config": {
-    "m": 16,
-    "ef_construct": 100
   }
 }
+```
+
+> **Note**: HNSW config is only applied when vectors are added via `update_collection()`.
 ```
 
 ### 5.2 Qdrant Filters for Core-first Search

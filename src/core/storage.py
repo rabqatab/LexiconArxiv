@@ -23,8 +23,9 @@ load_dotenv()
 # Default collection name for core corpus
 DEFAULT_COLLECTION = os.getenv("QDRANT_COLLECTION", "lexicon_arxiv")
 
-# Vector dimensions (placeholder for future embeddings)
-VECTOR_DIM = 768
+# Vector dimensions (commented out - using payload-only storage)
+# Vectors will be added later via named vectors feature
+# VECTOR_DIM = 768
 
 
 class QdrantStorage:
@@ -68,13 +69,10 @@ class QdrantStorage:
             logger.info(f"Collection '{self.collection_name}' already exists")
             return False
         except (UnexpectedResponse, Exception):
-            # Collection doesn't exist, create it
+            # Collection doesn't exist, create it (payload-only, vectors added later)
             self.client.create_collection(
                 collection_name=self.collection_name,
-                vectors_config=models.VectorParams(
-                    size=VECTOR_DIM,
-                    distance=models.Distance.COSINE,
-                ),
+                vectors_config={},  # Empty config for payload-only storage
             )
             logger.info(f"Created collection '{self.collection_name}'")
             return True
@@ -106,12 +104,11 @@ class QdrantStorage:
             "pdf_url": paper.pdf_url,
         }
 
-    def _generate_placeholder_vector(self) -> list[float]:
-        """Generate a placeholder zero vector.
-
-        Embeddings will be computed later; for now use zeros.
-        """
-        return [0.0] * VECTOR_DIM
+    # NOTE: Placeholder vector removed - using payload-only storage
+    # Vectors will be added later via named vectors feature
+    # def _generate_placeholder_vector(self) -> list[float]:
+    #     """Generate a placeholder zero vector."""
+    #     return [0.0] * VECTOR_DIM
 
     def upsert_paper(self, paper: RawPaper) -> str:
         """Upsert a single paper into the collection.
@@ -130,7 +127,6 @@ class QdrantStorage:
             points=[
                 models.PointStruct(
                     id=point_id,
-                    vector=self._generate_placeholder_vector(),
                     payload=payload,
                 )
             ],
@@ -154,7 +150,6 @@ class QdrantStorage:
             points = [
                 models.PointStruct(
                     id=str(uuid4()),
-                    vector=self._generate_placeholder_vector(),
                     payload=self._paper_to_payload(paper),
                 )
                 for paper in batch
@@ -1482,7 +1477,7 @@ class QdrantStorage:
         except Exception:
             pass  # Stub doesn't exist, create it
 
-        # Create new stub with placeholder zero vector (required by Qdrant)
+        # Create new stub (payload-only, no vector)
         payload = {
             "is_stub": True,
             "identifier": identifier,
@@ -1505,7 +1500,6 @@ class QdrantStorage:
                 points=[
                     models.PointStruct(
                         id=stub_id,
-                        vector=self._generate_placeholder_vector(),
                         payload=payload,
                     )
                 ],
@@ -1585,7 +1579,6 @@ class QdrantStorage:
                     points=[
                         models.PointStruct(
                             id=stub_id,
-                            vector=self._generate_placeholder_vector(),
                             payload=payload,
                         )
                     ],
