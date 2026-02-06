@@ -38,6 +38,6 @@ done
 
 echo "[OpenReview] Collecting papers since $SINCE_YEAR..."
 
-uv run python -m src.cli.core_collect collect-openreview --since-year $SINCE_YEAR
+uv run python -m src.cli.core_collect collect-openreview --all --since-year $SINCE_YEAR
 
 echo "[OpenReview] Collection complete."

@@ -44,7 +44,7 @@ done
 
 echo "[ACL Anthology] Collecting papers since $SINCE_YEAR..."
 
-CMD="uv run python -m src.cli.core_collect collect-acl --since-year $SINCE_YEAR"
+CMD="uv run python -m src.cli.core_collect collect-acl --all --since-year $SINCE_YEAR"
 
 if [ "$INCLUDE_WORKSHOPS" = true ]; then
     CMD="$CMD --include-workshops"

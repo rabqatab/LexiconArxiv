@@ -38,6 +38,6 @@ done
 
 echo "[DBLP] Collecting papers since $SINCE_YEAR..."
 
-uv run python -m src.cli.core_collect collect-dblp --since-year $SINCE_YEAR
+uv run python -m src.cli.core_collect collect-dblp --all --since-year $SINCE_YEAR
 
 echo "[DBLP] Collection complete."

@@ -38,6 +38,6 @@ done
 
 echo "[ACM] Collecting papers since $SINCE_YEAR..."
 
-uv run python -m src.cli.core_collect collect-acm --since-year $SINCE_YEAR
+uv run python -m src.cli.core_collect collect-acm --all --since-year $SINCE_YEAR
 
 echo "[ACM] Collection complete."

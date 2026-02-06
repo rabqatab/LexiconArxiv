@@ -38,6 +38,6 @@ done
 
 echo "[AAAI] Collecting papers since $SINCE_YEAR..."
 
-uv run python -m src.cli.core_collect collect-aaai --since-year $SINCE_YEAR
+uv run python -m src.cli.core_collect collect-aaai --all --since-year $SINCE_YEAR
 
 echo "[AAAI] Collection complete."

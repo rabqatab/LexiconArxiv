@@ -550,7 +550,7 @@ class CoreCorpusCollector:
         """
         try:
             # Extract basic info
-            openalex_id = work.get("id", "").replace("https://openalex.org/", "")
+            openalex_id = (work.get("id") or "").replace("https://openalex.org/", "")
             title = work.get("title") or work.get("display_name", "")
 
             if not title:
@@ -563,8 +563,8 @@ class CoreCorpusCollector:
                 institutions = authorship.get("institutions", [])
 
                 author = Author(
-                    name=author_data.get("display_name", "Unknown"),
-                    openalex_id=author_data.get("id", "").replace(
+                    name=author_data.get("display_name") or "Unknown",
+                    openalex_id=(author_data.get("id") or "").replace(
                         "https://openalex.org/", ""
                     ),
                     orcid=author_data.get("orcid"),
@@ -590,6 +590,7 @@ class CoreCorpusCollector:
             referenced_works = [
                 ref.replace("https://openalex.org/", "")
                 for ref in work.get("referenced_works", [])
+                if ref  # Filter out None values
             ]
 
             # Determine paper type from work type
