@@ -148,6 +148,27 @@ python -m src.cli.core_collect collect-all-sources --skip-openalex
 python -m src.cli.core_collect collect-all-sources --skip-acl --skip-dblp
 ```
 
+### collect-incremental
+
+Incremental collection for daily cron jobs.
+
+```bash
+# Daily cron job (papers updated in last 24 hours)
+python -m src.cli.core_collect collect-incremental
+
+# Weekly catch-up
+python -m src.cli.core_collect collect-incremental --days 7
+
+# Only specific source
+python -m src.cli.core_collect collect-incremental --source openalex
+python -m src.cli.core_collect collect-incremental --source openreview
+```
+
+**Crontab example (daily at 2 AM):**
+```bash
+0 2 * * * cd /path/to/project && python -m src.cli.core_collect collect-incremental >> /var/log/lexicon_cron.log 2>&1
+```
+
 ---
 
 ## Deduplication Commands
@@ -224,6 +245,52 @@ python -m src.cli.core_collect enrich-s2 --by-title
 python -m src.cli.core_collect enrich-s2 --by-title -v "NeurIPS 2024 poster"
 ```
 
+### enrich-crossref
+
+Enrich papers with references from CrossRef (excellent for ACM/Springer papers).
+
+```bash
+# Preview
+python -m src.cli.core_collect enrich-crossref --dry-run
+
+# Enrich all papers with DOIs
+python -m src.cli.core_collect enrich-crossref
+
+# Limit papers
+python -m src.cli.core_collect enrich-crossref --limit 500
+
+# Adjust concurrency (default: 5)
+python -m src.cli.core_collect enrich-crossref --parallel 20
+```
+
+**Note:** CrossRef has 97% success rate for ACM papers where Semantic Scholar fails. For polite pool access, set `CROSSREF_EMAIL` env var.
+
+### enrich-stubs
+
+Enrich stub papers (external references) with metadata.
+
+```bash
+# Enrich top 100 most-cited stubs
+python -m src.cli.core_collect enrich-stubs
+
+# Enrich DOI stubs only
+python -m src.cli.core_collect enrich-stubs --limit 1000 --type doi
+
+# Only highly-cited stubs (5+ citations)
+python -m src.cli.core_collect enrich-stubs --min-citations 5
+
+# Preview
+python -m src.cli.core_collect enrich-stubs --dry-run
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--type [doi\|arxiv\|openalex]` | Filter by identifier type |
+| `--min-citations N` | Only stubs cited N+ times |
+| `-n, --limit N` | Max stubs to enrich |
+| `-p, --parallel N` | Concurrent API requests |
+
 ### extract-pdf-refs
 
 Extract references from PDFs using GROBID.
@@ -264,7 +331,20 @@ python -m src.cli.core_collect resolve-refs --step internal --fuzzy-matching
 
 # External search for unresolved titles
 python -m src.cli.core_collect resolve-refs --step internal --external-search
+
+# Create stub papers for unresolved references (for complete citation graph)
+python -m src.cli.core_collect resolve-refs --create-stubs
 ```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--step [all\|normalize\|arxiv\|internal]` | Run specific step only |
+| `--fuzzy-matching` | Use fuzzy title matching (slower) |
+| `--external-search` | Search external APIs for unresolved titles |
+| `--create-stubs` | Create stub papers for unresolved references |
+| `-n, --limit N` | Max papers to process |
+| `-p, --parallel N` | Concurrent requests |
 
 ### ref-stats
 
@@ -272,6 +352,21 @@ Show reference resolution statistics.
 
 ```bash
 python -m src.cli.core_collect ref-stats
+```
+
+### stub-stats
+
+Show statistics about stub papers (external references).
+
+```bash
+# Summary view
+python -m src.cli.core_collect stub-stats
+
+# Show top 50 most-cited stubs
+python -m src.cli.core_collect stub-stats --top 50
+
+# JSON output
+python -m src.cli.core_collect stub-stats --json
 ```
 
 ---
@@ -515,6 +610,14 @@ Clear Semantic Scholar enrichment checkpoint.
 
 ```bash
 python -m src.cli.core_collect clear-s2-checkpoint
+```
+
+### clear-crossref-checkpoint
+
+Clear CrossRef enrichment checkpoint.
+
+```bash
+python -m src.cli.core_collect clear-crossref-checkpoint
 ```
 
 ### clear-pdf-checkpoint

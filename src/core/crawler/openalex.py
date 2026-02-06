@@ -6,7 +6,6 @@ Supports both full collection and incremental updates.
 
 import asyncio
 import logging
-import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, AsyncIterator
 from urllib.parse import urlencode
@@ -16,6 +15,11 @@ from dotenv import load_dotenv
 
 from src.core.checkpoint import CheckpointManager, CollectionCheckpoint
 from src.core.config import VenueConfig, get_venue_by_name, get_discovered_venues
+from src.core.constants import (
+    OPENALEX_BASE_URL,
+    get_openalex_api_key,
+    get_openalex_email,
+)
 from src.core.deduplication import Deduplicator
 from src.core.storage import QdrantStorage
 from src.models.paper import Author, PaperType, RawPaper, SourceType
@@ -26,7 +30,6 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # OpenAlex API configuration
-OPENALEX_BASE_URL = "https://api.openalex.org"
 DEFAULT_PER_PAGE = 200  # Max allowed by OpenAlex
 
 
@@ -59,9 +62,9 @@ class CoreCorpusCollector:
         """
         self.storage = storage
         self.checkpoint_manager = checkpoint_manager or CheckpointManager()
-        self.api_key = api_key or os.getenv("OPENALEX_API_KEY")
+        self.api_key = api_key or get_openalex_api_key()
         # Email only needed for polite pool if no API key
-        self.email = email or os.getenv("OPENALEX_EMAIL") if not self.api_key else None
+        self.email = email or get_openalex_email() if not self.api_key else None
         self.timeout = timeout
         self.deduplicator = deduplicator or Deduplicator()
         self._client: httpx.AsyncClient | None = None
@@ -669,8 +672,8 @@ async def discover_source_id(
         Dictionary with source information.
     """
     # Use API key from env if not provided
-    api_key = api_key or os.getenv("OPENALEX_API_KEY")
-    email = email or os.getenv("OPENALEX_EMAIL") if not api_key else None
+    api_key = api_key or get_openalex_api_key()
+    email = email or get_openalex_email() if not api_key else None
 
     params = {"search": venue_name}
     if api_key:

@@ -746,16 +746,24 @@ core_coverage = Gauge('core_coverage', 'Core coverage by venue', ['venue'])
 | Module | File | Status |
 |--------|------|--------|
 | Venue Configuration | `src/core/config.py` | ✅ Complete (27 venues, all Source IDs) |
+| **API Constants** | `src/core/constants.py` | ✅ Complete |
 | Qdrant Storage | `src/core/storage.py` | ✅ Complete |
 | Checkpoint Manager | `src/core/checkpoint.py` | ✅ Complete |
+| Checkpoint Mixin | `src/core/checkpoint_mixin.py` | ✅ Complete |
 | Deduplication | `src/core/deduplication.py` | ✅ Complete |
 | CLI | `src/cli/core_collect.py` | ✅ Complete |
 | Paper Model | `src/models/paper.py` | ✅ Complete |
+
+**Constants Module**: Centralized API URLs and environment variable helpers:
+- `OPENALEX_BASE_URL`, `CROSSREF_BASE_URL`, `S2_BASE_URL`
+- `get_openalex_email()`, `get_openalex_api_key()`, `get_crossref_email()`, `get_s2_api_key()`
+- `get_qdrant_url()`, `get_qdrant_collection()`
 
 ### 11.2 Crawler Modules
 
 | Module | File | Status |
 |--------|------|--------|
+| **BaseCrawler** | `src/core/crawler/base.py` | ✅ Complete |
 | OpenAlex Collector | `src/core/crawler/openalex.py` | ✅ Complete |
 | ACL Anthology Crawler | `src/core/crawler/acl_anthology.py` | ✅ Complete |
 | DBLP Crawler | `src/core/crawler/dblp.py` | ✅ Complete |
@@ -763,13 +771,25 @@ core_coverage = Gauge('core_coverage', 'Core coverage by venue', ['venue'])
 | ACM Open Crawler | `src/core/crawler/acm_open.py` | ✅ Complete |
 | AAAI OJS Crawler | `src/core/crawler/aaai_ojs.py` | ✅ Complete |
 
+**Crawler Architecture**: All crawlers (except OpenAlex) inherit from `BaseCrawler`, which provides:
+- Async context management (`__aenter__`/`__aexit__`)
+- HTTP client with configurable timeout
+- Checkpoint manager integration
+- Deduplicator integration
+- Common `client` property with error handling
+
 ### 11.3 Enrichment Modules
 
 | Module | File | Status |
 |--------|------|--------|
+| **BaseEnricher** | `src/core/enrichment/base.py` | ✅ Complete |
 | OpenAlex Enricher | `src/core/enrichment/openalex.py` | ✅ Complete |
+| CrossRef Enricher | `src/core/enrichment/crossref.py` | ✅ Complete |
 | Semantic Scholar Enricher | `src/core/enrichment/semantic_scholar.py` | ✅ Complete |
+| Stub Enricher | `src/core/enrichment/stub.py` | ✅ Complete |
 | PDF Reference Extractor | `src/core/enrichment/pdf.py` | ✅ Complete |
+
+**Enrichment Architecture**: See [Enrichment Pipeline](./enrichment.md#8-enrichment-architecture) for details on `BaseEnricher`, `OpenAlexMixin`, and `CrossRefMixin`.
 
 ### 11.4 Reference Resolution Modules
 

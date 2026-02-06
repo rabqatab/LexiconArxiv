@@ -708,3 +708,94 @@ Stub Enrichment Results:
   }
 }
 ```
+
+---
+
+## 8. Enrichment Architecture
+
+### Overview
+
+The enrichment module uses a shared base class architecture to reduce code duplication and standardize API interactions.
+
+### Module Structure
+
+```
+src/core/enrichment/
+├── __init__.py          # Package exports
+├── base.py              # Base classes and mixins (NEW)
+├── openalex.py          # OpenAlex enricher (PaperEnricher)
+├── crossref.py          # CrossRef enricher
+├── semantic_scholar.py  # Semantic Scholar enricher
+├── stub.py              # Stub paper enricher
+└── pdf.py               # PDF reference extraction
+```
+
+### Class Hierarchy
+
+```
+BaseEnricher (ABC)
+    ├── _client (httpx.AsyncClient)
+    ├── _semaphore (concurrency control)
+    ├── storage (QdrantStorage)
+    ├── delay, max_concurrent
+    └── __aenter__, __aexit__
+
+OpenAlexMixin
+    ├── _init_openalex(email, api_key)
+    ├── _get_openalex_params()
+    ├── fetch_openalex_work(identifier, identifier_type)
+    ├── parse_openalex_work(data)
+    └── reconstruct_abstract(inverted_index)  [static]
+
+CrossRefMixin
+    ├── _init_crossref(email)
+    ├── _get_crossref_headers()
+    ├── fetch_crossref_work(doi, max_retries)
+    └── parse_crossref_work(message)
+
+PaperEnricher(BaseEnricher, OpenAlexMixin)
+    └── Enriches corpus papers with citations/abstracts
+
+StubEnricher(BaseEnricher, OpenAlexMixin, CrossRefMixin)
+    └── Enriches stub papers, handles cross-reference deduplication
+
+CrossRefEnricher(BaseEnricher, CrossRefMixin)
+    └── Enriches papers using CrossRef as primary source
+```
+
+### Shared Functionality
+
+| Component | Provided By | Used By |
+|-----------|-------------|---------|
+| Async context management | `BaseEnricher` | All enrichers |
+| Rate limiting (semaphore) | `BaseEnricher` | All enrichers |
+| OpenAlex API fetching | `OpenAlexMixin` | `PaperEnricher`, `StubEnricher` |
+| OpenAlex response parsing | `OpenAlexMixin` | `PaperEnricher`, `StubEnricher` |
+| Abstract reconstruction | `OpenAlexMixin` | `PaperEnricher`, `StubEnricher` |
+| CrossRef API fetching | `CrossRefMixin` | `CrossRefEnricher`, `StubEnricher` |
+| CrossRef response parsing | `CrossRefMixin` | `CrossRefEnricher`, `StubEnricher` |
+
+### Usage Example
+
+```python
+from src.core.enrichment import StubEnricher
+
+async with StubEnricher(email="you@example.com") as enricher:
+    # Uses OpenAlexMixin methods
+    data = await enricher.fetch_openalex_work("10.1234/paper", "doi")
+    if data:
+        metadata = enricher.parse_openalex_work(data)
+        print(metadata["title"])
+    
+    # Uses CrossRefMixin methods (fallback)
+    data = await enricher.fetch_crossref_work("10.1234/paper")
+    if data:
+        metadata = enricher.parse_crossref_work(data)
+```
+
+### Benefits
+
+1. **No code duplication** - OpenAlex/CrossRef fetching logic is centralized
+2. **Consistent error handling** - Rate limiting and retries in one place
+3. **Easy to extend** - New enrichers can use mixins for API access
+4. **Maintainability** - Changes to API handling propagate to all enrichers

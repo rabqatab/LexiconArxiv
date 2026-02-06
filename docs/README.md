@@ -147,6 +147,8 @@ Infra:       Docker / Kubernetes
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.6.3 | Feb 2026 | Crawler base class, centralized API constants, checkpoint mixin |
+| 0.6.2 | Feb 2026 | Refactored enrichment modules with shared base classes |
 | 0.6.1 | Feb 2026 | Stub enrichment with cross-reference deduplication |
 | 0.6.0 | Feb 2026 | Stub papers for complete citation graph, CrossRef enrichment |
 | 0.5.0 | Feb 2026 | Keyword extraction (Regex + KeyBERT) for BM25 search |

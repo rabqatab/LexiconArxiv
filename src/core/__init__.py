@@ -13,6 +13,17 @@ Core modules:
 """
 
 from src.core.config import VENUES, VenueConfig, get_tier_venues, get_venue_by_name
+from src.core.constants import (
+    OPENALEX_BASE_URL,
+    CROSSREF_BASE_URL,
+    S2_BASE_URL,
+    get_openalex_email,
+    get_openalex_api_key,
+    get_crossref_email,
+    get_s2_api_key,
+    get_qdrant_url,
+    get_qdrant_collection,
+)
 from src.core.storage import QdrantStorage
 from src.core.checkpoint import CheckpointManager
 from src.core.deduplication import Deduplicator
@@ -55,6 +66,16 @@ from src.core.resolution import (
 )
 
 __all__ = [
+    # API Constants
+    "OPENALEX_BASE_URL",
+    "CROSSREF_BASE_URL",
+    "S2_BASE_URL",
+    "get_openalex_email",
+    "get_openalex_api_key",
+    "get_crossref_email",
+    "get_s2_api_key",
+    "get_qdrant_url",
+    "get_qdrant_collection",
     # Config
     "VENUES",
     "VenueConfig",

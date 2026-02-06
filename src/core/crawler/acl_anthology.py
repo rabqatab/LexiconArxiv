@@ -7,14 +7,15 @@ import asyncio
 import logging
 import re
 import xml.etree.ElementTree as ET
-from typing import Any, AsyncIterator
+from typing import TYPE_CHECKING, Any, AsyncIterator
 
-import httpx
-
-from src.core.checkpoint import CheckpointManager, CollectionCheckpoint
+from src.core.checkpoint import CheckpointManager
+from src.core.crawler.base import BaseCrawler
 from src.core.deduplication import Deduplicator
-from src.core.storage import QdrantStorage
 from src.models.paper import Author, PaperType, RawPaper, SourceType
+
+if TYPE_CHECKING:
+    from src.core.storage import QdrantStorage
 
 logger = logging.getLogger(__name__)
 
@@ -87,16 +88,18 @@ EVENT_LOCATIONS = {
 }
 
 
-class ACLAnthologyCollector:
+class ACLAnthologyCollector(BaseCrawler):
     """Collector for papers from ACL Anthology.
 
     Downloads XML files from the ACL Anthology GitHub repository
     and parses them into RawPaper objects.
     """
 
+    DEFAULT_USER_AGENT = "LexiconArxiv/1.0 (ACL Anthology Collection)"
+
     def __init__(
         self,
-        storage: QdrantStorage | None = None,
+        storage: "QdrantStorage | None" = None,
         checkpoint_manager: CheckpointManager | None = None,
         deduplicator: Deduplicator | None = None,
         timeout: float = 60.0,
@@ -110,40 +113,20 @@ class ACLAnthologyCollector:
                 Pass a shared instance for cross-source deduplication.
             timeout: HTTP request timeout in seconds.
         """
-        self.storage = storage or QdrantStorage()
-        self.checkpoint_manager = checkpoint_manager or CheckpointManager(
-            checkpoint_name="acl_anthology"
+        super().__init__(
+            storage=storage,
+            checkpoint_manager=checkpoint_manager,
+            deduplicator=deduplicator,
+            timeout=timeout,
+            checkpoint_name="acl_anthology",
         )
-        self.timeout = timeout
-        self.deduplicator = deduplicator or Deduplicator()
-        self._client: httpx.AsyncClient | None = None
 
-    async def __aenter__(self) -> "ACLAnthologyCollector":
-        """Async context manager entry."""
-        self._client = httpx.AsyncClient(
-            timeout=self.timeout,
-            headers={
-                "User-Agent": "LexiconArxiv/0.1.0 (ACL Anthology Collection)",
-                "Accept": "application/vnd.github.v3+json",
-            },
-        )
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        """Async context manager exit."""
-        if self._client:
-            await self._client.aclose()
-            self._client = None
-
-    @property
-    def client(self) -> httpx.AsyncClient:
-        """Get the HTTP client."""
-        if self._client is None:
-            raise RuntimeError(
-                "Collector must be used as async context manager: "
-                "async with ACLAnthologyCollector() as collector: ..."
-            )
-        return self._client
+    def _get_default_headers(self) -> dict[str, str]:
+        """Get default HTTP headers for GitHub API."""
+        return {
+            "User-Agent": self.DEFAULT_USER_AGENT,
+            "Accept": "application/vnd.github.v3+json",
+        }
 
     async def list_xml_files(self, venue_prefix: str | None = None) -> list[str]:
         """List available XML files from ACL Anthology GitHub.

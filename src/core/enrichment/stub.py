@@ -6,19 +6,16 @@ year, venue, and abstract by looking up their identifiers in external APIs.
 
 import asyncio
 import logging
-import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import httpx
+from src.core.enrichment.base import BaseEnricher, CrossRefMixin, OpenAlexMixin
 
-from src.core.storage import QdrantStorage
+if TYPE_CHECKING:
+    from src.core.storage import QdrantStorage
 
 logger = logging.getLogger(__name__)
-
-OPENALEX_BASE_URL = "https://api.openalex.org"
-CROSSREF_BASE_URL = "https://api.crossref.org"
 
 
 @dataclass
@@ -37,7 +34,7 @@ class StubEnrichmentProgress:
     last_updated: str | None = None
 
 
-class StubEnricher:
+class StubEnricher(BaseEnricher, OpenAlexMixin, CrossRefMixin):
     """Enricher for stub papers (external references).
 
     Fetches metadata for stub papers using OpenAlex (for DOI/arXiv/OpenAlex IDs)
@@ -46,7 +43,7 @@ class StubEnricher:
 
     def __init__(
         self,
-        storage: QdrantStorage | None = None,
+        storage: "QdrantStorage | None" = None,
         email: str | None = None,
         api_key: str | None = None,
         delay: float = 0.1,
@@ -61,26 +58,13 @@ class StubEnricher:
             delay: Delay between API calls in seconds.
             max_concurrent: Maximum concurrent API requests.
         """
-        self.storage = storage or QdrantStorage()
-        self.email = email or os.getenv("OPENALEX_EMAIL")
-        self.crossref_email = os.getenv("CROSSREF_EMAIL") or self.email
-        self.api_key = api_key or os.getenv("OPENALEX_API_KEY")
-        self.delay = delay
-        self.max_concurrent = max_concurrent
-
-        self._client: httpx.AsyncClient | None = None
-        self._semaphore: asyncio.Semaphore | None = None
-
-    async def __aenter__(self) -> "StubEnricher":
-        """Enter async context."""
-        self._client = httpx.AsyncClient(timeout=30.0)
-        self._semaphore = asyncio.Semaphore(self.max_concurrent)
-        return self
-
-    async def __aexit__(self, *args) -> None:
-        """Exit async context."""
-        if self._client:
-            await self._client.aclose()
+        super().__init__(
+            storage=storage,
+            delay=delay,
+            max_concurrent=max_concurrent,
+        )
+        self._init_openalex(email=email, api_key=api_key)
+        self._init_crossref(email=email)
 
     async def enrich_stubs(
         self,
@@ -173,22 +157,32 @@ class StubEnricher:
                 if id_type == "doi":
                     # Try OpenAlex first, then CrossRef
                     doi = identifier.replace("DOI:", "").replace("doi:", "")
-                    metadata = await self._fetch_from_openalex_doi(doi)
-                    if not metadata:
-                        metadata = await self._fetch_from_crossref(doi)
+                    raw_data = await self.fetch_openalex_work(doi, "doi")
+                    if raw_data:
+                        metadata = self.parse_openalex_work(raw_data)
+                    else:
+                        raw_data = await self.fetch_crossref_work(doi)
+                        if raw_data:
+                            metadata = self.parse_crossref_work(raw_data)
 
                 elif id_type == "arxiv":
                     arxiv_id = identifier.replace("arXiv:", "").replace("arxiv:", "")
                     # Try direct arXiv lookup first
-                    metadata = await self._fetch_from_openalex_arxiv(arxiv_id)
-                    if not metadata:
+                    raw_data = await self.fetch_openalex_work(arxiv_id, "arxiv")
+                    if raw_data:
+                        metadata = self.parse_openalex_work(raw_data)
+                    else:
                         # Try arXiv DOI format: 10.48550/arXiv.{id}
                         arxiv_doi = f"10.48550/arXiv.{arxiv_id}"
-                        metadata = await self._fetch_from_openalex_doi(arxiv_doi)
+                        raw_data = await self.fetch_openalex_work(arxiv_doi, "doi")
+                        if raw_data:
+                            metadata = self.parse_openalex_work(raw_data)
 
                 elif id_type == "openalex":
                     work_id = identifier.replace("W", "").replace("w", "")
-                    metadata = await self._fetch_from_openalex_id(work_id)
+                    raw_data = await self.fetch_openalex_work(work_id, "openalex")
+                    if raw_data:
+                        metadata = self.parse_openalex_work(raw_data)
 
                 if metadata:
                     # Check for duplicate stubs with discovered identifiers
@@ -325,250 +319,3 @@ class StubEnricher:
                     return existing
 
         return None
-
-    async def _fetch_from_openalex_doi(self, doi: str) -> dict[str, Any] | None:
-        """Fetch paper metadata from OpenAlex by DOI.
-
-        Args:
-            doi: The DOI to look up.
-
-        Returns:
-            Metadata dict or None if not found.
-        """
-        url = f"{OPENALEX_BASE_URL}/works/https://doi.org/{doi}"
-        params = {}
-        if self.api_key:
-            params["api_key"] = self.api_key
-        elif self.email:
-            params["mailto"] = self.email
-
-        return await self._fetch_openalex_work(url, params)
-
-    async def _fetch_from_openalex_arxiv(self, arxiv_id: str) -> dict[str, Any] | None:
-        """Fetch paper metadata from OpenAlex by arXiv ID.
-
-        Args:
-            arxiv_id: The arXiv ID to look up.
-
-        Returns:
-            Metadata dict or None if not found.
-        """
-        url = f"{OPENALEX_BASE_URL}/works/arXiv:{arxiv_id}"
-        params = {}
-        if self.api_key:
-            params["api_key"] = self.api_key
-        elif self.email:
-            params["mailto"] = self.email
-
-        return await self._fetch_openalex_work(url, params)
-
-    async def _fetch_from_openalex_id(self, work_id: str) -> dict[str, Any] | None:
-        """Fetch paper metadata from OpenAlex by Work ID.
-
-        Args:
-            work_id: The OpenAlex Work ID (without W prefix).
-
-        Returns:
-            Metadata dict or None if not found.
-        """
-        url = f"{OPENALEX_BASE_URL}/works/W{work_id}"
-        params = {}
-        if self.api_key:
-            params["api_key"] = self.api_key
-        elif self.email:
-            params["mailto"] = self.email
-
-        return await self._fetch_openalex_work(url, params)
-
-    async def _fetch_openalex_work(
-        self, url: str, params: dict[str, str]
-    ) -> dict[str, Any] | None:
-        """Fetch and parse OpenAlex work data.
-
-        Args:
-            url: The API URL.
-            params: Query parameters.
-
-        Returns:
-            Parsed metadata dict or None.
-        """
-        try:
-            response = await self._client.get(url, params=params)
-
-            if response.status_code == 404:
-                return None
-
-            if response.status_code == 429:
-                logger.warning("Rate limited by OpenAlex, waiting 60s...")
-                await asyncio.sleep(60)
-                return await self._fetch_openalex_work(url, params)
-
-            response.raise_for_status()
-            data = response.json()
-
-            # Extract metadata
-            title = data.get("title")
-            year = data.get("publication_year")
-
-            # Extract authors
-            authors = []
-            for authorship in data.get("authorships", [])[:10]:  # Limit to 10 authors
-                author = authorship.get("author", {})
-                name = author.get("display_name")
-                if name:
-                    authors.append(name)
-
-            # Extract venue
-            venue = None
-            primary_location = data.get("primary_location", {})
-            if primary_location:
-                source = primary_location.get("source", {})
-                if source:
-                    venue = source.get("display_name")
-
-            # Reconstruct abstract
-            abstract = None
-            inverted_index = data.get("abstract_inverted_index")
-            if inverted_index:
-                abstract = self._reconstruct_abstract(inverted_index)
-
-            # Citation count
-            citation_count = data.get("cited_by_count")
-
-            # Extract identifiers for cross-reference
-            doi = data.get("doi")
-            if doi:
-                # Clean DOI URL format
-                if doi.startswith("https://doi.org/"):
-                    doi = doi[16:]
-                elif doi.startswith("http://doi.org/"):
-                    doi = doi[15:]
-
-            # Extract arXiv ID from IDs list
-            arxiv_id = None
-            for id_obj in data.get("ids", {}).values():
-                if isinstance(id_obj, str) and "arxiv.org" in id_obj:
-                    # Extract arXiv ID from URL like https://arxiv.org/abs/2303.08774
-                    parts = id_obj.split("/")
-                    if len(parts) >= 2:
-                        arxiv_id = parts[-1]
-                        break
-
-            # Extract OpenAlex ID
-            openalex_id = data.get("id", "")
-            if openalex_id:
-                openalex_id = openalex_id.replace("https://openalex.org/", "")
-
-            return {
-                "title": title,
-                "year": year,
-                "authors": authors if authors else None,
-                "venue": venue,
-                "abstract": abstract,
-                "citation_count": citation_count,
-                # Identifiers for cross-reference
-                "doi": doi,
-                "arxiv_id": arxiv_id,
-                "openalex_id": openalex_id,
-            }
-
-        except Exception as e:
-            logger.debug(f"OpenAlex fetch error: {e}")
-            return None
-
-    async def _fetch_from_crossref(self, doi: str) -> dict[str, Any] | None:
-        """Fetch paper metadata from CrossRef by DOI.
-
-        Args:
-            doi: The DOI to look up.
-
-        Returns:
-            Metadata dict or None if not found.
-        """
-        url = f"{CROSSREF_BASE_URL}/works/{doi}"
-        headers = {}
-        if self.crossref_email:
-            headers["User-Agent"] = f"LexiconArxiv/1.0 (mailto:{self.crossref_email})"
-
-        try:
-            response = await self._client.get(url, headers=headers)
-
-            if response.status_code == 404:
-                return None
-
-            if response.status_code == 429:
-                logger.warning("Rate limited by CrossRef, waiting 60s...")
-                await asyncio.sleep(60)
-                return await self._fetch_from_crossref(doi)
-
-            response.raise_for_status()
-            data = response.json()
-            message = data.get("message", {})
-
-            # Extract title
-            titles = message.get("title", [])
-            title = titles[0] if titles else None
-
-            # Extract year
-            year = None
-            published = message.get("published", {}) or message.get("published-print", {})
-            date_parts = published.get("date-parts", [[]])
-            if date_parts and date_parts[0]:
-                year = date_parts[0][0]
-
-            # Extract authors
-            authors = []
-            for author in message.get("author", [])[:10]:
-                given = author.get("given", "")
-                family = author.get("family", "")
-                name = f"{given} {family}".strip()
-                if name:
-                    authors.append(name)
-
-            # Extract venue
-            venue = None
-            container = message.get("container-title", [])
-            if container:
-                venue = container[0]
-
-            return {
-                "title": title,
-                "year": year,
-                "authors": authors if authors else None,
-                "venue": venue,
-                "abstract": None,  # CrossRef rarely has abstracts
-                "citation_count": message.get("is-referenced-by-count"),
-            }
-
-        except Exception as e:
-            logger.debug(f"CrossRef fetch error: {e}")
-            return None
-
-    def _reconstruct_abstract(self, inverted_index: dict | None) -> str | None:
-        """Reconstruct abstract from OpenAlex inverted index.
-
-        Args:
-            inverted_index: OpenAlex abstract_inverted_index format.
-
-        Returns:
-            Reconstructed abstract text or None.
-        """
-        if not inverted_index:
-            return None
-
-        try:
-            # Find max position
-            max_pos = 0
-            for positions in inverted_index.values():
-                if positions:
-                    max_pos = max(max_pos, max(positions))
-
-            # Build word array
-            words = [""] * (max_pos + 1)
-            for word, positions in inverted_index.items():
-                for pos in positions:
-                    words[pos] = word
-
-            return " ".join(words)
-        except Exception:
-            return None

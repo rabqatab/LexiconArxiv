@@ -7,14 +7,15 @@ Uses the official openreview-py Python client.
 import asyncio
 import logging
 from datetime import datetime
-from typing import Any, AsyncIterator
-
-import httpx
+from typing import TYPE_CHECKING, Any, AsyncIterator
 
 from src.core.checkpoint import CheckpointManager
+from src.core.crawler.base import BaseCrawler
 from src.core.deduplication import Deduplicator
-from src.core.storage import QdrantStorage
 from src.models.paper import Author, PaperType, RawPaper, SourceType
+
+if TYPE_CHECKING:
+    from src.core.storage import QdrantStorage
 
 logger = logging.getLogger(__name__)
 
@@ -107,16 +108,18 @@ def _get_content_value(content_field: Any) -> Any:
     return content_field
 
 
-class OpenReviewCollector:
+class OpenReviewCollector(BaseCrawler):
     """Collector for papers from OpenReview.
 
     Uses the OpenReview API to collect papers from ML venues
     like ICLR, NeurIPS, and ICML with full metadata including reviews.
     """
 
+    DEFAULT_USER_AGENT = "LexiconArxiv/1.0 (OpenReview Collection)"
+
     def __init__(
         self,
-        storage: QdrantStorage | None = None,
+        storage: "QdrantStorage | None" = None,
         checkpoint_manager: CheckpointManager | None = None,
         deduplicator: Deduplicator | None = None,
         timeout: float = 60.0,
@@ -130,40 +133,13 @@ class OpenReviewCollector:
                 Pass a shared instance for cross-source deduplication.
             timeout: HTTP request timeout in seconds.
         """
-        self.storage = storage or QdrantStorage()
-        self.checkpoint_manager = checkpoint_manager or CheckpointManager(
-            checkpoint_name="openreview"
+        super().__init__(
+            storage=storage,
+            checkpoint_manager=checkpoint_manager,
+            deduplicator=deduplicator,
+            timeout=timeout,
+            checkpoint_name="openreview",
         )
-        self.timeout = timeout
-        self.deduplicator = deduplicator or Deduplicator()
-        self._client: httpx.AsyncClient | None = None
-
-    async def __aenter__(self) -> "OpenReviewCollector":
-        """Async context manager entry."""
-        self._client = httpx.AsyncClient(
-            timeout=self.timeout,
-            headers={
-                "User-Agent": "LexiconArxiv/0.1.0 (OpenReview Collection)",
-                "Accept": "application/json",
-            },
-        )
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        """Async context manager exit."""
-        if self._client:
-            await self._client.aclose()
-            self._client = None
-
-    @property
-    def client(self) -> httpx.AsyncClient:
-        """Get the HTTP client."""
-        if self._client is None:
-            raise RuntimeError(
-                "Collector must be used as async context manager: "
-                "async with OpenReviewCollector() as collector: ..."
-            )
-        return self._client
 
     def _parse_authors(self, note: dict[str, Any]) -> list[Author]:
         """Parse authors from OpenReview note.

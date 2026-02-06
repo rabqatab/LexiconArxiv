@@ -1,6 +1,7 @@
 """Enrichment pipelines for adding metadata to papers.
 
 This package contains enrichers for:
+- Base (base.py) - Base classes and mixins for API fetching
 - OpenAlex (openalex.py) - Citation and abstract enrichment via DOI/title lookup
 - Semantic Scholar (semantic_scholar.py) - Fallback citation enrichment
 - CrossRef (crossref.py) - Citation enrichment for ACM/Springer papers
@@ -8,6 +9,11 @@ This package contains enrichers for:
 - Stub (stub.py) - Metadata enrichment for stub papers (external references)
 """
 
+from src.core.enrichment.base import (
+    BaseEnricher,
+    CrossRefMixin,
+    OpenAlexMixin,
+)
 from src.core.enrichment.openalex import (
     PaperEnricher,
     EnrichmentProgress,
@@ -31,6 +37,10 @@ from src.core.enrichment.stub import (
 )
 
 __all__ = [
+    # Base classes
+    "BaseEnricher",
+    "OpenAlexMixin",
+    "CrossRefMixin",
     # OpenAlex enricher
     "PaperEnricher",
     "EnrichmentProgress",

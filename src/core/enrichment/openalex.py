@@ -7,20 +7,20 @@ papers in OpenAlex via DOI. Supports parallel processing for faster enrichment.
 import asyncio
 import json
 import logging
-import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
-from src.core.storage import QdrantStorage
+from src.core.enrichment.base import OPENALEX_BASE_URL, BaseEnricher, OpenAlexMixin
+
+if TYPE_CHECKING:
+    from src.core.storage import QdrantStorage
 
 logger = logging.getLogger(__name__)
-
-OPENALEX_BASE_URL = "https://api.openalex.org"
 
 
 class EnrichmentType(Enum):
@@ -48,12 +48,15 @@ class EnrichmentProgress:
     last_updated: str | None = None
 
 
-class PaperEnricher:
+class PaperEnricher(BaseEnricher, OpenAlexMixin):
     """Unified enricher for citations and abstracts from OpenAlex."""
+
+    DEFAULT_DELAY = 0.1
+    DEFAULT_CONCURRENT = 1
 
     def __init__(
         self,
-        storage: QdrantStorage | None = None,
+        storage: "QdrantStorage | None" = None,
         email: str | None = None,
         api_key: str | None = None,
         checkpoint_dir: Path | str | None = None,
@@ -72,55 +75,20 @@ class PaperEnricher:
             delay: Delay between API calls in seconds.
             max_concurrent: Maximum concurrent API requests (for parallel mode).
         """
-        self.storage = storage or QdrantStorage()
-        self.email = email or os.getenv("OPENALEX_EMAIL")
-        self.api_key = api_key or os.getenv("OPENALEX_API_KEY")
+        super().__init__(
+            storage=storage,
+            delay=delay,
+            max_concurrent=max_concurrent,
+        )
+        self._init_openalex(email=email, api_key=api_key)
         self.batch_size = batch_size
-        self.delay = delay
-        self.max_concurrent = max_concurrent
 
         # Checkpoint
         self.checkpoint_dir = Path(checkpoint_dir or "data/core/checkpoints")
-        self._client: httpx.AsyncClient | None = None
-        self._semaphore: asyncio.Semaphore | None = None
-
-    async def __aenter__(self) -> "PaperEnricher":
-        """Enter async context."""
-        self._client = httpx.AsyncClient(timeout=30.0)
-        self._semaphore = asyncio.Semaphore(self.max_concurrent)
-        return self
-
-    async def __aexit__(self, *args) -> None:
-        """Exit async context."""
-        if self._client:
-            await self._client.aclose()
 
     def _get_checkpoint_file(self, enrichment_type: EnrichmentType) -> Path:
         """Get checkpoint file path for enrichment type."""
         return self.checkpoint_dir / f"{enrichment_type.value}_enrichment.json"
-
-    def _build_url(self, doi: str) -> str:
-        """Build OpenAlex API URL for DOI lookup.
-
-        Args:
-            doi: The DOI to look up.
-
-        Returns:
-            Full API URL with authentication parameters.
-        """
-        # Clean DOI - remove https://doi.org/ prefix if present
-        if doi.startswith("https://doi.org/"):
-            doi = doi[16:]
-        elif doi.startswith("http://doi.org/"):
-            doi = doi[15:]
-
-        base = f"{OPENALEX_BASE_URL}/works/https://doi.org/{doi}"
-        params = []
-        if self.api_key:
-            params.append(f"api_key={self.api_key}")
-        elif self.email:
-            params.append(f"mailto={self.email}")
-        return f"{base}?{'&'.join(params)}" if params else base
 
     async def fetch_paper_data(self, doi: str) -> dict[str, Any] | None:
         """Fetch full paper data from OpenAlex by DOI.
@@ -131,70 +99,25 @@ class PaperEnricher:
         Returns:
             Paper data dict with 'referenced_works' and 'abstract', or None if not found.
         """
-        if not self._client:
-            raise RuntimeError("Client not initialized. Use async context manager.")
+        # Clean DOI - remove https://doi.org/ prefix if present
+        if doi.startswith("https://doi.org/"):
+            doi = doi[16:]
+        elif doi.startswith("http://doi.org/"):
+            doi = doi[15:]
 
-        url = self._build_url(doi)
-        try:
-            response = await self._client.get(url)
-            if response.status_code == 404:
-                return None
-            response.raise_for_status()
-            data = response.json()
-
-            # Extract relevant fields
-            refs = data.get("referenced_works", [])
-            refs_clean = [ref.replace("https://openalex.org/", "") for ref in refs]
-
-            # Reconstruct abstract from inverted index
-            abstract = self._reconstruct_abstract(data.get("abstract_inverted_index"))
-
-            return {
-                "referenced_works": refs_clean,
-                "abstract": abstract,
-            }
-
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 429:
-                logger.warning("Rate limited, waiting 60 seconds...")
-                await asyncio.sleep(60)
-                return await self.fetch_paper_data(doi)
-            logger.warning(f"HTTP error for DOI {doi}: {e}")
-            return None
-        except Exception as e:
-            logger.warning(f"Error fetching DOI {doi}: {e}")
+        raw_data = await self.fetch_openalex_work(doi, identifier_type="doi")
+        if not raw_data:
             return None
 
-    def _reconstruct_abstract(
-        self, inverted_index: dict[str, list[int]] | None
-    ) -> str | None:
-        """Reconstruct abstract from OpenAlex inverted index format.
-
-        Args:
-            inverted_index: OpenAlex abstract_inverted_index field.
-
-        Returns:
-            Reconstructed abstract string, or None if not available.
-        """
-        if not inverted_index:
-            return None
-
-        # Find max position
-        max_pos = 0
-        for positions in inverted_index.values():
-            if positions:
-                max_pos = max(max_pos, max(positions))
-
-        # Build word list
-        words = [""] * (max_pos + 1)
-        for word, positions in inverted_index.items():
-            for pos in positions:
-                words[pos] = word
-
-        return " ".join(words)
+        # Extract relevant fields using the parse method
+        parsed = self.parse_openalex_work(raw_data)
+        return {
+            "referenced_works": parsed.get("referenced_works", []),
+            "abstract": parsed.get("abstract"),
+        }
 
     async def _fetch_with_limit(self, doi: str) -> dict[str, Any] | None:
-        """Fetch with semaphore-controlled concurrency.
+        """Fetch paper data (semaphore is handled by fetch_openalex_work).
 
         Args:
             doi: The DOI to look up.
@@ -202,10 +125,8 @@ class PaperEnricher:
         Returns:
             Paper data or None.
         """
-        async with self._semaphore:
-            result = await self.fetch_paper_data(doi)
-            await asyncio.sleep(self.delay)
-            return result
+        # Note: semaphore and delay are handled in fetch_openalex_work via the mixin
+        return await self.fetch_paper_data(doi)
 
     async def search_by_title(
         self, title: str, min_refs: int = 1

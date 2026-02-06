@@ -12,7 +12,6 @@ Pipeline Steps:
 import asyncio
 import json
 import logging
-import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,13 +19,16 @@ from typing import Any
 
 import httpx
 
+from src.core.constants import (
+    OPENALEX_BASE_URL,
+    get_openalex_api_key,
+    get_openalex_email,
+)
 from src.core.deduplication import Deduplicator
 from src.core.resolution.normalizer import IdentifierNormalizer, IdentifierType
 from src.core.storage import QdrantStorage
 
 logger = logging.getLogger(__name__)
-
-OPENALEX_BASE_URL = "https://api.openalex.org"
 
 
 @dataclass
@@ -87,8 +89,8 @@ class ReferenceResolver:
             max_concurrent: Max concurrent API requests.
         """
         self.storage = storage or QdrantStorage()
-        self.email = email or os.getenv("OPENALEX_EMAIL")
-        self.api_key = api_key or os.getenv("OPENALEX_API_KEY")
+        self.email = email or get_openalex_email()
+        self.api_key = api_key or get_openalex_api_key()
         self.batch_size = batch_size
         self.delay = delay
         self.max_concurrent = max_concurrent

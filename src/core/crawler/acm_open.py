@@ -7,15 +7,18 @@ Uses a hybrid DBLP + ACM DL approach: get DOIs from DBLP, fetch abstracts from A
 import asyncio
 import logging
 import re
-from typing import Any, AsyncIterator
+from typing import TYPE_CHECKING, Any, AsyncIterator
 
 import httpx
 from bs4 import BeautifulSoup
 
 from src.core.checkpoint import CheckpointManager
+from src.core.crawler.base import BaseCrawler
 from src.core.deduplication import Deduplicator
-from src.core.storage import QdrantStorage
 from src.models.paper import Author, PaperType, RawPaper, SourceType
+
+if TYPE_CHECKING:
+    from src.core.storage import QdrantStorage
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +70,7 @@ ACM_VENUES = {
 }
 
 
-class ACMOpenCollector:
+class ACMOpenCollector(BaseCrawler):
     """Collector for papers from ACM conferences via DBLP + ACM DL hybrid.
 
     Strategy:
@@ -81,7 +84,7 @@ class ACMOpenCollector:
 
     def __init__(
         self,
-        storage: QdrantStorage | None = None,
+        storage: "QdrantStorage | None" = None,
         checkpoint_manager: CheckpointManager | None = None,
         deduplicator: Deduplicator | None = None,
         timeout: float = 60.0,
@@ -97,17 +100,17 @@ class ACMOpenCollector:
             timeout: HTTP request timeout in seconds.
             fetch_abstracts: Whether to fetch abstracts from ACM DL.
         """
-        self.storage = storage or QdrantStorage()
-        self.checkpoint_manager = checkpoint_manager or CheckpointManager(
-            checkpoint_name="acm_open"
+        super().__init__(
+            storage=storage,
+            checkpoint_manager=checkpoint_manager,
+            deduplicator=deduplicator,
+            timeout=timeout,
+            checkpoint_name="acm_open",
         )
-        self.timeout = timeout
         self.fetch_abstracts = fetch_abstracts
-        self.deduplicator = deduplicator or Deduplicator()
-        self._client: httpx.AsyncClient | None = None
 
     async def __aenter__(self) -> "ACMOpenCollector":
-        """Async context manager entry."""
+        """Async context manager entry with browser-like headers."""
         self._client = httpx.AsyncClient(
             timeout=self.timeout,
             follow_redirects=True,
@@ -120,22 +123,6 @@ class ACMOpenCollector:
             },
         )
         return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        """Async context manager exit."""
-        if self._client:
-            await self._client.aclose()
-            self._client = None
-
-    @property
-    def client(self) -> httpx.AsyncClient:
-        """Get the HTTP client."""
-        if self._client is None:
-            raise RuntimeError(
-                "Collector must be used as async context manager: "
-                "async with ACMOpenCollector() as collector: ..."
-            )
-        return self._client
 
     def _parse_authors(self, authors_data: Any) -> list[Author]:
         """Parse authors from DBLP response.

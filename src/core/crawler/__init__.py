@@ -9,6 +9,7 @@ This package contains collectors for:
 - AAAI OJS (aaai_ojs.py) - AAAI conferences
 """
 
+from src.core.crawler.base import BaseCrawler, classify_paper_type_by_title
 from src.core.crawler.openalex import (
     CoreCorpusCollector,
     discover_source_id,
@@ -46,6 +47,9 @@ from src.core.crawler.aaai_ojs import (
 )
 
 __all__ = [
+    # Base
+    "BaseCrawler",
+    "classify_paper_type_by_title",
     # OpenAlex
     "CoreCorpusCollector",
     "discover_source_id",

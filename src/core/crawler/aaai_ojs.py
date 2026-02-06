@@ -10,16 +10,19 @@ This collector focuses on AAAI proceedings from 2020-2023.
 import asyncio
 import logging
 import re
-from typing import Any, AsyncIterator
+from typing import TYPE_CHECKING, Any, AsyncIterator
 from urllib.parse import urljoin
 
 import httpx
 from bs4 import BeautifulSoup
 
 from src.core.checkpoint import CheckpointManager
+from src.core.crawler.base import BaseCrawler
 from src.core.deduplication import Deduplicator
-from src.core.storage import QdrantStorage
 from src.models.paper import Author, PaperType, RawPaper, SourceType
+
+if TYPE_CHECKING:
+    from src.core.storage import QdrantStorage
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +48,7 @@ AAAI_VENUES = {
 }
 
 
-class AAOJSCollector:
+class AAOJSCollector(BaseCrawler):
     """Collector for papers from AAAI OJS platform.
 
     Scrapes the AAAI proceedings from ojs.aaai.org to extract
@@ -54,7 +57,7 @@ class AAOJSCollector:
 
     def __init__(
         self,
-        storage: QdrantStorage | None = None,
+        storage: "QdrantStorage | None" = None,
         checkpoint_manager: CheckpointManager | None = None,
         deduplicator: Deduplicator | None = None,
         timeout: float = 60.0,
@@ -68,13 +71,13 @@ class AAOJSCollector:
                 Pass a shared instance for cross-source deduplication.
             timeout: HTTP request timeout in seconds.
         """
-        self.storage = storage or QdrantStorage()
-        self.checkpoint_manager = checkpoint_manager or CheckpointManager(
-            checkpoint_name="aaai_ojs"
+        super().__init__(
+            storage=storage,
+            checkpoint_manager=checkpoint_manager,
+            deduplicator=deduplicator,
+            timeout=timeout,
+            checkpoint_name="aaai_ojs",
         )
-        self.timeout = timeout
-        self.deduplicator = deduplicator or Deduplicator()
-        self._client: httpx.AsyncClient | None = None
 
     async def __aenter__(self) -> "AAOJSCollector":
         """Async context manager entry."""
@@ -91,21 +94,7 @@ class AAOJSCollector:
         )
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        """Async context manager exit."""
-        if self._client:
-            await self._client.aclose()
-            self._client = None
 
-    @property
-    def client(self) -> httpx.AsyncClient:
-        """Get the HTTP client."""
-        if self._client is None:
-            raise RuntimeError(
-                "Collector must be used as async context manager: "
-                "async with AAOJSCollector() as collector: ..."
-            )
-        return self._client
 
     def _extract_year_from_issue(self, issue_title: str, pattern: str) -> int | None:
         """Extract year from issue title.

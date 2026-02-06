@@ -17,19 +17,19 @@ Rate Limits:
 import asyncio
 import json
 import logging
-import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
-from src.core.storage import QdrantStorage
+from src.core.enrichment.base import BaseEnricher, CrossRefMixin
+
+if TYPE_CHECKING:
+    from src.core.storage import QdrantStorage
 
 logger = logging.getLogger(__name__)
-
-CROSSREF_API_BASE = "https://api.crossref.org"
 
 
 @dataclass
@@ -50,7 +50,7 @@ class CrossRefEnrichmentProgress:
     last_updated: str | None = None
 
 
-class CrossRefEnricher:
+class CrossRefEnricher(BaseEnricher, CrossRefMixin):
     """Enrich papers with citation data from CrossRef."""
 
     # CrossRef allows 50 req/sec but practical testing shows lower is safer
@@ -59,7 +59,7 @@ class CrossRefEnricher:
 
     def __init__(
         self,
-        storage: QdrantStorage | None = None,
+        storage: "QdrantStorage | None" = None,
         email: str | None = None,
         checkpoint_dir: Path | str | None = None,
         batch_size: int = 100,
@@ -77,30 +77,24 @@ class CrossRefEnricher:
             delay: Delay between requests in seconds (default: 0.05s = 20 req/sec).
             max_concurrent: Max concurrent requests (default: 10).
         """
-        self.storage = storage or QdrantStorage()
-        self.email = email or os.getenv("CROSSREF_EMAIL")
-
-        self.delay = delay if delay is not None else self.DEFAULT_DELAY
-        self.max_concurrent = max_concurrent if max_concurrent is not None else self.DEFAULT_CONCURRENT
+        super().__init__(
+            storage=storage,
+            delay=delay,
+            max_concurrent=max_concurrent,
+        )
+        self._init_crossref(email=email)
         self.batch_size = batch_size
 
         self.checkpoint_dir = Path(checkpoint_dir or "data/core/checkpoints")
         self._checkpoint_file = self.checkpoint_dir / "crossref_enrichment.json"
-        self._client: httpx.AsyncClient | None = None
-        self._semaphore: asyncio.Semaphore | None = None
 
     async def __aenter__(self) -> "CrossRefEnricher":
         """Enter async context."""
-        headers = {
-            "User-Agent": "LexiconArxiv/1.0 (Academic paper indexing; https://github.com/lexicon-arxiv)"
-        }
+        await super().__aenter__()
 
-        # Add mailto for polite pool
-        params = {}
-        if self.email:
-            params["mailto"] = self.email
+        if self.crossref_email:
             logger.info(
-                f"Using CrossRef polite pool (email: {self.email}). "
+                f"Using CrossRef polite pool (email: {self.crossref_email}). "
                 f"Rate: {1/self.delay:.1f} req/sec, {self.max_concurrent} concurrent"
             )
         else:
@@ -108,21 +102,7 @@ class CrossRefEnricher:
                 f"Using CrossRef public pool. "
                 f"Rate: {1/self.delay:.1f} req/sec, {self.max_concurrent} concurrent"
             )
-
-        self._client = httpx.AsyncClient(
-            headers=headers,
-            params=params,
-            timeout=30.0,
-            follow_redirects=True,
-        )
-        self._semaphore = asyncio.Semaphore(self.max_concurrent)
         return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        """Exit async context."""
-        if self._client:
-            await self._client.aclose()
-            self._client = None
 
     def _load_checkpoint(self) -> CrossRefEnrichmentProgress:
         """Load checkpoint from file."""
@@ -187,44 +167,7 @@ class CrossRefEnricher:
         Returns:
             CrossRef work data or None if not found.
         """
-        if not self._client:
-            raise RuntimeError("Client not initialized. Use async context manager.")
-
-        for attempt in range(max_retries):
-            try:
-                url = f"{CROSSREF_API_BASE}/works/{doi}"
-                response = await self._client.get(url)
-
-                if response.status_code == 404:
-                    return None
-
-                if response.status_code == 429:
-                    # Rate limited - wait and retry
-                    wait_time = 2 ** attempt  # Exponential backoff: 1, 2, 4 seconds
-                    logger.warning(f"CrossRef rate limited, waiting {wait_time}s (attempt {attempt + 1}/{max_retries})")
-                    await asyncio.sleep(wait_time)
-                    continue
-
-                response.raise_for_status()
-                data = response.json()
-                return data.get("message")
-
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == 404:
-                    return None
-                if e.response.status_code == 429:
-                    wait_time = 2 ** attempt
-                    logger.warning(f"CrossRef rate limited, waiting {wait_time}s (attempt {attempt + 1}/{max_retries})")
-                    await asyncio.sleep(wait_time)
-                    continue
-                logger.warning(f"CrossRef HTTP error for {doi}: {e}")
-                return None
-            except Exception as e:
-                logger.warning(f"CrossRef error for {doi}: {e}")
-                return None
-
-        logger.warning(f"CrossRef max retries exceeded for {doi}")
-        return None
+        return await self.fetch_crossref_work(doi, max_retries=max_retries)
 
     def _extract_references(self, work_data: dict[str, Any]) -> list[str]:
         """Extract reference identifiers from CrossRef work data.
@@ -255,11 +198,12 @@ class CrossRefEnricher:
         return identifiers
 
     async def _fetch_with_limit(self, doi: str) -> tuple[str, dict[str, Any] | None]:
-        """Fetch with semaphore-controlled concurrency."""
-        async with self._semaphore:
-            result = await self.fetch_by_doi(doi)
-            await asyncio.sleep(self.delay)
-            return doi, result
+        """Fetch with rate limiting.
+
+        Note: Semaphore and delay are handled in fetch_crossref_work via the mixin.
+        """
+        result = await self.fetch_by_doi(doi)
+        return doi, result
 
     async def _enrich_batch(
         self,

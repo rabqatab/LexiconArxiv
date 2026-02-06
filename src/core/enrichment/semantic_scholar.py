@@ -20,7 +20,6 @@ Rate Limits:
 import asyncio
 import json
 import logging
-import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,11 +27,10 @@ from typing import Any
 
 import httpx
 
+from src.core.constants import S2_BASE_URL, get_s2_api_key
 from src.core.storage import QdrantStorage
 
 logger = logging.getLogger(__name__)
-
-S2_API_BASE = "https://api.semanticscholar.org/graph/v1"
 
 
 @dataclass
@@ -87,7 +85,7 @@ class SemanticScholarEnricher:
                             If None, auto-set: 5 with key, 1 without.
         """
         self.storage = storage or QdrantStorage()
-        self.api_key = api_key or os.getenv("S2_API_KEY") or os.getenv("SEMANTIC_SCHOLAR_API_KEY")
+        self.api_key = api_key or get_s2_api_key()
 
         # Auto-adjust rate limits based on API key presence
         if self.api_key:
@@ -153,7 +151,7 @@ class SemanticScholarEnricher:
         elif doi.startswith("http://doi.org/"):
             doi = doi[15:]
 
-        url = f"{S2_API_BASE}/paper/DOI:{doi}"
+        url = f"{S2_BASE_URL}/paper/DOI:{doi}"
         params = {"fields": "paperId,title,references.paperId,references.title,references.externalIds"}
 
         try:
@@ -212,7 +210,7 @@ class SemanticScholarEnricher:
         if not self._client:
             raise RuntimeError("Client not initialized. Use async context manager.")
 
-        url = f"{S2_API_BASE}/paper/search"
+        url = f"{S2_BASE_URL}/paper/search"
         params = {
             "query": title,
             "fields": "paperId,title,externalIds,references.paperId,references.externalIds",

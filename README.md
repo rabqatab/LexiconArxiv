@@ -164,9 +164,12 @@ lexiconarxiv/
 │   ├── core/                    # Core modules
 │   │   ├── storage.py           # Qdrant vector database
 │   │   ├── checkpoint.py        # Resume support
+│   │   ├── checkpoint_mixin.py  # Reusable checkpoint mixin
 │   │   ├── config.py            # Venue configurations
+│   │   ├── constants.py         # Centralized API URLs and env helpers
 │   │   ├── deduplication.py     # Cross-source dedup
 │   │   ├── crawler/             # Data source crawlers
+│   │   │   ├── base.py          # BaseCrawler class
 │   │   │   ├── openalex.py
 │   │   │   ├── acl_anthology.py
 │   │   │   ├── openreview.py
@@ -174,6 +177,7 @@ lexiconarxiv/
 │   │   │   ├── dblp.py
 │   │   │   └── aaai_ojs.py
 │   │   ├── enrichment/          # Enrichment pipelines
+│   │   │   ├── base.py          # BaseEnricher, OpenAlexMixin, CrossRefMixin
 │   │   │   ├── openalex.py      # Citation/abstract via OpenAlex
 │   │   │   ├── crossref.py      # CrossRef (ACM/Springer papers)
 │   │   │   ├── semantic_scholar.py  # S2 fallback
@@ -195,6 +199,7 @@ lexiconarxiv/
 
 ## Recent Updates (Feb 2026)
 
+- **Code Refactoring**: BaseCrawler class, BaseEnricher with mixins, centralized constants
 - **Stub Papers**: Store external references for complete citation graph (no embedding)
 - **Stub Deduplication**: Auto-merge duplicate stubs referenced with different identifiers (DOI/arXiv/OpenAlex)
 - **Stub Enrichment**: Fetch metadata for external papers from OpenAlex/CrossRef

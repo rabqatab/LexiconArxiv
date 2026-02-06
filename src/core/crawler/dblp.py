@@ -6,14 +6,15 @@ Collects papers from DBLP API for venues with poor OpenAlex coverage.
 import asyncio
 import logging
 import re
-from typing import Any, AsyncIterator
+from typing import TYPE_CHECKING, Any, AsyncIterator
 
-import httpx
-
-from src.core.checkpoint import CheckpointManager, CollectionCheckpoint
+from src.core.checkpoint import CheckpointManager
+from src.core.crawler.base import BaseCrawler
 from src.core.deduplication import Deduplicator
-from src.core.storage import QdrantStorage
 from src.models.paper import Author, PaperType, RawPaper, SourceType
+
+if TYPE_CHECKING:
+    from src.core.storage import QdrantStorage
 
 logger = logging.getLogger(__name__)
 
@@ -56,16 +57,18 @@ DBLP_VENUES = {
 }
 
 
-class DBLPCollector:
+class DBLPCollector(BaseCrawler):
     """Collector for papers from DBLP.
 
     Uses the DBLP Search API to collect papers from venues
     with poor coverage in other sources.
     """
 
+    DEFAULT_USER_AGENT = "LexiconArxiv/1.0 (DBLP Collection)"
+
     def __init__(
         self,
-        storage: QdrantStorage | None = None,
+        storage: "QdrantStorage | None" = None,
         checkpoint_manager: CheckpointManager | None = None,
         deduplicator: Deduplicator | None = None,
         timeout: float = 60.0,
@@ -79,40 +82,13 @@ class DBLPCollector:
                 Pass a shared instance for cross-source deduplication.
             timeout: HTTP request timeout in seconds.
         """
-        self.storage = storage or QdrantStorage()
-        self.checkpoint_manager = checkpoint_manager or CheckpointManager(
-            checkpoint_name="dblp"
+        super().__init__(
+            storage=storage,
+            checkpoint_manager=checkpoint_manager,
+            deduplicator=deduplicator,
+            timeout=timeout,
+            checkpoint_name="dblp",
         )
-        self.timeout = timeout
-        self.deduplicator = deduplicator or Deduplicator()
-        self._client: httpx.AsyncClient | None = None
-
-    async def __aenter__(self) -> "DBLPCollector":
-        """Async context manager entry."""
-        self._client = httpx.AsyncClient(
-            timeout=self.timeout,
-            headers={
-                "User-Agent": "LexiconArxiv/0.1.0 (DBLP Collection)",
-                "Accept": "application/json",
-            },
-        )
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        """Async context manager exit."""
-        if self._client:
-            await self._client.aclose()
-            self._client = None
-
-    @property
-    def client(self) -> httpx.AsyncClient:
-        """Get the HTTP client."""
-        if self._client is None:
-            raise RuntimeError(
-                "Collector must be used as async context manager: "
-                "async with DBLPCollector() as collector: ..."
-            )
-        return self._client
 
     def _parse_authors(self, authors_data: Any) -> list[Author]:
         """Parse authors from DBLP response.
