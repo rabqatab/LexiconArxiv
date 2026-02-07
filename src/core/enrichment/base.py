@@ -151,6 +151,9 @@ class OpenAlexMixin:
     def _handle_api_key_exhaustion(self, response: "httpx.Response") -> bool:
         """Check if response indicates API key credit exhaustion.
 
+        If exhausted, switches to email-based polite pool and reduces
+        concurrency to avoid overwhelming the free tier.
+
         Args:
             response: HTTP response to check.
 
@@ -162,10 +165,20 @@ class OpenAlexMixin:
                 data = response.json()
                 if "Insufficient credits" in data.get("message", ""):
                     self._api_key_exhausted = True
-                    logger.warning(
-                        "OpenAlex API key credits exhausted. "
-                        "Falling back to email-based polite pool."
-                    )
+                    # Reduce concurrency for email-based polite pool
+                    if hasattr(self, "_semaphore") and self._semaphore is not None:
+                        old_value = self._semaphore._value
+                        self._semaphore = asyncio.Semaphore(1)
+                        logger.warning(
+                            "OpenAlex API key credits exhausted. "
+                            "Falling back to email-based polite pool "
+                            f"(concurrency: {old_value} -> 1)."
+                        )
+                    else:
+                        logger.warning(
+                            "OpenAlex API key credits exhausted. "
+                            "Falling back to email-based polite pool."
+                        )
                     return True
             except Exception:
                 pass

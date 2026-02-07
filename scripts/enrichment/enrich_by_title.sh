@@ -12,8 +12,8 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 cd "$PROJECT_ROOT"
 
-# Default values - keep low for search API rate limits
-PARALLEL=${PARALLEL:-1}
+# Default values - parallel auto-detected by Python code (5 for API key, 1 for email)
+PARALLEL=""
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -28,7 +28,7 @@ while [[ $# -gt 0 ]]; do
             echo "Enrich papers WITHOUT DOIs by title search"
             echo ""
             echo "Options:"
-            echo "  --parallel N  Concurrent requests (default: 5)"
+            echo "  --parallel N  Concurrent requests (auto: 5 for API key, 1 for email)"
             echo "  --help        Show this help message"
             exit 0
             ;;
@@ -41,6 +41,10 @@ done
 
 echo "[Title Lookup] Enriching citations by title..."
 
-uv run python -m src.cli.core_collect enrich-citations-by-title --parallel "$PARALLEL"
+CMD="uv run python -m src.cli.core_collect enrich-citations-by-title"
+if [ -n "$PARALLEL" ]; then
+    CMD="$CMD --parallel $PARALLEL"
+fi
+$CMD
 
 echo "[Title Lookup] Enrichment complete."

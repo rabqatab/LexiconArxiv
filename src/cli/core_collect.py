@@ -1548,7 +1548,7 @@ def enrich_abstracts(
 @click.option("--limit", "-n", type=int, help="Max papers to process")
 @click.option("--batch-size", type=int, default=100, help="Batch size")
 @click.option("--delay", type=float, default=0.1, help="Delay between API calls")
-@click.option("--parallel", "-p", type=int, default=1, help="Number of concurrent requests")
+@click.option("--parallel", "-p", type=int, default=None, help="Concurrent requests (auto: 5 for API key, 1 for email)")
 @click.option("--venue", "-v", multiple=True, help="Filter by venue (can repeat)")
 @click.option("--min-refs", type=int, default=1, help="Minimum refs required for match")
 def enrich_citations_by_title(
@@ -1556,7 +1556,7 @@ def enrich_citations_by_title(
     limit: int | None,
     batch_size: int,
     delay: float,
-    parallel: int,
+    parallel: int | None,
     venue: tuple[str, ...],
     min_refs: int,
 ) -> None:
