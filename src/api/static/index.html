@@ -85,6 +85,30 @@
             color: #8b5cf6;
             font-weight: 600;
         }
+        #legend {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #444;
+            font-size: 0.8rem;
+        }
+        #legend .legend-title {
+            color: #888;
+            margin-bottom: 6px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 4px 0;
+        }
+        .legend-line {
+            width: 24px;
+            height: 3px;
+            margin-right: 8px;
+            border-radius: 2px;
+        }
+        .legend-line.citing { background: #22d3ee; }
+        .legend-line.cited { background: #f97316; }
+        .legend-line.other { background: #6b7280; }
         #tooltip {
             position: fixed;
             background: rgba(20, 20, 40, 0.95);
@@ -126,12 +150,21 @@
             height: 100vh;
         }
         .link {
-            stroke: #4a4a6a;
-            stroke-opacity: 0.6;
+            stroke-opacity: 0.7;
+            stroke-width: 1.5px;
         }
         .link:hover {
-            stroke: #8b5cf6;
             stroke-opacity: 1;
+            stroke-width: 2.5px;
+        }
+        .link.citing {
+            stroke: #22d3ee; /* cyan - papers citing */
+        }
+        .link.cited {
+            stroke: #f97316; /* orange - papers cited */
+        }
+        .link.other {
+            stroke: #6b7280; /* gray - other connections */
         }
         .node circle {
             stroke: #fff;
@@ -196,6 +229,21 @@
         <button id="loadBtn" onclick="loadGraph()">Load Graph</button>
         <div id="error"></div>
         <div id="stats"></div>
+        <div id="legend">
+            <div class="legend-title">Edge Colors</div>
+            <div class="legend-item">
+                <div class="legend-line citing"></div>
+                <span>Citing center (incoming)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-line cited"></div>
+                <span>Cited by center (outgoing)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-line other"></div>
+                <span>Other connections</span>
+            </div>
+        </div>
     </div>
 
     <div id="tooltip"></div>
@@ -262,18 +310,60 @@
 
             svg.attr('width', width).attr('height', height);
 
-            // Create arrow marker for directed edges
-            svg.append('defs').append('marker')
-                .attr('id', 'arrowhead')
+            // Find center paper ID
+            const centerPaperId = data.nodes.find(n => n.is_center)?.id;
+
+            // Create arrow markers for different edge types
+            const defs = svg.append('defs');
+
+            // Citing edges (cyan) - papers that cite the center
+            defs.append('marker')
+                .attr('id', 'arrow-citing')
                 .attr('viewBox', '-0 -5 10 10')
-                .attr('refX', 20)
+                .attr('refX', 18)
+                .attr('refY', 0)
+                .attr('orient', 'auto')
+                .attr('markerWidth', 8)
+                .attr('markerHeight', 8)
+                .append('path')
+                .attr('d', 'M 0,-4 L 8,0 L 0,4 Z')
+                .attr('fill', '#22d3ee');
+
+            // Cited edges (orange) - papers cited by center
+            defs.append('marker')
+                .attr('id', 'arrow-cited')
+                .attr('viewBox', '-0 -5 10 10')
+                .attr('refX', 18)
+                .attr('refY', 0)
+                .attr('orient', 'auto')
+                .attr('markerWidth', 8)
+                .attr('markerHeight', 8)
+                .append('path')
+                .attr('d', 'M 0,-4 L 8,0 L 0,4 Z')
+                .attr('fill', '#f97316');
+
+            // Other edges (gray)
+            defs.append('marker')
+                .attr('id', 'arrow-other')
+                .attr('viewBox', '-0 -5 10 10')
+                .attr('refX', 18)
                 .attr('refY', 0)
                 .attr('orient', 'auto')
                 .attr('markerWidth', 6)
                 .attr('markerHeight', 6)
                 .append('path')
-                .attr('d', 'M 0,-5 L 10,0 L 0,5')
-                .attr('fill', '#4a4a6a');
+                .attr('d', 'M 0,-3 L 6,0 L 0,3 Z')
+                .attr('fill', '#6b7280');
+
+            // Classify edges
+            function getEdgeType(link) {
+                const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+                const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+
+                if (targetId === centerPaperId) return 'citing';  // Someone cites center
+                if (sourceId === centerPaperId) return 'cited';   // Center cites someone
+                return 'other';
+            }
 
             // Create container for zoom
             const g = svg.append('g');
@@ -303,18 +393,18 @@
             simulation = d3.forceSimulation(data.nodes)
                 .force('link', d3.forceLink(data.links)
                     .id(d => d.id)
-                    .distance(80))
-                .force('charge', d3.forceManyBody().strength(-200))
+                    .distance(40))
+                .force('charge', d3.forceManyBody().strength(-80))
                 .force('center', d3.forceCenter(width / 2, height / 2))
-                .force('collision', d3.forceCollide().radius(d => sizeScale(d.citation_count || 0) + 5));
+                .force('collision', d3.forceCollide().radius(d => sizeScale(d.citation_count || 0) + 3));
 
-            // Draw links
+            // Draw links with edge type classification
             const link = g.append('g')
                 .selectAll('line')
                 .data(data.links)
                 .join('line')
-                .attr('class', 'link')
-                .attr('marker-end', 'url(#arrowhead)');
+                .attr('class', d => 'link ' + getEdgeType(d))
+                .attr('marker-end', d => `url(#arrow-${getEdgeType(d)})`);
 
             // Draw nodes
             const node = g.append('g')

@@ -73,3 +73,5 @@ __marimo__/
 .obsidian/
 .claude/
 .serena/
+.playwright-mcp/
+*.png

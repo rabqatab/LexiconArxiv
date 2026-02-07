@@ -64,6 +64,7 @@
 - **On-demand**: Real-time arXiv/OpenAlex search at query time
 - **Core Connection**: Display citation/similarity relationships between on-demand papers and Core
 - **Research Graph**: Citation network visualization between papers
+- **Graph Visualization API**: REST API for interactive citation graph exploration with D3.js UI
 - **Stub Papers**: External papers referenced by corpus papers but not crawled (for complete citation graph)
 - **Payload-Only Storage**: Decouple metadata from embeddings; add vectors later with any dimension
 
@@ -98,6 +99,10 @@ python -m src.cli.core_collect init-storage
 
 # Check status
 python -m src.cli.core_collect status
+
+# Start Graph Visualization API
+uv run uvicorn src.api.main:app --reload --port 8000
+# Open http://localhost:8000 for visualization UI
 ```
 
 See [Quick Start Guide](./guides/quickstart.md) for detailed instructions.
@@ -116,7 +121,12 @@ lexiconarxiv/
 │   ├── testing/                 # Test strategy
 │   └── design/                  # UI/UX design
 ├── src/
-│   ├── api/                     # FastAPI endpoints
+│   ├── api/                     # Graph Visualization API
+│   │   ├── main.py              # FastAPI app with lifespan
+│   │   ├── dependencies.py      # GraphServices singleton
+│   │   ├── routes/graph.py      # /graph/* endpoints
+│   │   ├── models/responses.py  # Pydantic response models
+│   │   └── static/index.html    # D3.js visualization UI
 │   ├── core/                    # Core Corpus collection
 │   │   ├── crawler/             # Data source collectors
 │   │   ├── enrichment/          # Citation/abstract enrichment
@@ -136,10 +146,10 @@ lexiconarxiv/
 ## Tech Stack
 
 ```
-Backend:     Python 3.12+ / FastAPI / Celery
+Backend:     Python 3.12+ / FastAPI / uvicorn
 Databases:   PostgreSQL / Qdrant (vector + BM25)
 ML/NLP:      sentence-transformers / KeyBERT / spaCy
-Graph:       NetworkX (citation graph)
+Graph:       NetworkX (citation graph) / D3.js (visualization)
 Infra:       Docker / Kubernetes
 ```
 
@@ -149,6 +159,7 @@ Infra:       Docker / Kubernetes
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.8.0 | Feb 2026 | Graph Visualization API with D3.js UI for citation graph exploration |
 | 0.7.2 | Feb 2026 | DBLP/ACM consolidation, build_cited_by retry fix, incremental pipeline script |
 | 0.7.1 | Feb 2026 | ACL Git Trees API fix, NeurIPS D&B track, AACL venue, incremental docs |
 | 0.7.0 | Feb 2026 | Payload-only architecture, named vectors support |

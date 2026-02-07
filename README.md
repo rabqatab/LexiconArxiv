@@ -12,6 +12,7 @@ AI Research Insights Engine - Core Corpus collection and semantic search for top
 - **Qdrant Integration**: Payload-only storage with optional named vectors
 - **Keyword Extraction**: Acronym + semantic keyword extraction for BM25 search
 - **Citation Graph**: Reference resolution and GraphRAG support
+- **Graph Visualization API**: REST API + D3.js UI for interactive citation graph exploration
 - **Stub Papers**: Store external references with automatic deduplication for complete citation graph
 
 ## Quick Start
@@ -70,6 +71,31 @@ python -m src.cli.core_collect collect-acm --all
 # Check status
 python -m src.cli.core_collect status
 ```
+
+### Graph Visualization API
+
+```bash
+# Start the API server (pre-builds citation index on startup)
+uv run uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
+
+# Open the visualization UI
+open http://localhost:8000
+
+# API documentation (Swagger UI)
+open http://localhost:8000/docs
+```
+
+**API Endpoints**:
+- `GET /graph/health` - Health check
+- `GET /graph/stats` - Graph statistics
+- `GET /graph/paper/{paper_id}` - Paper details
+- `GET /graph/subgraph/{paper_id}?hops=1&direction=both` - Citation subgraph (D3.js format)
+
+**Visualization Features**:
+- Interactive force-directed graph with D3.js
+- Color-coded edges (cyan=citing, orange=cited, gray=other)
+- Click nodes to explore neighborhoods
+- Adjustable hops (1-3) and direction
 
 ## Data Sources
 
@@ -152,6 +178,7 @@ python -m src.cli.core_collect keyword-stats                 # Show statistics
 
 - [Crawling Guide](docs/guides/crawling.md) - Detailed collection guide
 - [Data Collection Design](docs/pipelines/data_collection.md) - Architecture and strategy
+- [Graph API Specification](docs/architecture/api.md#8-graph-visualization-api) - Graph Visualization API
 - [Full Documentation](docs/README.md) - Complete documentation index
 
 ## Project Structure
@@ -159,6 +186,12 @@ python -m src.cli.core_collect keyword-stats                 # Show statistics
 ```
 lexiconarxiv/
 ├── src/
+│   ├── api/                     # Graph Visualization API
+│   │   ├── main.py              # FastAPI app with lifespan
+│   │   ├── dependencies.py      # GraphServices (storage, index, builder)
+│   │   ├── routes/graph.py      # /graph/* endpoints
+│   │   ├── models/responses.py  # Pydantic response models
+│   │   └── static/index.html    # D3.js visualization UI
 │   ├── cli/                     # CLI tools
 │   │   └── core_collect.py      # Main collection CLI
 │   ├── core/                    # Core modules
@@ -168,6 +201,10 @@ lexiconarxiv/
 │   │   ├── config.py            # Venue configurations
 │   │   ├── constants.py         # Centralized API URLs and env helpers
 │   │   ├── deduplication.py     # Cross-source dedup
+│   │   ├── citation_graph/      # Citation graph analysis
+│   │   │   ├── builder.py       # CitationGraphBuilder (NetworkX)
+│   │   │   ├── reverse_index.py # ReverseCitationIndex
+│   │   │   └── exporter.py      # Graph export (CSV, JSON, GraphML)
 │   │   ├── crawler/             # Data source crawlers
 │   │   │   ├── base.py          # BaseCrawler class
 │   │   │   ├── openalex.py
@@ -186,7 +223,7 @@ lexiconarxiv/
 │   │   ├── resolution/          # Reference resolution
 │   │   │   ├── normalizer.py    # ID normalization (DOI, arXiv, OpenAlex)
 │   │   │   └── resolver.py      # Citation graph builder
-│   │   └── keyword/             # Keyword extraction (NEW)
+│   │   └── keyword/             # Keyword extraction
 │   │       ├── extractor.py     # Main KeywordExtractor class
 │   │       ├── patterns.py      # Regex patterns for acronyms
 │   │       └── stopwords.py     # Stopword filtering
@@ -199,6 +236,7 @@ lexiconarxiv/
 
 ## Recent Updates (Feb 2026)
 
+- **Graph Visualization API**: FastAPI REST API with D3.js UI for interactive citation graph exploration
 - **Payload-Only Architecture**: Decouple enrichment from embeddings (see below)
 - **Code Refactoring**: BaseCrawler class, BaseEnricher with mixins, centralized constants
 - **Stub Papers**: Store external references for complete citation graph (no embedding)

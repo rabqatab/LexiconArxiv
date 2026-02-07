@@ -10,11 +10,11 @@ class NodeData(BaseModel):
     """Node data for D3.js visualization."""
 
     id: str = Field(..., description="Qdrant point ID")
-    title: str = Field("", description="Paper title")
+    title: str | None = Field("", description="Paper title")
     year: int | None = Field(None, description="Publication year")
-    venue: str = Field("", description="Publication venue")
+    venue: str | None = Field("", description="Publication venue")
     authors: list[str] = Field(default_factory=list, description="Author names")
-    citation_count: int = Field(0, description="Global citation count")
+    citation_count: int | None = Field(0, description="Global citation count")
     doi: str | None = Field(None, description="Paper DOI")
     is_center: bool = Field(False, description="Whether this is the center paper of the subgraph")
 

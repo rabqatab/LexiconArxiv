@@ -502,3 +502,213 @@ bibtex = client.export(
     format="bibtex"
 )
 ```
+
+---
+
+## 8. Graph Visualization API
+
+Interactive citation graph exploration API with D3.js-compatible responses.
+
+**Local Base URL**: `http://localhost:8000`
+
+### 8.1 Quick Start
+
+```bash
+# Start the API server
+uv run uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
+
+# Open visualization UI
+open http://localhost:8000
+
+# API documentation
+open http://localhost:8000/docs
+```
+
+### 8.2 Endpoints
+
+#### GET /graph/health
+
+Health check endpoint.
+
+**Response**:
+```json
+{
+  "status": "healthy",
+  "index_built": true,
+  "storage_connected": true
+}
+```
+
+---
+
+#### GET /graph/stats
+
+Overall citation graph statistics.
+
+**Response**:
+```json
+{
+  "total_papers": 150000,
+  "total_real_papers": 120000,
+  "total_stub_papers": 30000,
+  "papers_with_refs": 95000,
+  "papers_with_resolved_refs": 90000,
+  "total_raw_refs": 2500000,
+  "total_resolved_refs": 1800000,
+  "resolution_coverage": 72.0,
+  "papers_with_graph_metrics": 85000,
+  "index_num_papers": 118000,
+  "index_num_edges": 1800000,
+  "index_memory_mb": 450.5
+}
+```
+
+---
+
+#### GET /graph/paper/{paper_id}
+
+Get detailed information about a specific paper.
+
+**Parameters**:
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `paper_id` | string | Qdrant point UUID |
+
+**Response**:
+```json
+{
+  "id": "dfc148fb-1efe-46d2-be20-2a963429404e",
+  "title": "DEBERTA: DECODING-ENHANCED BERT WITH DISENTANGLED ATTENTION",
+  "abstract": "Recent progress in pre-trained neural language models...",
+  "venue": "International Conference on Learning Representations",
+  "year": 2021,
+  "doi": null,
+  "citation_count": 922,
+  "authors": ["Pengcheng He", "Xiaodong Liu", "Jianfeng Gao", "Weizhu Chen"],
+  "is_core": true,
+  "resolved_references": ["uuid-1", "uuid-2"],
+  "cited_by": ["uuid-3", "uuid-4", "uuid-5"],
+  "in_corpus_citation_count": 38,
+  "reference_count": 2
+}
+```
+
+---
+
+#### GET /graph/subgraph/{paper_id}
+
+Get N-hop neighborhood subgraph around a paper. Returns D3.js-compatible node-link format.
+
+**Parameters**:
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `paper_id` | string | required | Center paper UUID |
+| `hops` | int | 1 | Number of hops (1-3) |
+| `direction` | string | "both" | Edge direction: `both`, `citing`, `cited` |
+
+**Direction Options**:
+- `both`: Follow both incoming and outgoing citations
+- `citing`: Only papers that cite the center (incoming)
+- `cited`: Only papers that the center cites (outgoing)
+
+**Example Request**:
+```
+GET /graph/subgraph/dfc148fb-1efe-46d2-be20-2a963429404e?hops=2&direction=both
+```
+
+**Response** (D3.js node-link format):
+```json
+{
+  "nodes": [
+    {
+      "id": "dfc148fb-1efe-46d2-be20-2a963429404e",
+      "title": "DEBERTA: DECODING-ENHANCED BERT WITH DISENTANGLED ATTENTION",
+      "year": 2021,
+      "venue": "ICLR",
+      "authors": ["Pengcheng He", "Xiaodong Liu"],
+      "citation_count": 922,
+      "doi": null,
+      "is_center": true
+    },
+    {
+      "id": "uuid-citing-paper",
+      "title": "Paper that cites DeBERTa",
+      "year": 2022,
+      "venue": "ACL",
+      "authors": ["Author Name"],
+      "citation_count": 45,
+      "doi": "10.18653/v1/2022.acl-long.123",
+      "is_center": false
+    }
+  ],
+  "links": [
+    {
+      "source": "uuid-citing-paper",
+      "target": "dfc148fb-1efe-46d2-be20-2a963429404e"
+    }
+  ],
+  "stats": {
+    "num_nodes": 49,
+    "num_edges": 49,
+    "density": 0.020833,
+    "center_paper_id": "dfc148fb-1efe-46d2-be20-2a963429404e",
+    "hops": 2,
+    "direction": "both"
+  }
+}
+```
+
+### 8.3 Visualization UI
+
+The API includes an interactive D3.js visualization at the root URL (`/`).
+
+**Features**:
+- Force-directed graph layout
+- Color-coded edges:
+  - **Cyan**: Papers citing the center (incoming)
+  - **Orange**: Papers cited by center (outgoing)
+  - **Gray**: Other connections
+- Node size proportional to citation count
+- Node color indicates publication year
+- Click any node to explore its neighborhood
+- Hover for paper details (title, year, venue, authors)
+- Zoom and pan support
+- Adjustable hops (1-3) and direction
+
+### 8.4 Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    FastAPI Application                   │
+├─────────────────────────────────────────────────────────┤
+│  Lifespan: Pre-build ReverseCitationIndex at startup    │
+│  (~10-30s for 150K nodes)                               │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  ┌─────────────┐   ┌──────────────┐   ┌─────────────┐  │
+│  │ /graph/     │   │ /graph/      │   │ /graph/     │  │
+│  │ health      │   │ stats        │   │ paper/{id}  │  │
+│  └─────────────┘   └──────────────┘   └─────────────┘  │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ /graph/subgraph/{paper_id}?hops=N&direction=D   │   │
+│  │                                                  │   │
+│  │  → CitationGraphBuilder.build_subgraph()        │   │
+│  │  → NetworkX DiGraph                             │   │
+│  │  → D3.js node-link JSON                         │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+├─────────────────────────────────────────────────────────┤
+│  Dependencies (GraphServices)                           │
+│  ├── QdrantStorage (lazy)                              │
+│  ├── ReverseCitationIndex (pre-built)                  │
+│  └── CitationGraphBuilder (lazy)                       │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 8.5 Performance Notes
+
+- **Startup**: ReverseCitationIndex pre-built (~10-30s for 150K nodes)
+- **Query**: O(nodes in neighborhood), typically < 100ms
+- **Max hops**: Limited to 3 to prevent result explosion
+- **Memory**: ~450MB for 150K nodes with metadata

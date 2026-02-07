@@ -202,12 +202,14 @@ async def get_subgraph(
 
     links: list[LinkData] = []
     for source, target in G.edges():
-        links.append(LinkData(source=source, target=target))
+        # Filter out self-loops (can occur from data quality issues)
+        if source != target:
+            links.append(LinkData(source=source, target=target))
 
-    # Calculate statistics
+    # Calculate statistics (use actual links count, excluding self-loops)
     num_nodes = G.number_of_nodes()
-    num_edges = G.number_of_edges()
-    density = nx.density(G) if num_nodes > 1 else 0.0
+    num_edges = len(links)  # Use filtered count
+    density = (num_edges / (num_nodes * (num_nodes - 1))) if num_nodes > 1 else 0.0
 
     stats = SubgraphStats(
         num_nodes=num_nodes,
