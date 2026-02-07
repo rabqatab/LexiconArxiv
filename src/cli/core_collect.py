@@ -49,8 +49,9 @@ from src.core.crawler import (
     AAAI_VENUES,
 )
 
-# Backward compatibility alias
+# Backward compatibility aliases
 get_acm_open_venues = get_acm_venues
+ACM_OPEN_VENUES = ACM_VENUES
 
 # Configure logging (console + file)
 LOG_DIR = Path(__file__).parent.parent.parent / "logs"
@@ -765,17 +766,16 @@ def list_openreview_venues() -> None:
 @click.option("--since-year", "-y", default=2020, help="Collect papers from this year (default: 2020)")
 @click.option("--to-year", type=int, help="Collect papers until this year (inclusive)")
 @click.option("--all", "collect_all", is_flag=True, help="Collect from all ACM venues")
-@click.option("--no-abstracts", is_flag=True, help="Skip fetching abstracts from ACM DL")
 def collect_acm(
     venue: str | None,
     since_year: int,
     to_year: int | None,
     collect_all: bool,
-    no_abstracts: bool,
 ) -> None:
-    """Collect papers from ACM Digital Library (now open access).
+    """Collect papers from ACM venues via DBLP.
 
-    Uses DBLP for paper metadata and ACM DL for abstracts.
+    Uses DBLP API for paper metadata. Abstracts are filled via enrichment pipeline.
+    Note: This is an alias for collect-dblp with ACM venues only.
 
     Examples:
 
@@ -787,9 +787,6 @@ def collect_acm(
 
       # Collect from all ACM venues
       python -m src.cli.core_collect collect-acm --all
-
-      # Fast collection without abstracts
-      python -m src.cli.core_collect collect-acm --venue www --no-abstracts
     """
     if not any([venue, collect_all]):
         click.echo("Error: Specify --venue or --all")
@@ -800,10 +797,7 @@ def collect_acm(
         storage = QdrantStorage()
         storage.ensure_collection()
 
-        async with ACMOpenCollector(
-            storage=storage,
-            fetch_abstracts=not no_abstracts
-        ) as collector:
+        async with ACMOpenCollector(storage=storage) as collector:
             if collect_all:
                 return await collector.collect_all(since_year, to_year)
             elif venue:
