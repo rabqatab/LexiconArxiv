@@ -145,10 +145,10 @@ else
     echo ""
 fi
 
-# Step 3.3: Title-based enrichment
+# Step 3.3: Title-based enrichment (use parallel=1 for search API rate limits)
 if [ "$SKIP_TITLE" = false ]; then
     echo "--- [3.3/$TOTAL_STEPS] Title Lookup ---"
-    "$SCRIPT_DIR/enrich_by_title.sh" --parallel 5
+    "$SCRIPT_DIR/enrich_by_title.sh" --parallel 1
     echo ""
 else
     echo "--- [3.3/$TOTAL_STEPS] Title Lookup (SKIPPED) ---"

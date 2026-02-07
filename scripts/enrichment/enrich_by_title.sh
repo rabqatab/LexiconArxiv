@@ -1,6 +1,9 @@
 #!/bin/bash
 # Step 3.3: Enrich papers by title lookup
 # For papers WITHOUT DOIs - searches OpenAlex by title
+#
+# NOTE: OpenAlex search API has stricter rate limits than DOI lookup.
+# Keep parallel low (1-2) to avoid 429 rate limit loops.
 
 set -e
 
@@ -9,8 +12,8 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 cd "$PROJECT_ROOT"
 
-# Default values
-PARALLEL=${PARALLEL:-5}
+# Default values - keep low for search API rate limits
+PARALLEL=${PARALLEL:-1}
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
