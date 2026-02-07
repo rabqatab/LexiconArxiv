@@ -22,6 +22,8 @@ logger = logging.getLogger(__name__)
 # ACL Anthology GitHub repository raw file base URL
 GITHUB_RAW_BASE = "https://raw.githubusercontent.com/acl-org/acl-anthology/master/data/xml"
 GITHUB_API_BASE = "https://api.github.com/repos/acl-org/acl-anthology/contents/data/xml"
+# Use Git Trees API for full listing (Contents API is limited to 1000 files)
+GITHUB_TREES_API = "https://api.github.com/repos/acl-org/acl-anthology/git/trees/master?recursive=1"
 
 # Target NLP venues with their ACL Anthology prefixes
 ACL_VENUES = {
@@ -68,6 +70,11 @@ ACL_VENUES = {
     "lrec": {
         "prefixes": ["lrec"],
         "full_name": "Language Resources and Evaluation Conference",
+        "tier": 1,
+    },
+    "aacl": {
+        "prefixes": ["aacl", "ijcnlp"],
+        "full_name": "Asia-Pacific Chapter of the ACL / IJCNLP",
         "tier": 1,
     },
 }
@@ -131,6 +138,8 @@ class ACLAnthologyCollector(BaseCrawler):
     async def list_xml_files(self, venue_prefix: str | None = None) -> list[str]:
         """List available XML files from ACL Anthology GitHub.
 
+        Uses Git Trees API to get complete listing (Contents API is limited to 1000 files).
+
         Args:
             venue_prefix: Optional prefix to filter files (e.g., "acl", "emnlp").
 
@@ -138,21 +147,27 @@ class ACLAnthologyCollector(BaseCrawler):
             List of XML filenames.
         """
         try:
-            response = await self.client.get(GITHUB_API_BASE)
+            # Use Trees API to get full file listing (no pagination limit)
+            response = await self.client.get(GITHUB_TREES_API)
             response.raise_for_status()
-            files = response.json()
+            data = response.json()
 
             xml_files = []
-            for item in files:
-                if item.get("type") == "file" and item.get("name", "").endswith(".xml"):
-                    filename = item["name"]
-                    if venue_prefix:
-                        # Match pattern like "2023.acl.xml" or "acl.xml"
-                        if venue_prefix in filename.lower():
-                            xml_files.append(filename)
-                    else:
-                        xml_files.append(filename)
+            for item in data.get("tree", []):
+                path = item.get("path", "")
+                # Filter to data/xml/*.xml files
+                if not path.startswith("data/xml/") or not path.endswith(".xml"):
+                    continue
 
+                filename = path.split("/")[-1]
+                if venue_prefix:
+                    # Match pattern like "2023.acl.xml" or "acl.xml"
+                    if venue_prefix in filename.lower():
+                        xml_files.append(filename)
+                else:
+                    xml_files.append(filename)
+
+            logger.info(f"Found {len(xml_files)} XML files in ACL Anthology")
             return sorted(xml_files)
 
         except Exception as e:

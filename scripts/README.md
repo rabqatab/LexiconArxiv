@@ -46,7 +46,8 @@ scripts/
 │   ├── enrich_crossref.sh            # Step 3.2: CrossRef citations
 │   ├── enrich_by_title.sh            # Step 3.3: Title-based lookup
 │   ├── enrich_abstracts.sh           # Step 3.4: Abstract enrichment
-│   └── enrich_stubs.sh               # Step 3.5: Stub paper metadata
+│   ├── enrich_pdf.sh                 # Step 3.5: PDF/GROBID extraction
+│   └── enrich_stubs.sh               # Step 3.6: Stub paper metadata
 │
 ├── resolution/                       # Stage 4: Resolution
 │   ├── run_resolution.sh             # Orchestrator: all resolution
@@ -188,7 +189,8 @@ Options:
   --skip-crossref    Skip Step 3.2: CrossRef
   --skip-title       Skip Step 3.3: Title lookup
   --skip-abstracts   Skip Step 3.4: Abstracts
-  --enrich-stubs     Include Step 3.5: Stub enrichment (expensive)
+  --skip-pdf         Skip Step 3.5: PDF/GROBID extraction
+  --enrich-stubs     Include Step 3.6: Stub enrichment (expensive)
   --citations-only   Only enrich citations (skip abstracts)
   --abstracts-only   Only enrich abstracts
 ```
@@ -201,7 +203,8 @@ Options:
 | `enrich_crossref.sh` | 3.2 | Additional citations from CrossRef |
 | `enrich_by_title.sh` | 3.3 | Enrich papers WITHOUT DOIs via title search |
 | `enrich_abstracts.sh` | 3.4 | Fill missing abstracts via OpenAlex |
-| `enrich_stubs.sh` | 3.5 | Fetch metadata for stub papers (optional) |
+| `enrich_pdf.sh` | 3.5 | Extract refs from PDFs via GROBID (fallback) |
+| `enrich_stubs.sh` | 3.6 | Fetch metadata for stub papers (optional) |
 
 **Example**: Only enrich abstracts:
 ```bash

@@ -59,6 +59,24 @@ OPENREVIEW_VENUES = {
         "start_year": 2021,  # NeurIPS started on OpenReview in 2021
         "conference_month": 12,  # December
     },
+    "neurips_db": {
+        # NeurIPS Datasets and Benchmarks Track (separate from main conference)
+        "invitation_pattern_v1": "",  # Not available in v1
+        "accepted_pattern_v1": "",
+        # v2 patterns (2023+)
+        "invitation_pattern_v2": "NeurIPS.cc/{year}/Datasets_and_Benchmarks_Track/-/Submission",
+        "v2_start_year": 2023,
+        # D&B track uses venueid for accepted papers
+        "venueid_pattern": "NeurIPS.cc/{year}/Datasets_and_Benchmarks_Track",
+        # Venue format: "NeurIPS 2024 Track Datasets and Benchmarks Poster/Oral/Spotlight"
+        "accepted_venue_patterns": ["{conf} {year} Track Datasets and Benchmarks"],
+        "rejected_venue_patterns": ["Submitted to {conf} {year}", "Withdrawn", "Desk Rejected"],
+        "full_name": "NeurIPS Datasets and Benchmarks Track",
+        "conf_name": "NeurIPS",
+        "tier": 0,
+        "start_year": 2023,  # D&B track on OpenReview from 2023
+        "conference_month": 12,  # December
+    },
     "icml": {
         # v1 patterns (not available for ICML)
         "invitation_pattern_v1": "",  # ICML 2020-2022 not on OpenReview

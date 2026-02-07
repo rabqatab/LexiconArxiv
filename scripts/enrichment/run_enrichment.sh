@@ -23,6 +23,7 @@ SKIP_OPENALEX=${SKIP_OPENALEX:-false}
 SKIP_CROSSREF=${SKIP_CROSSREF:-false}
 SKIP_TITLE=${SKIP_TITLE:-false}
 SKIP_ABSTRACTS=${SKIP_ABSTRACTS:-false}
+SKIP_PDF=${SKIP_PDF:-false}
 ENRICH_STUBS=${ENRICH_STUBS:-false}
 
 # Parse arguments
@@ -52,6 +53,10 @@ while [[ $# -gt 0 ]]; do
             SKIP_ABSTRACTS=true
             shift
             ;;
+        --skip-pdf)
+            SKIP_PDF=true
+            shift
+            ;;
         --enrich-stubs)
             ENRICH_STUBS=true
             shift
@@ -78,6 +83,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --skip-crossref    Skip CrossRef enrichment"
             echo "  --skip-title       Skip title-based enrichment"
             echo "  --skip-abstracts   Skip abstract enrichment"
+            echo "  --skip-pdf         Skip PDF/GROBID extraction"
             echo "  --enrich-stubs     Also enrich stub papers (expensive)"
             echo "  --citations-only   Only enrich citations (skip abstracts)"
             echo "  --abstracts-only   Only enrich abstracts"
@@ -88,6 +94,7 @@ while [[ $# -gt 0 ]]; do
             echo "  ./scripts/enrichment/enrich_crossref.sh"
             echo "  ./scripts/enrichment/enrich_by_title.sh"
             echo "  ./scripts/enrichment/enrich_abstracts.sh"
+            echo "  ./scripts/enrichment/enrich_pdf.sh"
             echo "  ./scripts/enrichment/enrich_stubs.sh"
             exit 0
             ;;
@@ -98,10 +105,10 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Calculate total steps
-TOTAL_STEPS=4
+# Calculate total steps (base: 5 steps including PDF)
+TOTAL_STEPS=5
 if [ "$ENRICH_STUBS" = true ]; then
-    TOTAL_STEPS=5
+    TOTAL_STEPS=6
 fi
 
 echo "=========================================="
@@ -113,6 +120,7 @@ echo "Skip OpenAlex: $SKIP_OPENALEX"
 echo "Skip CrossRef: $SKIP_CROSSREF"
 echo "Skip Title Lookup: $SKIP_TITLE"
 echo "Skip Abstracts: $SKIP_ABSTRACTS"
+echo "Skip PDF/GROBID: $SKIP_PDF"
 echo "Enrich Stubs: $ENRICH_STUBS"
 echo "=========================================="
 echo ""
@@ -157,9 +165,19 @@ else
     echo ""
 fi
 
-# Step 3.5: Stub enrichment (optional)
+# Step 3.5: PDF/GROBID extraction (last-resort fallback)
+if [ "$SKIP_PDF" = false ]; then
+    echo "--- [3.5/$TOTAL_STEPS] PDF/GROBID ---"
+    "$SCRIPT_DIR/enrich_pdf.sh" --parallel 2 --batch-size 10
+    echo ""
+else
+    echo "--- [3.5/$TOTAL_STEPS] PDF/GROBID (SKIPPED) ---"
+    echo ""
+fi
+
+# Step 3.6: Stub enrichment (optional)
 if [ "$ENRICH_STUBS" = true ]; then
-    echo "--- [3.5/$TOTAL_STEPS] Stubs ---"
+    echo "--- [3.6/$TOTAL_STEPS] Stubs ---"
     "$SCRIPT_DIR/enrich_stubs.sh" --parallel 5
     echo ""
 fi
