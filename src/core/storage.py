@@ -1159,20 +1159,49 @@ class QdrantStorage:
             if offset is None:
                 break
 
-        # Update in batches
+        # Update in batches with retry logic
+        import time
+
+        max_retries = 3
+        operations_per_batch = 50  # Smaller batches for stability
+
         for i in range(0, len(all_ids), batch_size):
             batch_ids = all_ids[i : i + batch_size]
 
-            for paper_id in batch_ids:
-                citing_papers = reverse_index.get(paper_id, [])
-                self.client.set_payload(
-                    collection_name=self.collection_name,
-                    payload={"cited_by": citing_papers},
-                    points=[paper_id],
-                )
-                if citing_papers:
-                    papers_with_citations += 1
-                updated += 1
+            # Process in smaller sub-batches to avoid connection issues
+            for j in range(0, len(batch_ids), operations_per_batch):
+                sub_batch = batch_ids[j : j + operations_per_batch]
+
+                for attempt in range(max_retries):
+                    try:
+                        sub_batch_citations = 0
+                        for paper_id in sub_batch:
+                            citing_papers = reverse_index.get(paper_id, [])
+                            self.client.set_payload(
+                                collection_name=self.collection_name,
+                                payload={"cited_by": citing_papers},
+                                points=[paper_id],
+                                wait=True,
+                            )
+                            if citing_papers:
+                                sub_batch_citations += 1
+                        # Only update counters after successful batch
+                        updated += len(sub_batch)
+                        papers_with_citations += sub_batch_citations
+                        break  # Success, exit retry loop
+                    except Exception as e:
+                        if attempt < max_retries - 1:
+                            logger.warning(
+                                f"Update failed at {updated}/{len(all_ids)}, "
+                                f"retrying ({attempt + 1}/{max_retries}): {e}"
+                            )
+                            time.sleep(2 ** (attempt + 1))  # Exponential backoff: 2, 4, 8 seconds
+                        else:
+                            logger.error(f"Failed after {max_retries} retries: {e}")
+                            raise
+
+                # Small delay between sub-batches to avoid overwhelming Qdrant
+                time.sleep(0.05)
 
             if progress_callback:
                 progress_callback(updated, len(all_ids))
