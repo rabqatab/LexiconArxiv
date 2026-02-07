@@ -27,6 +27,7 @@
 | Document | Description |
 |----------|-------------|
 | [Data Collection](./pipelines/data_collection.md) | Multi-source data collection strategy |
+| [Incremental Crawling](./pipelines/incremental_crawling.md) | Incremental update strategy and troubleshooting |
 | [Enrichment](./pipelines/enrichment.md) | Citation and abstract enrichment |
 | [Keyword Extraction](./pipelines/keyword_extraction.md) | Keyword/acronym extraction for BM25 |
 | [Citation Graph](./pipelines/citation_graph.md) | Citation graph and GraphRAG design |
@@ -148,6 +149,7 @@ Infra:       Docker / Kubernetes
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.7.1 | Feb 2026 | ACL Git Trees API fix, NeurIPS D&B track, AACL venue, incremental docs |
 | 0.7.0 | Feb 2026 | Payload-only architecture, named vectors support |
 | 0.6.3 | Feb 2026 | Crawler base class, centralized API constants, checkpoint mixin |
 | 0.6.2 | Feb 2026 | Refactored enrichment modules with shared base classes |

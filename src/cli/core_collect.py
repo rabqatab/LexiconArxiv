@@ -40,13 +40,17 @@ from src.core.crawler import (
     OpenReviewCollector,
     get_openreview_venues,
     OPENREVIEW_VENUES,
+    # ACM venues now in DBLP - backward compat aliases
     ACMOpenCollector,
-    get_acm_open_venues,
-    ACM_OPEN_VENUES,
+    get_acm_venues,
+    ACM_VENUES,
     AAOJSCollector,
     get_aaai_venues,
     AAAI_VENUES,
 )
+
+# Backward compatibility alias
+get_acm_open_venues = get_acm_venues
 
 # Configure logging (console + file)
 LOG_DIR = Path(__file__).parent.parent.parent / "logs"
@@ -366,10 +370,10 @@ def init_storage() -> None:
 @click.option("--source", "-s", type=click.Choice(["all", "openalex", "acl", "dblp", "openreview", "acm", "aaai"]),
               default="all", help="Source to collect from")
 def collect_incremental(days: int, source: str) -> None:
-    """Incremental collection for daily cron jobs.
+    """Incremental collection for periodic updates.
 
-    Fetches only papers updated in the last N days. Designed to be run
-    daily via crontab to keep the corpus up-to-date.
+    Fetches papers from the last N days. Supports daily, weekly, monthly,
+    or quarterly update schedules. Automatically spans multiple years if needed.
 
     Examples:
 
@@ -379,24 +383,39 @@ def collect_incremental(days: int, source: str) -> None:
       # Weekly catch-up
       python -m src.cli.core_collect collect-incremental --days 7
 
+      # Monthly update
+      python -m src.cli.core_collect collect-incremental --days 30
+
+      # Quarterly update (3 months)
+      python -m src.cli.core_collect collect-incremental --days 90
+
       # Only OpenAlex
       python -m src.cli.core_collect collect-incremental --source openalex
 
-      # Only new sources
-      python -m src.cli.core_collect collect-incremental --source openreview
+    Crontab examples:
 
-    Crontab example (daily at 2 AM):
-      0 2 * * * cd /path/to/project && python -m src.cli.core_collect collect-incremental >> /var/log/lexicon_cron.log 2>&1
+      # Daily at 2 AM
+      0 2 * * * cd /path/to/project && python -m src.cli.core_collect collect-incremental
+
+      # Weekly on Sundays
+      0 2 * * 0 cd /path/to/project && python -m src.cli.core_collect collect-incremental --days 7
+
+      # Quarterly (1st of Jan, Apr, Jul, Oct)
+      0 2 1 1,4,7,10 * cd /path/to/project && python -m src.cli.core_collect collect-incremental --days 90
     """
     since_date = (datetime.datetime.now() - datetime.timedelta(days=days)).strftime("%Y-%m-%d")
+    since_year = int(since_date[:4])  # Extract year from date range start
+    current_year = datetime.datetime.now().year
+
     click.echo(f"\n=== Incremental Collection (since {since_date}) ===\n")
+    if since_year < current_year:
+        click.echo(f"Note: Collecting from {since_year} to {current_year} (spans multiple years)\n")
 
     async def run_incremental() -> dict[str, int]:
         storage = QdrantStorage()
         storage.ensure_collection()
 
         results = {}
-        current_year = datetime.datetime.now().year
 
         # OpenAlex
         if source in ["all", "openalex"]:
@@ -406,57 +425,57 @@ def collect_incremental(days: int, source: str) -> None:
                 results["openalex"] = count
                 click.echo(f"  OpenAlex: {count} new papers")
 
-        # ACL Anthology - check recent years only (no date-based API)
+        # ACL Anthology - collect from since_year to current_year
         if source in ["all", "acl"]:
-            click.echo("Collecting from ACL Anthology...")
+            click.echo(f"Collecting from ACL Anthology ({since_year}-{current_year})...")
             async with ACLAnthologyCollector(storage=storage) as collector:
                 count = 0
                 for venue in get_acl_venues():
-                    async for batch in collector.collect_venue(venue, since_year=current_year):
+                    async for batch in collector.collect_venue(venue, since_year=since_year, to_year=current_year):
                         count += len(batch)
                 results["acl"] = count
                 click.echo(f"  ACL Anthology: {count} new papers")
 
-        # DBLP - check recent years only
+        # DBLP - collect from since_year to current_year
         if source in ["all", "dblp"]:
-            click.echo("Collecting from DBLP...")
+            click.echo(f"Collecting from DBLP ({since_year}-{current_year})...")
             async with DBLPCollector(storage=storage) as collector:
                 count = 0
                 for venue in get_dblp_venues():
-                    async for batch in collector.collect_venue(venue, since_year=current_year):
+                    async for batch in collector.collect_venue(venue, since_year=since_year, to_year=current_year):
                         count += len(batch)
                 results["dblp"] = count
                 click.echo(f"  DBLP: {count} new papers")
 
-        # OpenReview - check recent years only
+        # OpenReview - collect from since_year to current_year
         if source in ["all", "openreview"]:
-            click.echo("Collecting from OpenReview...")
+            click.echo(f"Collecting from OpenReview ({since_year}-{current_year})...")
             async with OpenReviewCollector(storage=storage) as collector:
                 count = 0
                 for venue in get_openreview_venues():
-                    async for batch in collector.collect_venue(venue, since_year=current_year):
+                    async for batch in collector.collect_venue(venue, since_year=since_year, to_year=current_year):
                         count += len(batch)
                 results["openreview"] = count
                 click.echo(f"  OpenReview: {count} new papers")
 
-        # ACM - check recent years only
+        # ACM/DBLP - collect from since_year to current_year
         if source in ["all", "acm"]:
-            click.echo("Collecting from ACM Open...")
+            click.echo(f"Collecting from ACM/DBLP ({since_year}-{current_year})...")
             async with ACMOpenCollector(storage=storage) as collector:
                 count = 0
                 for venue in get_acm_open_venues():
-                    async for batch in collector.collect_venue(venue, since_year=current_year):
+                    async for batch in collector.collect_venue(venue, since_year=since_year, to_year=current_year):
                         count += len(batch)
                 results["acm"] = count
-                click.echo(f"  ACM Open: {count} new papers")
+                click.echo(f"  ACM/DBLP: {count} new papers")
 
-        # AAAI - check recent years only
+        # AAAI - collect from since_year to current_year
         if source in ["all", "aaai"]:
-            click.echo("Collecting from AAAI OJS...")
+            click.echo(f"Collecting from AAAI OJS ({since_year}-{current_year})...")
             async with AAOJSCollector(storage=storage) as collector:
                 count = 0
                 for venue in get_aaai_venues():
-                    async for batch in collector.collect_venue(venue, since_year=current_year):
+                    async for batch in collector.collect_venue(venue, since_year=since_year, to_year=current_year):
                         count += len(batch)
                 results["aaai"] = count
                 click.echo(f"  AAAI OJS: {count} new papers")

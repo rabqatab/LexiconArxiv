@@ -63,13 +63,14 @@ OPENREVIEW_VENUES = {
         # NeurIPS Datasets and Benchmarks Track (separate from main conference)
         "invitation_pattern_v1": "",  # Not available in v1
         "accepted_pattern_v1": "",
-        # v2 patterns (2023+)
+        # v2 patterns - naming changed between years:
+        # 2023: NeurIPS.cc/2023/Track/Datasets_and_Benchmarks/-/Submission
+        # 2024+: NeurIPS.cc/2024/Datasets_and_Benchmarks_Track/-/Submission
         "invitation_pattern_v2": "NeurIPS.cc/{year}/Datasets_and_Benchmarks_Track/-/Submission",
+        "invitation_pattern_v2_alt": "NeurIPS.cc/{year}/Track/Datasets_and_Benchmarks/-/Submission",
         "v2_start_year": 2023,
-        # D&B track uses venueid for accepted papers
-        "venueid_pattern": "NeurIPS.cc/{year}/Datasets_and_Benchmarks_Track",
         # Venue format: "NeurIPS 2024 Track Datasets and Benchmarks Poster/Oral/Spotlight"
-        "accepted_venue_patterns": ["{conf} {year} Track Datasets and Benchmarks"],
+        "accepted_venue_patterns": ["{conf} {year} Track Datasets and Benchmarks", "{conf} {year} Datasets and Benchmarks"],
         "rejected_venue_patterns": ["Submitted to {conf} {year}", "Withdrawn", "Desk Rejected"],
         "full_name": "NeurIPS Datasets and Benchmarks Track",
         "conf_name": "NeurIPS",
@@ -417,50 +418,61 @@ class OpenReviewCollector(BaseCrawler):
         if use_v2:
             api_url = OPENREVIEW_API_V2
             invitation = venue_info.get("invitation_pattern_v2", "").format(year=year)
+            # Some venues have alternative patterns for different years
+            invitation_alt = venue_info.get("invitation_pattern_v2_alt", "").format(year=year)
         else:
             api_url = OPENREVIEW_API_V1
             invitation = venue_info.get("invitation_pattern_v1", "").format(year=year)
+            invitation_alt = ""
 
         if not invitation:
             logger.warning(f"No invitation pattern for {venue} {year}")
             return [], 0
 
-        # Build params
-        params = {
-            "invitation": invitation,
-            "limit": OPENREVIEW_PER_PAGE,
-            "offset": offset,
-        }
+        # Try primary invitation pattern, then alternative if available
+        for inv in [invitation, invitation_alt] if invitation_alt else [invitation]:
+            if not inv:
+                continue
 
-        # For v1, request directReplies to get decision info for filtering
-        # For v2, filtering is done by content.venue in _is_accepted()
-        if accepted_only and not use_v2:
-            params["details"] = "directReplies"
+            # Build params
+            params = {
+                "invitation": inv,
+                "limit": OPENREVIEW_PER_PAGE,
+                "offset": offset,
+            }
 
-        try:
-            response = await self.client.get(
-                f"{api_url}/notes",
-                params=params,
-            )
-            response.raise_for_status()
-            data = response.json()
+            # For v1, request directReplies to get decision info for filtering
+            # For v2, filtering is done by content.venue in _is_accepted()
+            if accepted_only and not use_v2:
+                params["details"] = "directReplies"
 
-            notes = data.get("notes", [])
-            # API v2 doesn't always return count, use notes length as fallback
-            total = data.get("count") if data.get("count") is not None else len(notes)
+            try:
+                response = await self.client.get(
+                    f"{api_url}/notes",
+                    params=params,
+                )
+                response.raise_for_status()
+                data = response.json()
 
-            return notes, total
+                notes = data.get("notes", [])
+                # API v2 doesn't always return count, use notes length as fallback
+                total = data.get("count") if data.get("count") is not None else len(notes)
 
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 404:
-                # Venue/year not found, try alternative invitation patterns
-                logger.debug(f"Invitation not found: {invitation}")
+                if notes:  # Found papers with this invitation pattern
+                    return notes, total
+
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 404:
+                    # Try alternative pattern
+                    logger.debug(f"Invitation not found: {inv}")
+                    continue
+                logger.error(f"OpenReview API error: {e}")
                 return [], 0
-            logger.error(f"OpenReview API error: {e}")
-            return [], 0
-        except Exception as e:
-            logger.error(f"OpenReview fetch failed: {e}")
-            return [], 0
+            except Exception as e:
+                logger.error(f"OpenReview fetch failed: {e}")
+                return [], 0
+
+        return [], 0
 
     async def _get_venue_years(
         self,

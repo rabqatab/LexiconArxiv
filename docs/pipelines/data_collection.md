@@ -107,6 +107,78 @@ Used for on-demand search of arXiv papers not in Core:
 | `cs.RO` | Robotics | No (excluded) |
 | `eess.AS` | Audio and Speech | No (excluded) |
 
+### 3.4 Source-Specific API Details
+
+#### ACL Anthology
+
+| Aspect | Details |
+|--------|---------|
+| **Data Format** | XML files on GitHub |
+| **API Endpoint** | `https://api.github.com/repos/acl-org/acl-anthology/git/trees/master?recursive=1` |
+| **File Pattern** | `{year}.{venue}.xml` (e.g., `2025.acl.xml`) |
+| **Pagination** | Git Trees API (no limit) - Contents API limited to 1000 files |
+
+**Venue Prefixes:**
+```python
+ACL_VENUES = {
+    "acl": ["acl"],           # Main ACL conference
+    "emnlp": ["emnlp"],       # EMNLP
+    "naacl": ["naacl"],       # NAACL
+    "eacl": ["eacl"],         # EACL
+    "aacl": ["aacl", "ijcnlp"],  # AACL (also under ijcnlp.xml)
+    "coling": ["coling"],     # COLING
+    "findings": ["findings"], # Findings (ACL, EMNLP, NAACL)
+    "tacl": ["tacl"],         # TACL journal
+    "conll": ["conll"],       # CoNLL
+    "lrec": ["lrec"],         # LREC
+}
+```
+
+#### OpenReview
+
+| Aspect | Details |
+|--------|---------|
+| **API Versions** | v1 (`api.openreview.net`) for ≤2023, v2 (`api2.openreview.net`) for 2024+ |
+| **Invitation Pattern** | `{venue}/{year}/Conference/-/Submission` |
+| **Accepted Filter** | `content.venue` field contains acceptance type |
+
+**Venue Patterns (v2):**
+```python
+OPENREVIEW_VENUES = {
+    "neurips": {
+        "invitation_pattern_v2": "NeurIPS.cc/{year}/Conference/-/Submission",
+        "accepted_venue_patterns": ["{conf} {year} oral", "{conf} {year} spotlight", "{conf} {year} poster"],
+    },
+    "neurips_db": {  # Datasets & Benchmarks Track
+        "invitation_pattern_v2": "NeurIPS.cc/{year}/Datasets_and_Benchmarks_Track/-/Submission",
+        "invitation_pattern_v2_alt": "NeurIPS.cc/{year}/Track/Datasets_and_Benchmarks/-/Submission",  # 2023
+    },
+    "iclr": {
+        "invitation_pattern_v2": "ICLR.cc/{year}/Conference/-/Submission",
+    },
+    "icml": {
+        "invitation_pattern_v2": "ICML.cc/{year}/Conference/-/Submission",
+    },
+}
+```
+
+**Known Pattern Changes:**
+- NeurIPS D&B 2023: `Track/Datasets_and_Benchmarks` → 2024: `Datasets_and_Benchmarks_Track`
+- ICLR 2024+: API v2 only
+- ICML 2023+: API v2 only (not available before 2023)
+
+### 3.5 Known Issues and Fixes
+
+| Issue | Source | Fix |
+|-------|--------|-----|
+| GitHub API returns max 1000 files | ACL Anthology | Use Git Trees API instead of Contents API |
+| NeurIPS D&B track missing (~460 papers) | OpenReview | Added `neurips_db` venue with alt patterns |
+| AACL papers under `ijcnlp.xml` | ACL Anthology | Added `["aacl", "ijcnlp"]` prefixes |
+| OpenAlex 87% gap for NLP venues | OpenAlex | Use ACL Anthology as primary for NLP |
+| Invitation patterns change yearly | OpenReview | Maintain `invitation_pattern_v2_alt` fallback |
+
+See [Incremental Crawling](incremental_crawling.md) for detailed troubleshooting.
+
 ---
 
 ## 4. Core Corpus Collection (OpenAlex)

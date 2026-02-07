@@ -3,9 +3,8 @@
 This package contains collectors for:
 - OpenAlex (openalex.py) - ML/AI/NLP venues
 - ACL Anthology (acl_anthology.py) - NLP conferences
-- DBLP (dblp.py) - IR/Legal venues
+- DBLP (dblp.py) - ACM/IR/Legal venues (KDD, SIGIR, WWW, RecSys, ECIR, ICAIL, etc.)
 - OpenReview (openreview.py) - ML conferences (ICLR, NeurIPS, ICML)
-- ACM Open (acm_open.py) - ACM conferences (KDD, SIGIR, WWW)
 - AAAI OJS (aaai_ojs.py) - AAAI conferences
 """
 
@@ -26,6 +25,11 @@ from src.core.crawler.dblp import (
     DBLP_VENUES,
     get_dblp_venues,
     get_dblp_venue_info,
+    # Backward compatibility aliases (formerly in acm_open.py)
+    ACMOpenCollector,
+    ACM_VENUES,
+    get_acm_venues,
+    get_acm_venue_info,
 )
 from src.core.crawler.openreview import (
     OpenReviewCollector,
@@ -33,12 +37,7 @@ from src.core.crawler.openreview import (
     get_openreview_venues,
     get_openreview_venue_info,
 )
-from src.core.crawler.acm_open import (
-    ACMOpenCollector,
-    ACM_VENUES as ACM_OPEN_VENUES,
-    get_acm_open_venues,
-    get_acm_open_venue_info,
-)
+# acm_open.py consolidated into dblp.py - aliases exported above
 from src.core.crawler.aaai_ojs import (
     AAOJSCollector,
     AAAI_VENUES,
@@ -59,21 +58,21 @@ __all__ = [
     "ACL_VENUES",
     "get_acl_venues",
     "get_acl_venue_info",
-    # DBLP
+    # DBLP (includes ACM venues)
     "DBLPCollector",
     "DBLP_VENUES",
     "get_dblp_venues",
     "get_dblp_venue_info",
+    # DBLP backward compat aliases (formerly acm_open.py)
+    "ACMOpenCollector",
+    "ACM_VENUES",
+    "get_acm_venues",
+    "get_acm_venue_info",
     # OpenReview
     "OpenReviewCollector",
     "OPENREVIEW_VENUES",
     "get_openreview_venues",
     "get_openreview_venue_info",
-    # ACM Open
-    "ACMOpenCollector",
-    "ACM_OPEN_VENUES",
-    "get_acm_open_venues",
-    "get_acm_open_venue_info",
     # AAAI OJS
     "AAOJSCollector",
     "AAAI_VENUES",

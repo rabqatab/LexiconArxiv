@@ -1,6 +1,12 @@
-"""DBLP Crawler for IR/Legal venue paper collection.
+"""DBLP Crawler for conference paper collection.
 
-Collects papers from DBLP API for venues with poor OpenAlex coverage.
+Collects papers from DBLP API for:
+- ACM conferences (KDD, SIGIR, WWW, RecSys, CIKM, WSDM)
+- IR conferences (ECIR)
+- Legal AI conferences (ICAIL, JURIX)
+
+Note: DBLP provides metadata only (no abstracts). Use enrichment pipeline
+to fill abstracts via Semantic Scholar or OpenAlex.
 """
 
 import asyncio
@@ -22,8 +28,25 @@ logger = logging.getLogger(__name__)
 DBLP_SEARCH_URL = "https://dblp.org/search/publ/api"
 DBLP_PER_PAGE = 100  # DBLP default is 30, max is 1000
 
-# Target venues with poor OpenAlex coverage
+# All DBLP venues organized by tier
 DBLP_VENUES = {
+    # Tier 0 - Top-tier ACM conferences
+    "kdd": {
+        "query": "venue:KDD:",
+        "full_name": "ACM SIGKDD Conference on Knowledge Discovery and Data Mining",
+        "tier": 0,
+    },
+    "sigir": {
+        "query": "venue:SIGIR:",
+        "full_name": "ACM SIGIR Conference on Research and Development in Information Retrieval",
+        "tier": 0,
+    },
+    "www": {
+        "query": "venue:WWW:",
+        "full_name": "The Web Conference",
+        "tier": 0,
+    },
+    # Tier 1 - Strong conferences
     "recsys": {
         "query": "venue:RecSys:",
         "full_name": "ACM Conference on Recommender Systems",
@@ -33,16 +56,6 @@ DBLP_VENUES = {
         "query": "venue:ECIR:",
         "full_name": "European Conference on Information Retrieval",
         "tier": 1,
-    },
-    "icail": {
-        "query": "venue:ICAIL:",
-        "full_name": "International Conference on Artificial Intelligence and Law",
-        "tier": 2,
-    },
-    "jurix": {
-        "query": "venue:JURIX:",
-        "full_name": "International Conference on Legal Knowledge and Information Systems",
-        "tier": 2,
     },
     "cikm": {
         "query": "venue:CIKM:",
@@ -54,7 +67,21 @@ DBLP_VENUES = {
         "full_name": "ACM International Conference on Web Search and Data Mining",
         "tier": 1,
     },
+    # Tier 2 - Specialized conferences
+    "icail": {
+        "query": "venue:ICAIL:",
+        "full_name": "International Conference on Artificial Intelligence and Law",
+        "tier": 2,
+    },
+    "jurix": {
+        "query": "venue:JURIX:",
+        "full_name": "International Conference on Legal Knowledge and Information Systems",
+        "tier": 2,
+    },
 }
+
+# Backward compatibility alias
+ACM_VENUES = {k: v for k, v in DBLP_VENUES.items() if k in ["kdd", "sigir", "www", "recsys", "cikm", "wsdm"]}
 
 
 class DBLPCollector(BaseCrawler):
@@ -475,3 +502,18 @@ def get_dblp_venues() -> list[str]:
 def get_dblp_venue_info(venue: str) -> dict[str, Any] | None:
     """Get information about a DBLP venue."""
     return DBLP_VENUES.get(venue.lower())
+
+
+# Backward compatibility aliases for acm_open.py migration
+def get_acm_venues() -> list[str]:
+    """Get list of ACM venues (subset of DBLP venues)."""
+    return list(ACM_VENUES.keys())
+
+
+def get_acm_venue_info(venue: str) -> dict[str, Any] | None:
+    """Get information about an ACM venue."""
+    return ACM_VENUES.get(venue.lower())
+
+
+# Alias for backward compatibility
+ACMOpenCollector = DBLPCollector

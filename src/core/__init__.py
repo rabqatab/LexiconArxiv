@@ -34,19 +34,23 @@ from src.core.crawler import (
     ACLAnthologyCollector,
     DBLPCollector,
     OpenReviewCollector,
-    ACMOpenCollector,
+    ACMOpenCollector,  # Alias for DBLPCollector (backward compat)
     AAOJSCollector,
     ACL_VENUES,
     DBLP_VENUES,
     OPENREVIEW_VENUES,
-    ACM_OPEN_VENUES,
+    ACM_VENUES,
     AAAI_VENUES,
     get_acl_venues,
     get_dblp_venues,
     get_openreview_venues,
-    get_acm_open_venues,
+    get_acm_venues,
     get_aaai_venues,
 )
+
+# Backward compatibility alias
+ACM_OPEN_VENUES = ACM_VENUES
+get_acm_open_venues = get_acm_venues
 
 # Import from enrichment subpackage
 from src.core.enrichment import (
@@ -97,12 +101,14 @@ __all__ = [
     "ACL_VENUES",
     "DBLP_VENUES",
     "OPENREVIEW_VENUES",
-    "ACM_OPEN_VENUES",
+    "ACM_VENUES",
+    "ACM_OPEN_VENUES",  # Backward compat alias
     "AAAI_VENUES",
     "get_acl_venues",
     "get_dblp_venues",
     "get_openreview_venues",
-    "get_acm_open_venues",
+    "get_acm_venues",
+    "get_acm_open_venues",  # Backward compat alias
     "get_aaai_venues",
     # Enrichment
     "PaperEnricher",
