@@ -159,10 +159,8 @@ class PaperEnricher(BaseEnricher, OpenAlexMixin):
         # Build search URL
         url = f"{OPENALEX_BASE_URL}/works"
         params = {"search": title, "per_page": 5}
-        if self.api_key:
-            params["api_key"] = self.api_key
-        elif self.email:
-            params["mailto"] = self.email
+        # Use shared method that respects _api_key_exhausted flag
+        params.update(self._get_openalex_params())
 
         try:
             response = await self._client.get(url, params=params)
