@@ -46,6 +46,41 @@ docker run -d --rm --name grobid -p 8070:8070 lfoppiano/grobid:0.8.0
 # For ARM64 (Apple Silicon) - see ARM64 section below
 ```
 
+### Qdrant Connection Reset During build_cited_by
+
+**Symptoms:**
+- `Connection reset by peer` error
+- `httpx.ReadError: [Errno 104] Connection reset by peer`
+- Crash during Stage 5 (Graph) of the pipeline
+
+**Cause:**
+The `build_cited_by` command makes 100k+ individual API calls to Qdrant, which can overwhelm the connection pool.
+
+**Solutions:**
+
+1. **Use the latest code** (v0.7.2+) which includes retry logic and batching:
+   ```bash
+   git pull
+   uv run python -m src.cli.core_collect build-cited-by
+   ```
+
+2. **If still failing**, restart Qdrant and retry:
+   ```bash
+   docker restart qdrant
+   sleep 5
+   uv run python -m src.cli.core_collect build-cited-by
+   ```
+
+3. **For persistent issues**, increase Qdrant resources:
+   ```bash
+   # Restart with more memory
+   docker stop qdrant && docker rm qdrant
+   docker run -d --name qdrant -p 6333:6333 \
+     --memory=4g \
+     -v qdrant_storage:/qdrant/storage \
+     qdrant/qdrant
+   ```
+
 ---
 
 ## Rate Limiting

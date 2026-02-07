@@ -149,6 +149,7 @@ Infra:       Docker / Kubernetes
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.7.2 | Feb 2026 | DBLP/ACM consolidation, build_cited_by retry fix, incremental pipeline script |
 | 0.7.1 | Feb 2026 | ACL Git Trees API fix, NeurIPS D&B track, AACL venue, incremental docs |
 | 0.7.0 | Feb 2026 | Payload-only architecture, named vectors support |
 | 0.6.3 | Feb 2026 | Crawler base class, centralized API constants, checkpoint mixin |

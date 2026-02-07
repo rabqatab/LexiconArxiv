@@ -838,9 +838,8 @@ core_coverage = Gauge('core_coverage', 'Core coverage by venue', ['venue'])
 | **BaseCrawler** | `src/core/crawler/base.py` | ✅ Complete |
 | OpenAlex Collector | `src/core/crawler/openalex.py` | ✅ Complete |
 | ACL Anthology Crawler | `src/core/crawler/acl_anthology.py` | ✅ Complete |
-| DBLP Crawler | `src/core/crawler/dblp.py` | ✅ Complete |
+| DBLP Crawler | `src/core/crawler/dblp.py` | ✅ Complete (includes ACM venues) |
 | OpenReview Crawler | `src/core/crawler/openreview.py` | ✅ Complete |
-| ACM Open Crawler | `src/core/crawler/acm_open.py` | ✅ Complete |
 | AAAI OJS Crawler | `src/core/crawler/aaai_ojs.py` | ✅ Complete |
 
 **Crawler Architecture**: All crawlers (except OpenAlex) inherit from `BaseCrawler`, which provides:
@@ -993,11 +992,13 @@ Three new sources were added to address coverage gaps:
      - API v2 (`api2.openreview.net`): ICLR 2024+, NeurIPS 2023+, ICML 2023+
      - Automatic version selection based on venue and year
 
-2. **ACM Open Library** (`src/core/crawler/acm_open.py`)
-   - Venues: KDD, SIGIR, WWW, RecSys, CIKM, WSDM
-   - Strategy: DBLP for metadata + ACM DL for abstracts
-   - Rate limit: 0.5 req/sec for ACM scraping
-   - Note: ACM made all content open access in January 2026
+2. **DBLP Crawler** (`src/core/crawler/dblp.py`)
+   - ACM venues: KDD, SIGIR, WWW, RecSys, CIKM, WSDM (Tier 0-1)
+   - IR venues: ECIR (Tier 1)
+   - Legal AI venues: ICAIL, JURIX (Tier 2)
+   - Strategy: DBLP API for metadata, enrichment pipeline for abstracts
+   - Rate limit: 1 req/sec
+   - Note: `acm_open.py` was consolidated into `dblp.py` in v0.7.2
 
 3. **AAAI OJS** (`src/core/crawler/aaai_ojs.py`)
    - Venues: AAAI (2020-2023), ICWSM

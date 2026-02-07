@@ -307,6 +307,24 @@ GITHUB_TREES_API = "https://api.github.com/repos/acl-org/acl-anthology/git/trees
 
 **Workaround:** Use ACL Anthology as primary source for NLP venues, not OpenAlex.
 
+### 6.5 Incremental --days Only Affected OpenAlex (Fixed in v0.7.2)
+
+**Issue:** The `--days` parameter only worked for OpenAlex. Other sources used `current_year` only, missing papers from the previous year when running in January-March.
+
+**Fix:** Now calculates `since_year` from the date range, correctly spanning year boundaries:
+```bash
+# Running in March 2026 with --days 90
+# Before: Only collected 2026 papers (missed late 2025)
+# After:  Collects 2025-2026 papers correctly
+python -m src.cli.core_collect collect-incremental --days 90
+```
+
+### 6.6 build_cited_by Connection Reset (Fixed in v0.7.2)
+
+**Issue:** `build_cited_by` crashed with "Connection reset by peer" when updating 100k+ papers.
+
+**Fix:** Added retry logic, smaller batches (50 ops), and delays between batches.
+
 ---
 
 ## 7. Future Improvements
