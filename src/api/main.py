@@ -6,12 +6,18 @@ The API serves D3.js-compatible JSON for subgraph neighborhoods around papers.
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from src.api.dependencies import get_services
 from src.api.routes import graph
+
+# Static files directory
+STATIC_DIR = Path(__file__).parent / "static"
 
 # Configure logging
 logging.basicConfig(
@@ -65,14 +71,22 @@ app.add_middleware(
 # Include routers
 app.include_router(graph.router)
 
+# Mount static files
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
 
 @app.get("/")
 async def root():
-    """Root endpoint with API information."""
+    """Serve the visualization UI."""
+    index_path = STATIC_DIR / "index.html"
+    if index_path.exists():
+        return FileResponse(index_path)
     return {
         "name": "LexiconArxiv Graph API",
         "version": "0.1.0",
         "docs": "/docs",
+        "visualization": "/static/index.html",
         "endpoints": {
             "health": "/graph/health",
             "stats": "/graph/stats",

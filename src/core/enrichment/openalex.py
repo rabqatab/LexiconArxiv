@@ -52,7 +52,8 @@ class PaperEnricher(BaseEnricher, OpenAlexMixin):
     """Unified enricher for citations and abstracts from OpenAlex."""
 
     DEFAULT_DELAY = 0.1
-    DEFAULT_CONCURRENT = 1
+    DEFAULT_CONCURRENT_API_KEY = 5  # Higher limit when using API key
+    DEFAULT_CONCURRENT_EMAIL = 1  # Lower limit for email-based polite pool
 
     def __init__(
         self,
@@ -62,7 +63,7 @@ class PaperEnricher(BaseEnricher, OpenAlexMixin):
         checkpoint_dir: Path | str | None = None,
         batch_size: int = 100,
         delay: float = 0.1,
-        max_concurrent: int = 1,
+        max_concurrent: int | None = None,
     ):
         """Initialize PaperEnricher.
 
@@ -73,14 +74,24 @@ class PaperEnricher(BaseEnricher, OpenAlexMixin):
             checkpoint_dir: Directory for checkpoint files.
             batch_size: Number of papers to process per batch.
             delay: Delay between API calls in seconds.
-            max_concurrent: Maximum concurrent API requests (for parallel mode).
+            max_concurrent: Maximum concurrent API requests. If None, uses 5 for API key, 1 for email.
         """
+        # Initialize OpenAlex first to determine if API key is available
+        self._init_openalex(email=email, api_key=api_key)
+
+        # Set default concurrency based on auth method
+        if max_concurrent is None:
+            max_concurrent = (
+                self.DEFAULT_CONCURRENT_API_KEY
+                if self.api_key
+                else self.DEFAULT_CONCURRENT_EMAIL
+            )
+
         super().__init__(
             storage=storage,
             delay=delay,
             max_concurrent=max_concurrent,
         )
-        self._init_openalex(email=email, api_key=api_key)
         self.batch_size = batch_size
 
         # Checkpoint
@@ -156,6 +167,10 @@ class PaperEnricher(BaseEnricher, OpenAlexMixin):
         try:
             response = await self._client.get(url, params=params)
             if response.status_code == 429:
+                # Check if API key credits exhausted - if so, switch to email and retry
+                if self._handle_api_key_exhaustion(response):
+                    return await self.search_by_title(title, min_refs)
+                # Regular rate limiting - wait and retry
                 logger.warning("Rate limited, waiting 60 seconds...")
                 await asyncio.sleep(60)
                 return await self.search_by_title(title, min_refs)

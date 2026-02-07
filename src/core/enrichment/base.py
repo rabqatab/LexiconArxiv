@@ -115,6 +115,7 @@ class OpenAlexMixin:
     # These will be set by __init__ in subclasses
     email: str | None = None
     api_key: str | None = None
+    _api_key_exhausted: bool = False  # Track if API key credits are exhausted
     _client: httpx.AsyncClient | None = None
     _semaphore: asyncio.Semaphore | None = None
     delay: float = 0.1
@@ -132,15 +133,47 @@ class OpenAlexMixin:
         """
         self.email = email or get_openalex_email()
         self.api_key = api_key or get_openalex_api_key()
+        self._api_key_exhausted = False
 
     def _get_openalex_params(self) -> dict[str, str]:
-        """Get query parameters for OpenAlex API calls."""
+        """Get query parameters for OpenAlex API calls.
+
+        Falls back to email-based polite pool if API key credits are exhausted.
+        """
         params = {}
-        if self.api_key:
+        # Use API key only if available AND not exhausted
+        if self.api_key and not self._api_key_exhausted:
             params["api_key"] = self.api_key
         elif self.email:
             params["mailto"] = self.email
         return params
+
+    def _handle_api_key_exhaustion(self, response: "httpx.Response") -> bool:
+        """Check if response indicates API key credit exhaustion.
+
+        Args:
+            response: HTTP response to check.
+
+        Returns:
+            True if credits exhausted and switched to email, False otherwise.
+        """
+        if response.status_code == 429 and self.api_key and not self._api_key_exhausted:
+            try:
+                data = response.json()
+                if "Insufficient credits" in data.get("message", ""):
+                    self._api_key_exhausted = True
+                    logger.warning(
+                        "OpenAlex API key credits exhausted. "
+                        "Falling back to email-based polite pool."
+                    )
+                    return True
+            except Exception:
+                pass
+        return False
+
+    def has_valid_api_key(self) -> bool:
+        """Check if a valid (non-exhausted) API key is available."""
+        return bool(self.api_key and not self._api_key_exhausted)
 
     async def fetch_openalex_work(
         self,
@@ -181,6 +214,10 @@ class OpenAlexMixin:
                 return None
 
             if response.status_code == 429:
+                # Check if API key credits exhausted - if so, switch to email and retry
+                if self._handle_api_key_exhaustion(response):
+                    return await self.fetch_openalex_work(identifier, identifier_type)
+                # Regular rate limiting - wait and retry
                 logger.warning("Rate limited by OpenAlex, waiting 60s...")
                 await asyncio.sleep(60)
                 return await self.fetch_openalex_work(identifier, identifier_type)
