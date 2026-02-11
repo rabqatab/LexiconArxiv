@@ -19,12 +19,9 @@ from typing import Any
 
 import httpx
 
-from src.core.constants import (
-    OPENALEX_BASE_URL,
-    get_openalex_api_key,
-    get_openalex_email,
-)
+from src.core.constants import OPENALEX_BASE_URL
 from src.core.deduplication import Deduplicator
+from src.core.enrichment.base import OpenAlexMixin
 from src.core.resolution.normalizer import IdentifierNormalizer, IdentifierType
 from src.core.storage import QdrantStorage
 
@@ -58,7 +55,7 @@ class ResolutionProgress:
     stubs_updated: int = 0  # Existing stubs updated with new citations
 
 
-class ReferenceResolver:
+class ReferenceResolver(OpenAlexMixin):
     """Resolve raw reference identifiers to internal paper IDs.
 
     Three-step pipeline:
@@ -89,8 +86,7 @@ class ReferenceResolver:
             max_concurrent: Max concurrent API requests.
         """
         self.storage = storage or QdrantStorage()
-        self.email = email or get_openalex_email()
-        self.api_key = api_key or get_openalex_api_key()
+        self._init_openalex(email, api_key)
         self.batch_size = batch_size
         self.delay = delay
         self.max_concurrent = max_concurrent
@@ -494,48 +490,24 @@ class ReferenceResolver:
     async def _lookup_arxiv_doi(self, arxiv_id: str) -> str | None:
         """Look up DOI for an arXiv ID via OpenAlex.
 
+        Uses OpenAlexMixin.fetch_openalex_work for proper rate limit handling,
+        API key exhaustion fallback to email pool, and max retry limits.
+
         Args:
             arxiv_id: arXiv ID (e.g., '2303.08774').
 
         Returns:
             DOI string or None if not found.
         """
-        async with self._semaphore:
-            await asyncio.sleep(self.delay)
-
-            # Build URL - OpenAlex accepts arXiv IDs
-            url = f"{OPENALEX_BASE_URL}/works/arXiv:{arxiv_id}"
-            params = {}
-            if self.api_key:
-                params["api_key"] = self.api_key
-            elif self.email:
-                params["mailto"] = self.email
-
-            try:
-                response = await self._client.get(url, params=params)
-
-                if response.status_code == 404:
-                    return None
-
-                if response.status_code == 429:
-                    logger.warning("Rate limited, waiting 60s...")
-                    await asyncio.sleep(60)
-                    return await self._lookup_arxiv_doi(arxiv_id)
-
-                response.raise_for_status()
-                data = response.json()
-
-                doi = data.get("doi")
-                if doi:
-                    # Clean DOI URL format
-                    if doi.startswith("https://doi.org/"):
-                        doi = doi[16:]
-                    return doi.lower()
-
-            except Exception as e:
-                logger.debug(f"Error looking up arXiv {arxiv_id}: {e}")
-
-            return None
+        data = await self.fetch_openalex_work(arxiv_id, "arxiv")
+        if data:
+            doi = data.get("doi")
+            if doi:
+                # Clean DOI URL format
+                if doi.startswith("https://doi.org/"):
+                    doi = doi[16:]
+                return doi.lower()
+        return None
 
     # =========================================================================
     # Step 3: Resolve to Internal IDs
@@ -756,15 +728,20 @@ class ReferenceResolver:
         logger.debug(f"Added external paper: {paper.title[:50]}... -> {point_id}")
         return point_id
 
-    async def _search_openalex_by_title(self, title: str) -> dict[str, Any] | None:
+    async def _search_openalex_by_title(
+        self, title: str, _retry_count: int = 0
+    ) -> dict[str, Any] | None:
         """Search OpenAlex by title.
 
         Args:
             title: Paper title.
+            _retry_count: Internal retry counter (do not set manually).
 
         Returns:
             Paper data dict or None.
         """
+        max_retries = 3
+
         if not self._client:
             return None
 
@@ -773,17 +750,28 @@ class ReferenceResolver:
 
             url = f"{OPENALEX_BASE_URL}/works"
             params = {"search": title, "per_page": 5}
-            if self.api_key:
-                params["api_key"] = self.api_key
-            elif self.email:
-                params["mailto"] = self.email
+            params.update(self._get_openalex_params())
 
             try:
                 response = await self._client.get(url, params=params)
 
                 if response.status_code == 429:
+                    if self._handle_api_key_exhaustion(response):
+                        return await self._search_openalex_by_title(title)
+                    if _retry_count >= max_retries:
+                        logger.warning(
+                            f"OpenAlex rate limit: max retries ({max_retries}) "
+                            f"reached for title search, skipping."
+                        )
+                        return None
+                    logger.warning(
+                        f"Rate limited, waiting 60s... "
+                        f"(retry {_retry_count + 1}/{max_retries})"
+                    )
                     await asyncio.sleep(60)
-                    return await self._search_openalex_by_title(title)
+                    return await self._search_openalex_by_title(
+                        title, _retry_count=_retry_count + 1
+                    )
 
                 response.raise_for_status()
                 data = response.json()

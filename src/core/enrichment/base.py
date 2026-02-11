@@ -192,16 +192,20 @@ class OpenAlexMixin:
         self,
         identifier: str,
         identifier_type: str = "doi",
+        _retry_count: int = 0,
     ) -> dict[str, Any] | None:
         """Fetch paper metadata from OpenAlex.
 
         Args:
             identifier: The identifier value.
             identifier_type: Type of identifier ('doi', 'arxiv', 'openalex').
+            _retry_count: Internal retry counter (do not set manually).
 
         Returns:
             Metadata dict or None if not found.
         """
+        max_retries = 3
+
         if not self._client:
             raise RuntimeError("Client not initialized. Use async context manager.")
 
@@ -229,11 +233,24 @@ class OpenAlexMixin:
             if response.status_code == 429:
                 # Check if API key credits exhausted - if so, switch to email and retry
                 if self._handle_api_key_exhaustion(response):
-                    return await self.fetch_openalex_work(identifier, identifier_type)
-                # Regular rate limiting - wait and retry
-                logger.warning("Rate limited by OpenAlex, waiting 60s...")
+                    return await self.fetch_openalex_work(
+                        identifier, identifier_type, _retry_count=0
+                    )
+                # Regular rate limiting - wait and retry (with max retries)
+                if _retry_count >= max_retries:
+                    logger.warning(
+                        f"OpenAlex rate limit: max retries ({max_retries}) reached "
+                        f"for {identifier_type}:{identifier}, skipping."
+                    )
+                    return None
+                logger.warning(
+                    f"Rate limited by OpenAlex, waiting 60s... "
+                    f"(retry {_retry_count + 1}/{max_retries})"
+                )
                 await asyncio.sleep(60)
-                return await self.fetch_openalex_work(identifier, identifier_type)
+                return await self.fetch_openalex_work(
+                    identifier, identifier_type, _retry_count=_retry_count + 1
+                )
 
             response.raise_for_status()
             return response.json()

@@ -90,16 +90,23 @@ The `build_cited_by` command makes 100k+ individual API calls to Qdrant, which c
 **Symptoms:**
 - `HTTP 429 Too Many Requests`
 - Collection slows down significantly
+- Repeated "Rate limited, waiting 60s..." messages
+
+**Cause:**
+OpenAlex free API key credits reset daily. When exhausted, all requests return 429 until the next reset (midnight UTC / 09:00 KST).
 
 **Solutions:**
 
 1. Set `OPENALEX_EMAIL` in `.env` for polite pool access (10 req/sec vs 1 req/sec)
-2. Collection includes automatic delays - just wait
-3. If persistent, reduce parallelism:
+2. The system automatically falls back from API key to email-based polite pool when credits are exhausted
+3. Rate-limited retries are capped at 3 attempts before skipping and moving on
+4. If persistent, reduce parallelism:
 
 ```bash
 python -m src.cli.core_collect enrich-citations --parallel 5
 ```
+
+**Note:** Both the enrichment pipeline and the reference resolver share the same `OpenAlexMixin` for API key exhaustion handling and automatic email fallback.
 
 ### Semantic Scholar Rate Limits
 

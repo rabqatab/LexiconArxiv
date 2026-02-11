@@ -742,8 +742,9 @@ BaseEnricher (ABC)
 
 OpenAlexMixin
     ├── _init_openalex(email, api_key)
-    ├── _get_openalex_params()
-    ├── fetch_openalex_work(identifier, identifier_type)
+    ├── _get_openalex_params()          # Respects _api_key_exhausted flag
+    ├── _handle_api_key_exhaustion()    # Detects credit exhaustion, falls back to email
+    ├── fetch_openalex_work(identifier, identifier_type)  # Max 3 retries on rate limit
     ├── parse_openalex_work(data)
     └── reconstruct_abstract(inverted_index)  [static]
 
@@ -761,6 +762,9 @@ StubEnricher(BaseEnricher, OpenAlexMixin, CrossRefMixin)
 
 CrossRefEnricher(BaseEnricher, CrossRefMixin)
     └── Enriches papers using CrossRef as primary source
+
+ReferenceResolver(OpenAlexMixin)
+    └── Resolves arXiv IDs to DOIs, uses mixin for API key exhaustion fallback
 ```
 
 ### Shared Functionality
@@ -769,7 +773,8 @@ CrossRefEnricher(BaseEnricher, CrossRefMixin)
 |-----------|-------------|---------|
 | Async context management | `BaseEnricher` | All enrichers |
 | Rate limiting (semaphore) | `BaseEnricher` | All enrichers |
-| OpenAlex API fetching | `OpenAlexMixin` | `PaperEnricher`, `StubEnricher` |
+| OpenAlex API fetching | `OpenAlexMixin` | `PaperEnricher`, `StubEnricher`, `ReferenceResolver` |
+| OpenAlex API key fallback | `OpenAlexMixin` | `PaperEnricher`, `StubEnricher`, `ReferenceResolver` |
 | OpenAlex response parsing | `OpenAlexMixin` | `PaperEnricher`, `StubEnricher` |
 | Abstract reconstruction | `OpenAlexMixin` | `PaperEnricher`, `StubEnricher` |
 | CrossRef API fetching | `CrossRefMixin` | `CrossRefEnricher`, `StubEnricher` |
