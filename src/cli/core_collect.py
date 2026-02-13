@@ -1955,7 +1955,7 @@ def clear_pdf_checkpoint() -> None:
               default="all", help="Run specific step only")
 @click.option("--fuzzy-matching", is_flag=True, help="Use fuzzy title matching (slower)")
 @click.option("--external-search", is_flag=True, help="Search external APIs for unresolved titles")
-@click.option("--create-stubs", is_flag=True, help="Create stub papers for unresolved references")
+@click.option("--create-stubs/--no-create-stubs", default=True, help="Create stub papers for unresolved references (default: enabled)")
 @click.option("--batch-size", type=int, default=100, help="Batch size")
 @click.option("--parallel", "-p", type=int, default=5, help="Concurrent requests")
 def resolve_refs(
@@ -1997,8 +1997,8 @@ def resolve_refs(
       # Search external APIs for unresolved titles
       python -m src.cli.core_collect resolve-refs --step internal --external-search
 
-      # Create stub papers for unresolved references (for citation graph)
-      python -m src.cli.core_collect resolve-refs --create-stubs
+      # Skip stub paper creation (stubs are created by default)
+      python -m src.cli.core_collect resolve-refs --no-create-stubs
 
       # Limit papers processed
       python -m src.cli.core_collect resolve-refs --limit 1000
