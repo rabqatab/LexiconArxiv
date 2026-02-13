@@ -43,7 +43,7 @@ QDRANT_COLLECTION=lexicon_arxiv
 
 ```bash
 # Run Qdrant (vector database)
-docker run -d -p 6333:6333 --name qdrant qdrant/qdrant
+docker run -d -p 6333:6333 --name qdrant -v qdrant_storage:/qdrant/storage qdrant/qdrant
 
 # Run GROBID (PDF reference extraction) - optional but recommended
 # For x86_64 (Intel/AMD):

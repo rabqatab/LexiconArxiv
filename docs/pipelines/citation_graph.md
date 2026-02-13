@@ -397,7 +397,7 @@ print(f"Estimated memory: {est} MB")
 | GraphAnalyzer | ✅ Complete | PageRank, HITS, communities |
 | CLI commands | ✅ Complete | 6 commands |
 | `cited_by` field | ✅ Complete | `build-cited-by` command |
-| Stub paper creation | ✅ Complete | `resolve-refs --create-stubs` |
+| Stub paper creation | ✅ Complete | `resolve-refs` (stubs created by default) |
 | Stub enrichment | ✅ Complete | `enrich-stubs` with deduplication |
 | `stub-stats` command | ✅ Complete | Most-cited external papers |
 | Stub deduplication | ✅ Complete | Cross-reference merge during enrichment |
@@ -478,7 +478,7 @@ Many papers cite the same foundational works, so deduplication significantly red
 
 ```bash
 # Create stub papers during resolution
-python -m src.cli.core_collect resolve-refs --create-stubs
+python -m src.cli.core_collect resolve-refs
 
 # Show stub statistics and most-cited external papers
 python -m src.cli.core_collect stub-stats

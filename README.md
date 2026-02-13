@@ -24,7 +24,7 @@ AI Research Insights Engine - Core Corpus collection and semantic search for top
 python --version
 
 # Start Qdrant (vector database)
-docker run -d -p 6333:6333 --name qdrant qdrant/qdrant
+docker run -d -p 6333:6333 --name qdrant -v qdrant_storage:/qdrant/storage qdrant/qdrant
 
 # Start GROBID (PDF extraction) - optional
 # x86_64:

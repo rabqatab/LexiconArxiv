@@ -91,7 +91,7 @@ uv pip install -e ".[dev]"
 cp .env.example .env  # Edit with OPENALEX_EMAIL
 
 # Start Qdrant
-docker run -d -p 6333:6333 --name qdrant qdrant/qdrant
+docker run -d -p 6333:6333 --name qdrant -v qdrant_storage:/qdrant/storage qdrant/qdrant
 
 # Run full pipeline
 python -m src.cli.core_collect init-storage

@@ -22,6 +22,7 @@ SKIP_DEDUP=${SKIP_DEDUP:-false}
 SKIP_ENRICHMENT=${SKIP_ENRICHMENT:-false}
 SKIP_RESOLUTION=${SKIP_RESOLUTION:-false}
 SKIP_GRAPH=${SKIP_GRAPH:-false}
+SKIP_SNAPSHOT=${SKIP_SNAPSHOT:-false}
 PARALLEL=${PARALLEL:-10}
 LOG_FILE=${LOG_FILE:-""}
 
@@ -56,6 +57,10 @@ while [[ $# -gt 0 ]]; do
             SKIP_GRAPH=true
             shift
             ;;
+        --skip-snapshot)
+            SKIP_SNAPSHOT=true
+            shift
+            ;;
         --parallel)
             PARALLEL="$2"
             shift 2
@@ -84,6 +89,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --skip-enrichment     Skip Stage 3: Enrichment"
             echo "  --skip-resolution     Skip Stage 4: Resolution"
             echo "  --skip-graph          Skip Stage 5: Graph"
+            echo "  --skip-snapshot       Skip pre-pipeline snapshot"
             echo "  --parallel N          Concurrent requests (default: 10)"
             echo "  --log FILE            Save output to log file (also prints to terminal)"
             echo "  --help                Show this help message"
@@ -132,10 +138,29 @@ echo "Skip Dedup: $SKIP_DEDUP"
 echo "Skip Enrichment: $SKIP_ENRICHMENT"
 echo "Skip Resolution: $SKIP_RESOLUTION"
 echo "Skip Graph: $SKIP_GRAPH"
+echo "Skip Snapshot: $SKIP_SNAPSHOT"
 echo "Parallel: $PARALLEL"
 echo "Log File: ${LOG_FILE:-"(none)"}"
 echo "=========================================="
 echo ""
+
+# Pre-pipeline: Snapshot (safety net)
+if [ "$SKIP_SNAPSHOT" = false ]; then
+    echo "============ [PRE] SNAPSHOT ============"
+    # Only snapshot if collection has data
+    POINT_COUNT=$(curl -sf "${QDRANT_URL:-http://localhost:6333}/collections/${QDRANT_COLLECTION:-lexicon_arxiv}" 2>/dev/null \
+        | python3 -c "import sys,json; print(json.load(sys.stdin)['result']['points_count'])" 2>/dev/null || echo "0")
+    if [ "$POINT_COUNT" -gt 0 ] 2>/dev/null; then
+        echo "Collection has ${POINT_COUNT} points. Creating snapshot..."
+        "$SCRIPT_DIR/maintenance/qdrant_snapshot.sh"
+    else
+        echo "Collection is empty or Qdrant unreachable. Skipping snapshot."
+    fi
+    echo ""
+else
+    echo "============ [PRE] SNAPSHOT (SKIPPED) ============"
+    echo ""
+fi
 
 # Stage 1: Collection
 if [ "$SKIP_COLLECTION" = false ]; then

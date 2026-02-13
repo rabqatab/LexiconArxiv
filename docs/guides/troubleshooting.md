@@ -18,8 +18,8 @@ Solutions to common issues when running LexiconArxiv.
 # Check if Qdrant is running
 docker ps | grep qdrant
 
-# Start Qdrant
-docker run -d -p 6333:6333 --name qdrant qdrant/qdrant
+# Start Qdrant (with persistent volume)
+docker run -d -p 6333:6333 --name qdrant -v qdrant_storage:/qdrant/storage qdrant/qdrant
 
 # Restart if needed
 docker restart qdrant
@@ -342,6 +342,76 @@ python -m src.cli.core_collect extract-keywords --no-keybert
 ```bash
 python -m src.cli.core_collect extract-keywords --limit 1000
 ```
+
+---
+
+## Data Loss Prevention
+
+### Always Use Persistent Volumes
+
+Running Qdrant **without** `-v` means all data lives inside the container. If the container is removed (`docker rm`), all data is permanently lost.
+
+**Correct (persistent):**
+```bash
+docker run -d -p 6333:6333 --name qdrant -v qdrant_storage:/qdrant/storage qdrant/qdrant
+```
+
+**Dangerous (ephemeral):**
+```bash
+# DO NOT USE - data lost on docker rm!
+docker run -d -p 6333:6333 --name qdrant qdrant/qdrant
+```
+
+> **Note**: `docker restart qdrant` and `docker stop/start qdrant` are safe — they preserve container data. Only `docker rm` destroys it.
+
+### Check if Your Container Has a Volume
+
+```bash
+docker inspect qdrant --format '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{end}}'
+# Should show: /var/lib/docker/volumes/qdrant_storage/_data -> /qdrant/storage
+# If empty, your data is at risk!
+```
+
+### Snapshot Backups
+
+Use the snapshot script to back up your collection before risky operations:
+
+```bash
+# Create a snapshot (saved to data/backups/)
+./scripts/maintenance/qdrant_snapshot.sh
+
+# List existing snapshots
+./scripts/maintenance/qdrant_snapshot.sh --list
+
+# Restore from snapshot
+./scripts/maintenance/qdrant_snapshot.sh --restore data/backups/lexicon_arxiv_2026-02-13_120000.snapshot
+```
+
+The full pipeline automatically creates a snapshot before running (disable with `--skip-snapshot`).
+
+### Migrating to Persistent Volume
+
+If your Qdrant is currently running without a volume:
+
+1. **Create a snapshot first:**
+   ```bash
+   ./scripts/maintenance/qdrant_snapshot.sh
+   ```
+
+2. **Stop and remove the old container:**
+   ```bash
+   docker stop qdrant && docker rm qdrant
+   ```
+
+3. **Start with persistent volume:**
+   ```bash
+   docker run -d -p 6333:6333 --name qdrant -v qdrant_storage:/qdrant/storage qdrant/qdrant
+   ```
+
+4. **Restore from snapshot:**
+   ```bash
+   ./scripts/maintenance/qdrant_snapshot.sh --restore data/backups/<your-snapshot>.snapshot
+   ```
 
 ---
 

@@ -593,7 +593,7 @@ python -m src.cli.core_collect enrich-s2
 python -m src.cli.core_collect extract-pdf-refs
 
 # 5. Resolve references to internal IDs (with stub paper creation)
-python -m src.cli.core_collect resolve-refs --create-stubs
+python -m src.cli.core_collect resolve-refs
 
 # 6. Build cited_by index
 python -m src.cli.core_collect build-cited-by

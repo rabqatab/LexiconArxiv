@@ -332,8 +332,8 @@ python -m src.cli.core_collect resolve-refs --step internal --fuzzy-matching
 # External search for unresolved titles
 python -m src.cli.core_collect resolve-refs --step internal --external-search
 
-# Create stub papers for unresolved references (for complete citation graph)
-python -m src.cli.core_collect resolve-refs --create-stubs
+# Skip stub paper creation (stubs are created by default)
+python -m src.cli.core_collect resolve-refs --no-create-stubs
 ```
 
 **Options:**
@@ -342,7 +342,7 @@ python -m src.cli.core_collect resolve-refs --create-stubs
 | `--step [all\|normalize\|arxiv\|internal]` | Run specific step only |
 | `--fuzzy-matching` | Use fuzzy title matching (slower) |
 | `--external-search` | Search external APIs for unresolved titles |
-| `--create-stubs` | Create stub papers for unresolved references |
+| `--create-stubs/--no-create-stubs` | Create stub papers for unresolved references (default: enabled) |
 | `-n, --limit N` | Max papers to process |
 | `-p, --parallel N` | Concurrent requests |
 

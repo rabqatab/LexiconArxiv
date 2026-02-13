@@ -31,7 +31,7 @@ QDRANT_API_KEY=                         # Optional, for cloud Qdrant
 
 ```bash
 # Using Docker
-docker run -p 6333:6333 qdrant/qdrant
+docker run -d -p 6333:6333 --name qdrant -v qdrant_storage:/qdrant/storage qdrant/qdrant
 
 # Or using docker-compose if configured
 docker-compose up -d qdrant
