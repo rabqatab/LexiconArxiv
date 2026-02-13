@@ -26,6 +26,9 @@ source .venv/bin/activate
 # Install dependencies
 uv pip install -e ".[dev]"
 
+# Make all scripts executable
+chmod +x scripts/**/*.sh
+
 # Configure environment
 cp .env.example .env
 ```
@@ -35,6 +38,23 @@ Edit `.env` with your settings:
 OPENALEX_EMAIL=your-email@example.com   # Required for polite pool (10 req/sec)
 QDRANT_URL=http://localhost:6333
 QDRANT_COLLECTION=lexicon_arxiv
+```
+
+### Deploying to a Production Server
+
+After cloning on a new machine (or pulling updates):
+
+```bash
+git clone https://github.com/your-org/lexiconarxiv.git && cd lexiconarxiv
+uv venv && source .venv/bin/activate && uv pip install -e .
+chmod +x scripts/**/*.sh
+cp .env.example .env  # then edit with your credentials
+```
+
+If pulling updates to an existing deployment, clean stale Python cache:
+
+```bash
+git pull && find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null
 ```
 
 ---

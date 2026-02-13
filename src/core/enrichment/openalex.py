@@ -140,7 +140,7 @@ class PaperEnricher(BaseEnricher, OpenAlexMixin):
         return await self.fetch_paper_data(doi)
 
     async def search_by_title(
-        self, title: str, min_refs: int = 1
+        self, title: str, min_refs: int = 1, _retry_count: int = 0,
     ) -> dict[str, Any] | None:
         """Search OpenAlex by title and return paper with citations.
 
@@ -149,10 +149,13 @@ class PaperEnricher(BaseEnricher, OpenAlexMixin):
         Args:
             title: The paper title to search for.
             min_refs: Minimum number of references required (default 1).
+            _retry_count: Internal retry counter (do not set manually).
 
         Returns:
             Dict with 'doi', 'referenced_works', 'abstract', or None if not found.
         """
+        max_retries = 3
+
         if not self._client:
             raise RuntimeError("Client not initialized. Use async context manager.")
 
@@ -167,11 +170,20 @@ class PaperEnricher(BaseEnricher, OpenAlexMixin):
             if response.status_code == 429:
                 # Check if API key credits exhausted - if so, switch to email and retry
                 if self._handle_api_key_exhaustion(response):
-                    return await self.search_by_title(title, min_refs)
-                # Regular rate limiting - wait and retry
-                logger.warning("Rate limited, waiting 60 seconds...")
+                    return await self.search_by_title(title, min_refs, _retry_count=0)
+                # Regular rate limiting - wait and retry (with max retries)
+                if _retry_count >= max_retries:
+                    logger.warning(
+                        f"OpenAlex rate limit: max retries ({max_retries}) reached "
+                        f"for title search '{title[:50]}', skipping."
+                    )
+                    return None
+                logger.warning(
+                    f"Rate limited, waiting 60s... "
+                    f"(retry {_retry_count + 1}/{max_retries})"
+                )
                 await asyncio.sleep(60)
-                return await self.search_by_title(title, min_refs)
+                return await self.search_by_title(title, min_refs, _retry_count=_retry_count + 1)
             response.raise_for_status()
             data = response.json()
 
