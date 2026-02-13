@@ -13,8 +13,9 @@ class VenueConfig:
     name: str  # Short venue name (e.g., "NeurIPS")
     full_name: str  # Full venue name
     source_id: str | None  # Primary OpenAlex Source ID (e.g., "S4306420609")
-    tier: int  # 0 = top tier, 1 = second tier
+    tier: int  # 0 = top tier, 1 = second tier, 2 = specialized/legal
     venue_type: str = "conference"  # conference, journal, workshop
+    domain: str = "ai"  # Domain: "ai" (default), "legal", etc.
     # Some venues have per-year Source IDs in OpenAlex (fragmented)
     alt_source_ids: tuple[str, ...] = ()  # Additional per-year Source IDs
 
@@ -258,7 +259,7 @@ TIER_1_VENUES = [
     ),
 ]
 
-# Tier 2: Specialized/Applied venues (legal AI, etc.)
+# Tier 2: Legal AI domain venues
 TIER_2_VENUES = [
     VenueConfig(
         name="AILaw",
@@ -266,6 +267,7 @@ TIER_2_VENUES = [
         source_id="S96609033",
         tier=2,
         venue_type="journal",
+        domain="legal",
     ),
     VenueConfig(
         name="ICAIL",
@@ -273,6 +275,7 @@ TIER_2_VENUES = [
         source_id="S4306419144",  # Limited OpenAlex coverage
         tier=2,
         venue_type="conference",
+        domain="legal",
     ),
     VenueConfig(
         name="JURIX",
@@ -280,6 +283,23 @@ TIER_2_VENUES = [
         source_id="S4306419638",  # Limited OpenAlex coverage
         tier=2,
         venue_type="conference",
+        domain="legal",
+    ),
+    VenueConfig(
+        name="NLLP",
+        full_name="Natural Legal Language Processing Workshop",
+        source_id=None,  # No stable OpenAlex source; collected via ACL/EMNLP workshops
+        tier=2,
+        venue_type="workshop",
+        domain="legal",
+    ),
+    VenueConfig(
+        name="LREC-Legal",
+        full_name="Workshop on Language Resources and Technologies for the Legal Knowledge Graph",
+        source_id=None,  # Collected via LREC workshops
+        tier=2,
+        venue_type="workshop",
+        domain="legal",
     ),
 ]
 
@@ -309,3 +329,13 @@ def get_discovered_venues() -> list[VenueConfig]:
 def get_undiscovered_venues() -> list[VenueConfig]:
     """Get all venues that need Source ID discovery."""
     return [v for v in VENUES if not v.is_discovered]
+
+
+def get_venues_by_domain(domain: str) -> list[VenueConfig]:
+    """Get all venues for a specific domain (e.g., 'legal', 'ai')."""
+    return [v for v in VENUES if v.domain == domain]
+
+
+# Domain constants
+DOMAIN_AI = "ai"
+DOMAIN_LEGAL = "legal"

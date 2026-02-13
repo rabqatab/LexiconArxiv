@@ -144,124 +144,121 @@ class StubEnricher(BaseEnricher, OpenAlexMixin, CrossRefMixin):
             payload: The stub's current payload.
             progress: Progress tracker to update.
         """
-        async with self._semaphore:
-            await asyncio.sleep(self.delay)
+        progress.processed += 1
+        identifier = payload.get("identifier", "")
+        id_type = payload.get("identifier_type", "")
 
-            progress.processed += 1
-            identifier = payload.get("identifier", "")
-            id_type = payload.get("identifier_type", "")
+        try:
+            metadata = None
 
-            try:
-                metadata = None
+            if id_type == "doi":
+                # Try OpenAlex first, then CrossRef
+                doi = identifier.replace("DOI:", "").replace("doi:", "")
+                raw_data = await self.fetch_openalex_work(doi, "doi")
+                if raw_data:
+                    metadata = self.parse_openalex_work(raw_data)
+                else:
+                    raw_data = await self.fetch_crossref_work(doi)
+                    if raw_data:
+                        metadata = self.parse_crossref_work(raw_data)
 
-                if id_type == "doi":
-                    # Try OpenAlex first, then CrossRef
-                    doi = identifier.replace("DOI:", "").replace("doi:", "")
-                    raw_data = await self.fetch_openalex_work(doi, "doi")
+            elif id_type == "arxiv":
+                arxiv_id = identifier.replace("arXiv:", "").replace("arxiv:", "")
+                # Try direct arXiv lookup first
+                raw_data = await self.fetch_openalex_work(arxiv_id, "arxiv")
+                if raw_data:
+                    metadata = self.parse_openalex_work(raw_data)
+                else:
+                    # Try arXiv DOI format: 10.48550/arXiv.{id}
+                    arxiv_doi = f"10.48550/arXiv.{arxiv_id}"
+                    raw_data = await self.fetch_openalex_work(arxiv_doi, "doi")
                     if raw_data:
                         metadata = self.parse_openalex_work(raw_data)
+
+            elif id_type == "openalex":
+                work_id = identifier.replace("W", "").replace("w", "")
+                raw_data = await self.fetch_openalex_work(work_id, "openalex")
+                if raw_data:
+                    metadata = self.parse_openalex_work(raw_data)
+
+            if metadata:
+                # Check for duplicate stubs with discovered identifiers
+                duplicate_stub = await self._check_for_duplicate(
+                    stub_id=stub_id,
+                    current_type=id_type,
+                    metadata=metadata,
+                )
+
+                if duplicate_stub:
+                    # Merge current stub into the duplicate
+                    dup_id, dup_payload = duplicate_stub
+                    success = self.storage.merge_stubs(
+                        keep_stub_id=dup_id,
+                        merge_stub_id=stub_id,
+                    )
+                    if success:
+                        progress.merged += 1
+                        logger.info(
+                            f"Merged duplicate stub {stub_id} ({id_type}) "
+                            f"into {dup_id}"
+                        )
+                        # Also update the kept stub with metadata if needed
+                        if not dup_payload.get("title"):
+                            self.storage.update_stub_metadata(
+                                stub_id=dup_id,
+                                title=metadata.get("title"),
+                                year=metadata.get("year"),
+                                authors=metadata.get("authors"),
+                                venue=metadata.get("venue"),
+                                abstract=metadata.get("abstract"),
+                                citation_count=metadata.get("citation_count"),
+                            )
                     else:
-                        raw_data = await self.fetch_crossref_work(doi)
-                        if raw_data:
-                            metadata = self.parse_crossref_work(raw_data)
-
-                elif id_type == "arxiv":
-                    arxiv_id = identifier.replace("arXiv:", "").replace("arxiv:", "")
-                    # Try direct arXiv lookup first
-                    raw_data = await self.fetch_openalex_work(arxiv_id, "arxiv")
-                    if raw_data:
-                        metadata = self.parse_openalex_work(raw_data)
-                    else:
-                        # Try arXiv DOI format: 10.48550/arXiv.{id}
-                        arxiv_doi = f"10.48550/arXiv.{arxiv_id}"
-                        raw_data = await self.fetch_openalex_work(arxiv_doi, "doi")
-                        if raw_data:
-                            metadata = self.parse_openalex_work(raw_data)
-
-                elif id_type == "openalex":
-                    work_id = identifier.replace("W", "").replace("w", "")
-                    raw_data = await self.fetch_openalex_work(work_id, "openalex")
-                    if raw_data:
-                        metadata = self.parse_openalex_work(raw_data)
-
-                if metadata:
-                    # Check for duplicate stubs with discovered identifiers
-                    duplicate_stub = await self._check_for_duplicate(
+                        progress.errors += 1
+                else:
+                    # No duplicate, just update metadata and add alternate identifiers
+                    success = self.storage.update_stub_metadata(
                         stub_id=stub_id,
-                        current_type=id_type,
-                        metadata=metadata,
+                        title=metadata.get("title"),
+                        year=metadata.get("year"),
+                        authors=metadata.get("authors"),
+                        venue=metadata.get("venue"),
+                        abstract=metadata.get("abstract"),
+                        citation_count=metadata.get("citation_count"),
                     )
 
-                    if duplicate_stub:
-                        # Merge current stub into the duplicate
-                        dup_id, dup_payload = duplicate_stub
-                        success = self.storage.merge_stubs(
-                            keep_stub_id=dup_id,
-                            merge_stub_id=stub_id,
+                    # Add discovered alternate identifiers
+                    if id_type != "doi" and metadata.get("doi"):
+                        self.storage.add_stub_alternate_identifier(
+                            stub_id, "doi", metadata["doi"]
                         )
-                        if success:
-                            progress.merged += 1
-                            logger.info(
-                                f"Merged duplicate stub {stub_id} ({id_type}) "
-                                f"into {dup_id}"
-                            )
-                            # Also update the kept stub with metadata if needed
-                            if not dup_payload.get("title"):
-                                self.storage.update_stub_metadata(
-                                    stub_id=dup_id,
-                                    title=metadata.get("title"),
-                                    year=metadata.get("year"),
-                                    authors=metadata.get("authors"),
-                                    venue=metadata.get("venue"),
-                                    abstract=metadata.get("abstract"),
-                                    citation_count=metadata.get("citation_count"),
-                                )
-                        else:
-                            progress.errors += 1
+                    if id_type != "arxiv" and metadata.get("arxiv_id"):
+                        self.storage.add_stub_alternate_identifier(
+                            stub_id, "arxiv", metadata["arxiv_id"]
+                        )
+                    if id_type != "openalex" and metadata.get("openalex_id"):
+                        self.storage.add_stub_alternate_identifier(
+                            stub_id, "openalex", metadata["openalex_id"]
+                        )
+
+                    if success:
+                        progress.enriched += 1
+                        logger.debug(f"Enriched stub {stub_id}: {metadata.get('title', '')[:50]}")
                     else:
-                        # No duplicate, just update metadata and add alternate identifiers
-                        success = self.storage.update_stub_metadata(
-                            stub_id=stub_id,
-                            title=metadata.get("title"),
-                            year=metadata.get("year"),
-                            authors=metadata.get("authors"),
-                            venue=metadata.get("venue"),
-                            abstract=metadata.get("abstract"),
-                            citation_count=metadata.get("citation_count"),
-                        )
+                        progress.errors += 1
+            else:
+                progress.not_found += 1
 
-                        # Add discovered alternate identifiers
-                        if id_type != "doi" and metadata.get("doi"):
-                            self.storage.add_stub_alternate_identifier(
-                                stub_id, "doi", metadata["doi"]
-                            )
-                        if id_type != "arxiv" and metadata.get("arxiv_id"):
-                            self.storage.add_stub_alternate_identifier(
-                                stub_id, "arxiv", metadata["arxiv_id"]
-                            )
-                        if id_type != "openalex" and metadata.get("openalex_id"):
-                            self.storage.add_stub_alternate_identifier(
-                                stub_id, "openalex", metadata["openalex_id"]
-                            )
+        except Exception as e:
+            logger.warning(f"Error enriching stub {stub_id}: {e}")
+            progress.errors += 1
 
-                        if success:
-                            progress.enriched += 1
-                            logger.debug(f"Enriched stub {stub_id}: {metadata.get('title', '')[:50]}")
-                        else:
-                            progress.errors += 1
-                else:
-                    progress.not_found += 1
-
-            except Exception as e:
-                logger.warning(f"Error enriching stub {stub_id}: {e}")
-                progress.errors += 1
-
-            # Progress logging
-            if progress.processed % 100 == 0:
-                logger.info(
-                    f"Stub enrichment progress: {progress.processed}/{progress.total_to_process}, "
-                    f"{progress.enriched} enriched, {progress.merged} merged"
-                )
+        # Progress logging
+        if progress.processed % 100 == 0:
+            logger.info(
+                f"Stub enrichment progress: {progress.processed}/{progress.total_to_process}, "
+                f"{progress.enriched} enriched, {progress.merged} merged"
+            )
 
     async def _check_for_duplicate(
         self,

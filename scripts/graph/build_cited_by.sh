@@ -26,12 +26,19 @@ echo "Current citation graph status:"
 uv run python -m src.cli.core_collect citation-graph-stats
 echo ""
 
-# Build cited_by
+# Build cited_by (use --incremental for faster updates after resolve-refs)
 echo "Building cited_by field..."
 echo "(Scanning all papers and computing reverse citations)"
 echo ""
 
-uv run python -m src.cli.core_collect build-cited-by
+# Full rebuild by default; pass INCREMENTAL=true for incremental mode
+if [ "${INCREMENTAL:-false}" = true ]; then
+    echo "Mode: Incremental (only unindexed papers)"
+    uv run python -m src.cli.core_collect build-cited-by --incremental
+else
+    echo "Mode: Full rebuild"
+    uv run python -m src.cli.core_collect build-cited-by
+fi
 
 echo ""
 echo "=========================================="

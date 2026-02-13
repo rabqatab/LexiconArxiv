@@ -12,6 +12,18 @@ Core modules:
 - deduplication.py - Cross-source deduplication
 """
 
+from src.core.exceptions import (
+    LexiconArxivError,
+    StorageError,
+    CollectionNotFoundError,
+    PaperNotFoundError,
+    EnrichmentError,
+    APIRateLimitError,
+    ResolutionError,
+    CheckpointError,
+    CrawlerError,
+    ConfigurationError,
+)
 from src.core.config import VENUES, VenueConfig, get_tier_venues, get_venue_by_name
 from src.core.constants import (
     OPENALEX_BASE_URL,
@@ -70,6 +82,17 @@ from src.core.resolution import (
 )
 
 __all__ = [
+    # Exceptions
+    "LexiconArxivError",
+    "StorageError",
+    "CollectionNotFoundError",
+    "PaperNotFoundError",
+    "EnrichmentError",
+    "APIRateLimitError",
+    "ResolutionError",
+    "CheckpointError",
+    "CrawlerError",
+    "ConfigurationError",
     # API Constants
     "OPENALEX_BASE_URL",
     "CROSSREF_BASE_URL",

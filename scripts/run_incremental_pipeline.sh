@@ -95,7 +95,7 @@ if [ "$DRY_RUN" = true ]; then
     echo "  6. resolve-refs --create-stubs"
     echo "  7. enrich-stubs --parallel $PARALLEL"
     if [ "$SKIP_GRAPH" = false ]; then
-        echo "  8. build-citation-graph"
+        echo "  8. build-cited-by --incremental"
     fi
     exit 0
 fi
@@ -138,11 +138,11 @@ echo ""
 echo "[Step 7/7] Enriching stub papers..."
 uv run python -m src.cli.core_collect enrich-stubs --parallel "$PARALLEL"
 
-# Step 8: Rebuild citation graph (optional)
+# Step 8: Incrementally update cited_by index (optional)
 if [ "$SKIP_GRAPH" = false ]; then
     echo ""
-    echo "[Step 8/8] Building citation graph..."
-    uv run python -m src.cli.core_collect build-citation-graph
+    echo "[Step 8/8] Updating cited_by index (incremental)..."
+    uv run python -m src.cli.core_collect build-cited-by --incremental
 fi
 
 # Done
