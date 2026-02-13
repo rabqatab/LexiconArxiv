@@ -166,7 +166,9 @@ class PaperEnricher(BaseEnricher, OpenAlexMixin):
         params.update(self._get_openalex_params())
 
         try:
-            response = await self._client.get(url, params=params)
+            async with self._semaphore:
+                response = await self._client.get(url, params=params)
+                await asyncio.sleep(self.delay)
             if response.status_code == 429:
                 # Check if API key credits exhausted - if so, switch to email and retry
                 if self._handle_api_key_exhaustion(response):
@@ -232,11 +234,8 @@ class PaperEnricher(BaseEnricher, OpenAlexMixin):
     async def _search_title_with_limit(
         self, title: str, min_refs: int = 1
     ) -> dict[str, Any] | None:
-        """Search by title with semaphore-controlled concurrency."""
-        async with self._semaphore:
-            result = await self.search_by_title(title, min_refs)
-            await asyncio.sleep(self.delay)
-            return result
+        """Search by title with concurrency control (managed inside search_by_title)."""
+        return await self.search_by_title(title, min_refs)
 
     async def enrich_batch_parallel(
         self,
