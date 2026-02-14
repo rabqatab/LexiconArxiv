@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 import httpx
 
 from src.core.enrichment.base import OPENALEX_BASE_URL, BaseEnricher, OpenAlexMixin
+from src.core.exceptions import APIRateLimitError
 
 if TYPE_CHECKING:
     from src.core.storage import QdrantStorage
@@ -52,7 +53,7 @@ class PaperEnricher(BaseEnricher, OpenAlexMixin):
     """Unified enricher for citations and abstracts from OpenAlex."""
 
     DEFAULT_DELAY = 0.1
-    DEFAULT_CONCURRENT_API_KEY = 5  # Higher limit when using API key
+    DEFAULT_CONCURRENT_API_KEY = 3  # Stay under 10 req/s with delay=0.1
     DEFAULT_CONCURRENT_EMAIL = 1  # Lower limit for email-based polite pool
 
     def __init__(
@@ -92,6 +93,7 @@ class PaperEnricher(BaseEnricher, OpenAlexMixin):
             delay=delay,
             max_concurrent=max_concurrent,
         )
+        self._original_max_concurrent = max_concurrent
         self.batch_size = batch_size
 
         # Checkpoint
@@ -179,7 +181,9 @@ class PaperEnricher(BaseEnricher, OpenAlexMixin):
                         f"OpenAlex rate limit: max retries ({max_retries}) reached "
                         f"for title search '{title[:50]}', skipping."
                     )
-                    return None
+                    raise APIRateLimitError(
+                        f"Max retries ({max_retries}) for title: {title[:50]}"
+                    )
                 logger.warning(
                     f"Rate limited, waiting 60s... "
                     f"(retry {_retry_count + 1}/{max_retries})"
@@ -273,6 +277,13 @@ class PaperEnricher(BaseEnricher, OpenAlexMixin):
 
         for (point_id, payload), result in zip(to_process, results):
             progress.processed += 1
+
+            if isinstance(result, APIRateLimitError):
+                # Don't mark as processed — will retry on next run
+                progress.errors += 1
+                continue
+
+            # Mark as processed (success, not-found, or other error)
             progress.processed_point_ids.add(point_id)
 
             if isinstance(result, Exception):
@@ -356,6 +367,13 @@ class PaperEnricher(BaseEnricher, OpenAlexMixin):
 
         for (point_id, payload), result in zip(to_process, results):
             progress.processed += 1
+
+            if isinstance(result, APIRateLimitError):
+                # Don't mark as processed — will retry on next run
+                progress.errors += 1
+                continue
+
+            # Mark as processed (success, not-found, or other error)
             progress.processed_point_ids.add(point_id)
 
             if isinstance(result, Exception):

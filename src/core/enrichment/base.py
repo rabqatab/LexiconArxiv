@@ -7,11 +7,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from abc import ABC
 from typing import TYPE_CHECKING, Any
 
 import httpx
 
+from src.core.exceptions import APIRateLimitError
 from src.core.constants import (
     CROSSREF_BASE_URL,
     OPENALEX_BASE_URL,
@@ -116,6 +118,9 @@ class OpenAlexMixin:
     email: str | None = None
     api_key: str | None = None
     _api_key_exhausted: bool = False  # Track if API key credits are exhausted
+    _api_key_exhausted_at: float = 0  # When exhaustion was detected
+    _api_key_cooldown: float = 300  # Retry API key after 5 minutes
+    _original_max_concurrent: int = 1  # Remember pre-exhaustion concurrency
     _client: httpx.AsyncClient | None = None
     _semaphore: asyncio.Semaphore | None = None
     delay: float = 0.1
@@ -139,9 +144,21 @@ class OpenAlexMixin:
         """Get query parameters for OpenAlex API calls.
 
         Falls back to email-based polite pool if API key credits are exhausted.
+        Automatically retries API key after cooldown period.
         """
+        # Check if cooldown has elapsed — try API key again
+        if self._api_key_exhausted and self.api_key:
+            elapsed = time.monotonic() - self._api_key_exhausted_at
+            if elapsed > self._api_key_cooldown:
+                self._api_key_exhausted = False
+                if hasattr(self, "_semaphore") and self._semaphore is not None:
+                    self._semaphore = asyncio.Semaphore(self._original_max_concurrent)
+                logger.info(
+                    f"API key cooldown ({self._api_key_cooldown}s) elapsed, "
+                    f"retrying API key (concurrency: {self._original_max_concurrent})"
+                )
+
         params = {}
-        # Use API key only if available AND not exhausted
         if self.api_key and not self._api_key_exhausted:
             params["api_key"] = self.api_key
         elif self.email:
@@ -165,19 +182,24 @@ class OpenAlexMixin:
                 data = response.json()
                 if "Insufficient credits" in data.get("message", ""):
                     self._api_key_exhausted = True
+                    self._api_key_exhausted_at = time.monotonic()
                     # Reduce concurrency for email-based polite pool
                     if hasattr(self, "_semaphore") and self._semaphore is not None:
-                        old_value = self._semaphore._value
+                        self._original_max_concurrent = max(
+                            self._original_max_concurrent, self._semaphore._value
+                        )
                         self._semaphore = asyncio.Semaphore(1)
                         logger.warning(
                             "OpenAlex API key credits exhausted. "
                             "Falling back to email-based polite pool "
-                            f"(concurrency: {old_value} -> 1)."
+                            f"(concurrency: {self._original_max_concurrent} -> 1). "
+                            f"Will retry API key in {self._api_key_cooldown}s."
                         )
                     else:
                         logger.warning(
                             "OpenAlex API key credits exhausted. "
-                            "Falling back to email-based polite pool."
+                            "Falling back to email-based polite pool. "
+                            f"Will retry API key in {self._api_key_cooldown}s."
                         )
                     return True
             except Exception:
@@ -242,7 +264,9 @@ class OpenAlexMixin:
                         f"OpenAlex rate limit: max retries ({max_retries}) reached "
                         f"for {identifier_type}:{identifier}, skipping."
                     )
-                    return None
+                    raise APIRateLimitError(
+                        f"Max retries ({max_retries}) for {identifier_type}:{identifier}"
+                    )
                 logger.warning(
                     f"Rate limited by OpenAlex, waiting 60s... "
                     f"(retry {_retry_count + 1}/{max_retries})"
