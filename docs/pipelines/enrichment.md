@@ -335,7 +335,7 @@ print(f'Papers with abstracts: {stats[\"by_source\"]}')
 
 ---
 
-## 4. Keyword Extraction (NEW)
+## 4. Keyword Extraction
 
 ### Problem
 
@@ -343,43 +343,37 @@ Papers lack searchable keywords/acronyms, making exact paper retrieval difficult
 
 ### Solution
 
-Two-phase extraction pipeline:
+Multi-phase extraction pipeline with optional LLM enhancement:
 
 1. **Regex-based Acronym Extraction**: Extract explicit acronyms from titles/abstracts
 2. **KeyBERT Semantic Extraction**: Extract semantic keywords from abstracts
+3. **LLM Extraction** (optional): Extract keywords via Gemini API or local Ollama
+4. **LLM Judge** (optional): Validate and filter keywords for relevance
 
 ### Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                 Keyword Extraction Pipeline                      │
-├─────────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────────────┐ │
-│  │   Qdrant    │───▶│  Phase 1    │───▶│     Phase 2         │ │
-│  │  (papers)   │    │  Regex      │    │     KeyBERT         │ │
-│  └─────────────┘    │  Extraction │    │     Extraction      │ │
-│                     └──────┬──────┘    └──────────┬──────────┘ │
-│                            │                      │             │
-│                            ▼                      ▼             │
-│                     ┌─────────────────────────────────────┐     │
-│                     │      Filter & Merge Keywords        │     │
-│                     └──────────────────┬──────────────────┘     │
-│                                        │                        │
-│                                        ▼                        │
-│                              ┌─────────────────┐                │
-│                              │  Update Qdrant  │                │
-│                              │   (keywords)    │                │
-│                              └─────────────────┘                │
-└─────────────────────────────────────────────────────────────────┘
+Regex → KeyBERT → LLM Extraction → Normalize → Judge → Qdrant
+(always)  (opt)      (opt)                       (opt)
 ```
 
 ### CLI Commands
 
 ```bash
-# Keyword extraction
-uv run python -m src.cli.core_collect extract-keywords              # Full extraction
-uv run python -m src.cli.core_collect extract-keywords --dry-run    # Preview
-uv run python -m src.cli.core_collect extract-keywords --no-keybert # Regex only
+# Default extraction (regex + KeyBERT)
+uv run python -m src.cli.core_collect extract-keywords
+
+# Full pipeline with Gemini LLM + judge
+uv run python -m src.cli.core_collect extract-keywords --llm --judge
+
+# Local Ollama pipeline
+uv run python -m src.cli.core_collect extract-keywords --llm --judge --llm-backend ollama
+
+# Regex only (faster)
+uv run python -m src.cli.core_collect extract-keywords --no-keybert
+
+# Preview
+uv run python -m src.cli.core_collect extract-keywords --dry-run --limit 10
 
 # Statistics
 uv run python -m src.cli.core_collect keyword-stats

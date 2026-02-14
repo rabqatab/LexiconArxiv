@@ -10,7 +10,7 @@ AI Research Insights Engine - Core Corpus collection and semantic search for top
 - **Cross-source Deduplication**: Automatic duplicate detection
 - **Checkpoint Resume**: Resumable collection with progress tracking
 - **Qdrant Integration**: Payload-only storage with optional named vectors
-- **Keyword Extraction**: Acronym + semantic keyword extraction for BM25 search
+- **Keyword Extraction**: Regex + KeyBERT + optional LLM (Gemini/Ollama) + LLM judge for BM25 search
 - **Citation Graph**: Reference resolution and GraphRAG support
 - **Graph Visualization API**: REST API + D3.js UI for interactive citation graph exploration
 - **Stub Papers**: Store external references with automatic deduplication for complete citation graph
@@ -173,9 +173,10 @@ uv run python -m src.cli.core_collect stub-stats                        # Most-c
 uv run python -m src.cli.core_collect enrich-stubs --limit 1000         # Fetch metadata for stubs
 
 # Keyword Extraction (for BM25 search)
-uv run python -m src.cli.core_collect extract-keywords              # Full extraction
-uv run python -m src.cli.core_collect extract-keywords --dry-run    # Preview mode
+uv run python -m src.cli.core_collect extract-keywords              # Default (regex + KeyBERT)
+uv run python -m src.cli.core_collect extract-keywords --llm --judge  # Full LLM pipeline
 uv run python -m src.cli.core_collect extract-keywords --no-keybert # Regex only (faster)
+uv run python -m src.cli.core_collect extract-keywords --dry-run    # Preview mode
 uv run python -m src.cli.core_collect keyword-stats                 # Show statistics
 ```
 
@@ -230,9 +231,13 @@ lexiconarxiv/
 │   │   │   ├── normalizer.py    # ID normalization (DOI, arXiv, OpenAlex)
 │   │   │   └── resolver.py      # Citation graph builder
 │   │   └── keyword/             # Keyword extraction
-│   │       ├── extractor.py     # Main KeywordExtractor class
+│   │       ├── extractor.py     # KeywordExtractor (sync + async pipeline)
 │   │       ├── patterns.py      # Regex patterns for acronyms
-│   │       └── stopwords.py     # Stopword filtering
+│   │       ├── stopwords.py     # Stopword filtering
+│   │       ├── llm_base.py      # Pydantic models, prompts, ABC base classes
+│   │       ├── gemini.py        # Gemini API extraction + judge
+│   │       ├── ollama.py        # Ollama REST API extraction + judge
+│   │       └── judge.py         # KeywordJudge wrapper
 │   └── models/
 │       └── paper.py             # Paper data model
 ├── docs/                        # Documentation
@@ -242,6 +247,7 @@ lexiconarxiv/
 
 ## Recent Updates (Feb 2026)
 
+- **LLM-Enhanced Keywords**: Gemini/Ollama keyword extraction + LLM judge validation, configurable embedding models
 - **Graph Visualization API**: FastAPI REST API with D3.js UI for interactive citation graph exploration
 - **Payload-Only Architecture**: Decouple enrichment from embeddings (see below)
 - **Code Refactoring**: BaseCrawler class, BaseEnricher with mixins, centralized constants

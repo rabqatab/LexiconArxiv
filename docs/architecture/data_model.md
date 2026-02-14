@@ -442,8 +442,8 @@ client.update_collection(
     "referenced_works": "keyword[]",
     "cited_by": "keyword[]",   // Internal paper IDs that cite this paper
     "cited_by_count_internal": "integer",
-    "keywords": "keyword[]",   // Extracted keywords/acronyms (acronyms + KeyBERT)
-    "keywords_source": "keyword"  // "regex", "keybert", "both"
+    "keywords": "keyword[]",   // Extracted keywords/acronyms (regex + KeyBERT + LLM)
+    "keywords_source": "keyword"  // pipe-delimited: "regex", "regex|keybert", "regex|keybert|gemini|judge", etc.
   }
 }
 ```

@@ -341,6 +341,64 @@ uv run python -m src.cli.core_collect extract-keywords --no-keybert
 uv run python -m src.cli.core_collect extract-keywords --limit 1000
 ```
 
+### Gemini API Key Not Found
+
+**Symptoms:**
+- `ValueError: Gemini API key not found. Set GEMINI_API_KEY or GOOGLE_API_KEY.`
+
+**Solution:**
+
+Set the API key in your `.env` file:
+
+```bash
+GEMINI_API_KEY=your_api_key_here
+```
+
+Get a key at: https://aistudio.google.com/app/apikey
+
+### Ollama Connection Refused
+
+**Symptoms:**
+- `httpx.ConnectError: Connection refused` when using `--llm-backend ollama`
+
+**Solution:**
+
+1. Ensure Ollama is running:
+
+```bash
+ollama serve
+```
+
+2. Pull the required model:
+
+```bash
+ollama pull llama3.1:8b
+```
+
+3. Verify with custom URL if not on default port:
+
+```bash
+OLLAMA_BASE_URL=http://localhost:11434 uv run python -m src.cli.core_collect extract-keywords --llm --llm-backend ollama
+```
+
+### LLM Extraction Timeout
+
+**Cause:** Local Ollama model is too slow for the default 60s timeout.
+
+**Solutions:**
+
+1. Use a smaller model:
+
+```bash
+uv run python -m src.cli.core_collect extract-keywords --llm --llm-backend ollama --ollama-model qwen2.5:7b
+```
+
+2. Use Gemini (cloud, faster):
+
+```bash
+uv run python -m src.cli.core_collect extract-keywords --llm --llm-backend gemini
+```
+
 ---
 
 ## Data Loss Prevention

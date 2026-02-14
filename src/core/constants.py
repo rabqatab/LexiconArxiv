@@ -45,6 +45,14 @@ SEMANTIC_SCHOLAR_API_KEY_ENV = "SEMANTIC_SCHOLAR_API_KEY"
 QDRANT_URL_ENV = "QDRANT_URL"
 QDRANT_COLLECTION_ENV = "QDRANT_COLLECTION"
 
+# Gemini
+GEMINI_API_KEY_ENV = "GEMINI_API_KEY"
+GOOGLE_API_KEY_ENV = "GOOGLE_API_KEY"
+
+# Ollama
+OLLAMA_BASE_URL_ENV = "OLLAMA_BASE_URL"
+DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434"
+
 
 # =============================================================================
 # Helper Functions
@@ -82,3 +90,16 @@ def get_qdrant_url() -> str:
 def get_qdrant_collection() -> str:
     """Get Qdrant collection name from environment with default."""
     return os.getenv(QDRANT_COLLECTION_ENV, "lexicon_arxiv")
+
+
+def get_gemini_api_key() -> str | None:
+    """Get Gemini API key from environment.
+
+    Checks both GEMINI_API_KEY and GOOGLE_API_KEY.
+    """
+    return os.getenv(GEMINI_API_KEY_ENV) or os.getenv(GOOGLE_API_KEY_ENV)
+
+
+def get_ollama_base_url() -> str:
+    """Get Ollama base URL from environment with default."""
+    return os.getenv(OLLAMA_BASE_URL_ENV, DEFAULT_OLLAMA_BASE_URL)

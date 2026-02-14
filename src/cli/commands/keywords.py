@@ -1,5 +1,6 @@
 """Keyword extraction commands for LexiconArxiv CLI."""
 
+import asyncio
 import json
 import logging
 from pathlib import Path
@@ -19,126 +20,102 @@ def register_commands(cli: click.Group):
     @click.option("--batch-size", default=100, help="Papers per batch (default: 100)")
     @click.option("--no-keybert", is_flag=True, help="Use only regex patterns (faster)")
     @click.option("--force", is_flag=True, help="Re-extract for papers that already have keywords")
+    @click.option(
+        "--embedding-model",
+        default="all-MiniLM-L6-v2",
+        help="Sentence-transformers model for KeyBERT (default: all-MiniLM-L6-v2)",
+    )
+    @click.option("--llm", "use_llm", is_flag=True, help="Enable LLM keyword extraction")
+    @click.option(
+        "--llm-backend",
+        type=click.Choice(["gemini", "ollama"]),
+        default="gemini",
+        help="LLM backend (default: gemini)",
+    )
+    @click.option("--judge", "use_judge", is_flag=True, help="Enable LLM judge validation")
+    @click.option(
+        "--judge-backend",
+        type=click.Choice(["gemini", "ollama"]),
+        default=None,
+        help="Judge backend (default: same as --llm-backend)",
+    )
+    @click.option(
+        "--ollama-model",
+        default="llama3.1:8b",
+        help="Ollama model name (default: llama3.1:8b)",
+    )
+    @click.option(
+        "--gemini-model",
+        default="gemini-2.0-flash",
+        help="Gemini model name (default: gemini-2.0-flash)",
+    )
     def extract_keywords(
         dry_run: bool,
         limit: int | None,
         batch_size: int,
         no_keybert: bool,
         force: bool,
+        embedding_model: str,
+        use_llm: bool,
+        llm_backend: str,
+        use_judge: bool,
+        judge_backend: str | None,
+        ollama_model: str,
+        gemini_model: str,
     ) -> None:
         """Extract keywords from paper titles and abstracts.
 
-        Uses a two-phase extraction pipeline:
+        Uses a multi-phase extraction pipeline:
         1. Regex patterns for acronyms (BERT, HyDE, RAG, etc.)
         2. KeyBERT for semantic keywords (optional)
+        3. LLM extraction via Gemini or Ollama (optional)
+        4. LLM judge validation (optional)
 
         Examples:
 
-          # Extract keywords for all papers
-          python -m src.cli.core_collect extract-keywords
+          # Extract keywords for all papers (default: regex + KeyBERT)
+          uv run python -m src.cli.core_collect extract-keywords
 
-          # Preview without saving
-          python -m src.cli.core_collect extract-keywords --dry-run --limit 10
+          # Full pipeline with Gemini LLM + judge
+          uv run python -m src.cli.core_collect extract-keywords --llm --judge
 
-          # Use only regex (faster, no KeyBERT model loading)
-          python -m src.cli.core_collect extract-keywords --no-keybert
+          # Local Ollama pipeline
+          uv run python -m src.cli.core_collect extract-keywords --llm --judge --llm-backend ollama
 
-          # Re-extract keywords for all papers
-          python -m src.cli.core_collect extract-keywords --force
+          # Better embeddings
+          uv run python -m src.cli.core_collect extract-keywords --embedding-model all-mpnet-base-v2
+
+          # Preview full pipeline
+          uv run python -m src.cli.core_collect extract-keywords --llm --judge --dry-run --limit 10
         """
-        from src.core.keyword import KeywordExtractor
+        needs_async = use_llm or use_judge
 
-        storage = QdrantStorage()
-        extractor = KeywordExtractor(use_keybert=not no_keybert)
-
-        mode = "regex only" if no_keybert else "regex + KeyBERT"
-        click.echo(f"Keyword extraction mode: {mode}")
-
-        if dry_run:
-            click.echo("DRY RUN - changes will not be saved\n")
-
-        # Track stats
-        processed = 0
-        papers_with_keywords = 0
-        total_keywords = 0
-        offset = None
-
-        # Sample for dry run display
-        samples: list[tuple[str, str, list[str]]] = []
-
-        while True:
-            papers, next_offset = storage.get_papers_for_keyword_extraction(
-                limit=batch_size,
-                offset=offset,
-                skip_existing=not force,
+        if needs_async:
+            asyncio.run(
+                _extract_keywords_async(
+                    dry_run=dry_run,
+                    limit=limit,
+                    batch_size=batch_size,
+                    no_keybert=no_keybert,
+                    force=force,
+                    embedding_model=embedding_model,
+                    use_llm=use_llm,
+                    llm_backend=llm_backend,
+                    use_judge=use_judge,
+                    judge_backend=judge_backend or llm_backend,
+                    ollama_model=ollama_model,
+                    gemini_model=gemini_model,
+                )
             )
-
-            if not papers:
-                break
-
-            updates: list[tuple[str, list[str], str]] = []
-
-            for point_id, payload in papers:
-                title = payload.get("title", "")
-                abstract = payload.get("abstract")
-
-                keywords = extractor.extract(title, abstract)
-                source = extractor.get_extraction_source(title, abstract)
-
-                if keywords:
-                    papers_with_keywords += 1
-                    total_keywords += len(keywords)
-
-                updates.append((point_id, keywords, source))
-
-                # Collect samples for dry run
-                if dry_run and len(samples) < 5 and keywords:
-                    samples.append((title[:60], source, keywords[:5]))
-
-                processed += 1
-                if limit and processed >= limit:
-                    break
-
-            # Save if not dry run
-            if not dry_run and updates:
-                storage.batch_update_keywords_with_source(updates)
-
-            offset = next_offset
-
-            # Progress
-            if processed % 500 == 0:
-                click.echo(f"  Processed {processed} papers...")
-
-            if limit and processed >= limit:
-                break
-
-            if offset is None:
-                break
-
-        # Display results
-        click.echo(f"\n{'=' * 60}")
-        click.echo("KEYWORD EXTRACTION COMPLETE")
-        click.echo(f"{'=' * 60}\n")
-
-        click.echo(f"Papers processed:       {processed:,}")
-        click.echo(f"Papers with keywords:   {papers_with_keywords:,}")
-        click.echo(f"Total keywords:         {total_keywords:,}")
-
-        if papers_with_keywords > 0:
-            avg = total_keywords / papers_with_keywords
-            click.echo(f"Avg keywords per paper: {avg:.2f}")
-
-        # Show samples in dry run
-        if dry_run and samples:
-            click.echo(f"\n=== Sample Extractions ===\n")
-            for title, source, keywords in samples:
-                click.echo(f"Title:    {title}...")
-                click.echo(f"Source:   {source}")
-                click.echo(f"Keywords: {keywords}")
-                click.echo()
-
-        if dry_run:
-            click.echo("\nDRY RUN - no changes were saved. Run without --dry-run to save.")
+        else:
+            _extract_keywords_sync(
+                dry_run=dry_run,
+                limit=limit,
+                batch_size=batch_size,
+                no_keybert=no_keybert,
+                force=force,
+                embedding_model=embedding_model,
+            )
 
     @cli.command("keyword-stats")
     @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
@@ -153,10 +130,10 @@ def register_commands(cli: click.Group):
         Examples:
 
           # Show keyword stats
-          python -m src.cli.core_collect keyword-stats
+          uv run python -m src.cli.core_collect keyword-stats
 
           # Output as JSON
-          python -m src.cli.core_collect keyword-stats --json
+          uv run python -m src.cli.core_collect keyword-stats --json
         """
         storage = QdrantStorage()
 
@@ -205,10 +182,10 @@ def register_commands(cli: click.Group):
         Examples:
 
           # Clear checkpoint with confirmation
-          python -m src.cli.core_collect clear-keyword-checkpoint
+          uv run python -m src.cli.core_collect clear-keyword-checkpoint
 
           # Clear without prompting
-          python -m src.cli.core_collect clear-keyword-checkpoint --confirm
+          uv run python -m src.cli.core_collect clear-keyword-checkpoint --confirm
         """
         checkpoint_file = Path("data/core/checkpoints/keyword_extraction.json")
 
@@ -235,7 +212,7 @@ def register_commands(cli: click.Group):
         Examples:
 
           # Clear all keywords
-          python -m src.cli.core_collect clear-keywords --confirm
+          uv run python -m src.cli.core_collect clear-keywords --confirm
         """
         if not confirm:
             click.echo("WARNING: This will remove all keywords from all papers.")
@@ -248,3 +225,262 @@ def register_commands(cli: click.Group):
 
         cleared = storage.clear_all_keywords()
         click.echo(f"Cleared keywords from {cleared:,} papers.")
+
+
+def _extract_keywords_sync(
+    dry_run: bool,
+    limit: int | None,
+    batch_size: int,
+    no_keybert: bool,
+    force: bool,
+    embedding_model: str,
+) -> None:
+    """Synchronous keyword extraction (regex + KeyBERT only)."""
+    from src.core.keyword import KeywordExtractor
+
+    storage = QdrantStorage()
+    extractor = KeywordExtractor(
+        use_keybert=not no_keybert,
+        embedding_model=embedding_model,
+    )
+
+    mode = "regex only" if no_keybert else "regex + KeyBERT"
+    click.echo(f"Keyword extraction mode: {mode}")
+    if embedding_model != "all-MiniLM-L6-v2":
+        click.echo(f"Embedding model: {embedding_model}")
+
+    if dry_run:
+        click.echo("DRY RUN - changes will not be saved\n")
+
+    processed, papers_with_keywords, total_keywords, samples = _run_extraction_loop(
+        storage=storage,
+        extractor=extractor,
+        batch_size=batch_size,
+        limit=limit,
+        force=force,
+        dry_run=dry_run,
+    )
+
+    _display_results(processed, papers_with_keywords, total_keywords, samples, dry_run)
+
+
+async def _extract_keywords_async(
+    dry_run: bool,
+    limit: int | None,
+    batch_size: int,
+    no_keybert: bool,
+    force: bool,
+    embedding_model: str,
+    use_llm: bool,
+    llm_backend: str,
+    use_judge: bool,
+    judge_backend: str,
+    ollama_model: str,
+    gemini_model: str,
+) -> None:
+    """Async keyword extraction (with LLM and/or judge)."""
+    from src.core.keyword import KeywordExtractor
+
+    storage = QdrantStorage()
+    extractor = KeywordExtractor(
+        use_keybert=not no_keybert,
+        embedding_model=embedding_model,
+        use_llm=use_llm,
+        llm_backend=llm_backend,
+        use_judge=use_judge,
+        judge_backend=judge_backend,
+        ollama_model=ollama_model,
+        gemini_model=gemini_model,
+    )
+
+    parts = ["regex"]
+    if not no_keybert:
+        parts.append("KeyBERT")
+    if use_llm:
+        parts.append(f"LLM ({llm_backend})")
+    if use_judge:
+        parts.append(f"judge ({judge_backend})")
+    click.echo(f"Keyword extraction mode: {' + '.join(parts)}")
+
+    if dry_run:
+        click.echo("DRY RUN - changes will not be saved\n")
+
+    try:
+        processed, papers_with_keywords, total_keywords, samples = (
+            await _run_extraction_loop_async(
+                storage=storage,
+                extractor=extractor,
+                batch_size=batch_size,
+                limit=limit,
+                force=force,
+                dry_run=dry_run,
+            )
+        )
+
+        _display_results(
+            processed, papers_with_keywords, total_keywords, samples, dry_run
+        )
+    finally:
+        await extractor.close()
+
+
+def _run_extraction_loop(
+    storage: QdrantStorage,
+    extractor,
+    batch_size: int,
+    limit: int | None,
+    force: bool,
+    dry_run: bool,
+) -> tuple[int, int, int, list[tuple[str, str, list[str]]]]:
+    """Synchronous extraction loop (regex + KeyBERT only)."""
+    processed = 0
+    papers_with_keywords = 0
+    total_keywords = 0
+    offset = None
+    samples: list[tuple[str, str, list[str]]] = []
+
+    while True:
+        papers, next_offset = storage.get_papers_for_keyword_extraction(
+            limit=batch_size,
+            offset=offset,
+            skip_existing=not force,
+        )
+
+        if not papers:
+            break
+
+        updates: list[tuple[str, list[str], str]] = []
+
+        for point_id, payload in papers:
+            title = payload.get("title", "")
+            abstract = payload.get("abstract")
+
+            keywords = extractor.extract(title, abstract)
+            source = extractor.get_extraction_source(title, abstract)
+
+            if keywords:
+                papers_with_keywords += 1
+                total_keywords += len(keywords)
+
+            updates.append((point_id, keywords, source))
+
+            if dry_run and len(samples) < 5 and keywords:
+                samples.append((title[:60], source, keywords[:5]))
+
+            processed += 1
+            if limit and processed >= limit:
+                break
+
+        if not dry_run and updates:
+            storage.batch_update_keywords_with_source(updates)
+
+        offset = next_offset
+
+        if processed % 500 == 0:
+            click.echo(f"  Processed {processed} papers...")
+
+        if limit and processed >= limit:
+            break
+
+        if offset is None:
+            break
+
+    return processed, papers_with_keywords, total_keywords, samples
+
+
+async def _run_extraction_loop_async(
+    storage: QdrantStorage,
+    extractor,
+    batch_size: int,
+    limit: int | None,
+    force: bool,
+    dry_run: bool,
+) -> tuple[int, int, int, list[tuple[str, str, list[str]]]]:
+    """Async extraction loop (with LLM and/or judge)."""
+    processed = 0
+    papers_with_keywords = 0
+    total_keywords = 0
+    offset = None
+    samples: list[tuple[str, str, list[str]]] = []
+
+    while True:
+        papers, next_offset = storage.get_papers_for_keyword_extraction(
+            limit=batch_size,
+            offset=offset,
+            skip_existing=not force,
+        )
+
+        if not papers:
+            break
+
+        updates: list[tuple[str, list[str], str]] = []
+
+        for point_id, payload in papers:
+            title = payload.get("title", "")
+            abstract = payload.get("abstract")
+
+            keywords, source = await extractor.extract_pipeline_with_source(
+                title, abstract
+            )
+
+            if keywords:
+                papers_with_keywords += 1
+                total_keywords += len(keywords)
+
+            updates.append((point_id, keywords, source))
+
+            if dry_run and len(samples) < 5 and keywords:
+                samples.append((title[:60], source, keywords[:5]))
+
+            processed += 1
+            if limit and processed >= limit:
+                break
+
+        if not dry_run and updates:
+            storage.batch_update_keywords_with_source(updates)
+
+        offset = next_offset
+
+        if processed % 500 == 0:
+            click.echo(f"  Processed {processed} papers...")
+
+        if limit and processed >= limit:
+            break
+
+        if offset is None:
+            break
+
+    return processed, papers_with_keywords, total_keywords, samples
+
+
+def _display_results(
+    processed: int,
+    papers_with_keywords: int,
+    total_keywords: int,
+    samples: list[tuple[str, str, list[str]]],
+    dry_run: bool,
+) -> None:
+    """Display extraction results summary."""
+    click.echo(f"\n{'=' * 60}")
+    click.echo("KEYWORD EXTRACTION COMPLETE")
+    click.echo(f"{'=' * 60}\n")
+
+    click.echo(f"Papers processed:       {processed:,}")
+    click.echo(f"Papers with keywords:   {papers_with_keywords:,}")
+    click.echo(f"Total keywords:         {total_keywords:,}")
+
+    if papers_with_keywords > 0:
+        avg = total_keywords / papers_with_keywords
+        click.echo(f"Avg keywords per paper: {avg:.2f}")
+
+    # Show samples in dry run
+    if dry_run and samples:
+        click.echo(f"\n=== Sample Extractions ===\n")
+        for title, source, keywords in samples:
+            click.echo(f"Title:    {title}...")
+            click.echo(f"Source:   {source}")
+            click.echo(f"Keywords: {keywords}")
+            click.echo()
+
+    if dry_run:
+        click.echo("\nDRY RUN - no changes were saved. Run without --dry-run to save.")

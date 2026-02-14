@@ -148,7 +148,7 @@ lexiconarxiv/
 ```
 Backend:     Python 3.12+ / FastAPI / uvicorn
 Databases:   PostgreSQL / Qdrant (vector + BM25)
-ML/NLP:      sentence-transformers / KeyBERT / spaCy
+ML/NLP:      sentence-transformers / KeyBERT / Gemini API / Ollama
 Graph:       NetworkX (citation graph) / D3.js (visualization)
 Infra:       Docker / Kubernetes
 ```
@@ -159,6 +159,7 @@ Infra:       Docker / Kubernetes
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.9.0 | Feb 2026 | LLM-enhanced keyword extraction (Gemini/Ollama), LLM judge validation, configurable embeddings |
 | 0.8.0 | Feb 2026 | Graph Visualization API with D3.js UI for citation graph exploration |
 | 0.7.2 | Feb 2026 | DBLP/ACM consolidation, build_cited_by retry fix, incremental pipeline script |
 | 0.7.1 | Feb 2026 | ACL Git Trees API fix, NeurIPS D&B track, AACL venue, incremental docs |

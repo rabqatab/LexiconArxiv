@@ -438,10 +438,10 @@ uv run python -m src.cli.core_collect export-graph-subgraph <paper_id> --hops 2 
 
 ### extract-keywords
 
-Extract keywords using regex patterns and KeyBERT.
+Extract keywords using a multi-phase pipeline: regex, KeyBERT, LLM extraction (Gemini/Ollama), and LLM judge.
 
 ```bash
-# Full extraction (regex + KeyBERT)
+# Default extraction (regex + KeyBERT)
 uv run python -m src.cli.core_collect extract-keywords
 
 # Preview without saving
@@ -449,6 +449,18 @@ uv run python -m src.cli.core_collect extract-keywords --dry-run --limit 10
 
 # Regex only (faster, no model loading)
 uv run python -m src.cli.core_collect extract-keywords --no-keybert
+
+# Better embedding model for KeyBERT
+uv run python -m src.cli.core_collect extract-keywords --embedding-model all-mpnet-base-v2
+
+# Full pipeline with Gemini LLM + judge
+uv run python -m src.cli.core_collect extract-keywords --llm --judge
+
+# Full pipeline with local Ollama
+uv run python -m src.cli.core_collect extract-keywords --llm --judge --llm-backend ollama
+
+# Regex + judge only (validate regex output)
+uv run python -m src.cli.core_collect extract-keywords --no-keybert --judge
 
 # Re-extract ALL papers (replace existing keywords)
 uv run python -m src.cli.core_collect extract-keywords --force
@@ -468,10 +480,18 @@ uv run python -m src.cli.core_collect extract-keywords --batch-size 200
 | `--batch-size N` | Papers per batch (default: 100) |
 | `--no-keybert` | Skip KeyBERT, use regex only |
 | `--force` | Re-extract for papers with existing keywords |
+| `--embedding-model` | Sentence-transformers model for KeyBERT (default: `all-MiniLM-L6-v2`) |
+| `--llm` | Enable LLM keyword extraction |
+| `--llm-backend` | LLM backend: `gemini` (default) or `ollama` |
+| `--judge` | Enable LLM judge validation |
+| `--judge-backend` | Judge backend: `gemini` or `ollama` (default: same as `--llm-backend`) |
+| `--ollama-model` | Ollama model name (default: `llama3.1:8b`) |
+| `--gemini-model` | Gemini model name (default: `gemini-2.0-flash`) |
 
 **Behavior:**
 - Default: Skips papers that already have keywords
 - With `--force`: Re-processes all papers, replacing existing keywords
+- With `--llm` or `--judge`: Uses async execution with the full pipeline
 
 ### keyword-stats
 
@@ -658,6 +678,9 @@ uv run python -m src.cli.core_collect clear-keyword-checkpoint
 | `QDRANT_URL` | Qdrant server URL | Yes |
 | `QDRANT_API_KEY` | Qdrant API key (for cloud) | No |
 | `S2_API_KEY` | Semantic Scholar API key | No |
+| `GEMINI_API_KEY` | Gemini API key (for LLM keyword extraction) | No |
+| `GOOGLE_API_KEY` | Alternative to `GEMINI_API_KEY` | No |
+| `OLLAMA_BASE_URL` | Ollama server URL (default: `http://localhost:11434`) | No |
 
 ---
 
