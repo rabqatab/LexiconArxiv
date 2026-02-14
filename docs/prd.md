@@ -73,7 +73,7 @@ AI/NLP researchers continuously face the following challenges:
 ### 5.1 Search & Discovery
 - Natural language query → research intent interpretation
 - Core-based hybrid search (BM25 + Semantic)
-- Keyword/acronym extraction (Regex + KeyBERT) - supports exact paper retrieval (e.g., "HyDE paper")
+- Keyword/acronym extraction (LLM-first with Regex + KeyBERT fallback) - supports exact paper retrieval (e.g., "HyDE paper")
 - On-demand latest paper extension
 
 ### 5.2 Research Graph

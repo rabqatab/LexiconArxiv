@@ -14,11 +14,17 @@ class ExtractedKeywords(BaseModel):
     """Structured output from LLM keyword extraction.
 
     Used as Gemini response_schema and Ollama format schema.
+    Categories are research-oriented for academic papers.
     """
 
-    acronyms: list[str]
-    methods: list[str]
-    concepts: list[str]
+    task: list[str]
+    method: list[str]
+    model: list[str]
+    domain: list[str]
+    dataset: list[str]
+
+    def to_dict(self) -> dict[str, list[str]]:
+        return self.model_dump()
 
 
 class JudgeResult(BaseModel):
@@ -35,10 +41,22 @@ class JudgeResult(BaseModel):
 EXTRACTION_SYSTEM_PROMPT = (
     "You are an expert academic keyword extractor. "
     "Given a research paper's title and abstract, extract the most important "
-    "technical keywords. Focus on:\n"
-    "- Acronyms: model names, method abbreviations (e.g. BERT, RAG, LoRA)\n"
-    "- Methods: specific techniques or algorithms mentioned\n"
-    "- Concepts: key technical concepts central to the paper\n\n"
+    "technical keywords into 5 categories:\n\n"
+    "- task: the specific problem or objective the paper addresses "
+    "(e.g. 'text classification', 'machine translation', 'question answering')\n"
+    "- method: techniques, algorithms, or approaches used "
+    "(e.g. 'contrastive learning', 'attention mechanism', 'fine-tuning')\n"
+    "- model: named models or systems — proper nouns "
+    "(e.g. 'BERT', 'GPT-4', 'LLaMA', 'T5')\n"
+    "- domain: application area or research field "
+    "(e.g. 'NLP', 'computer vision', 'legal AI', 'biomedical')\n"
+    "- dataset: benchmarks, datasets, or evaluation resources "
+    "(e.g. 'GLUE', 'SQuAD', 'ImageNet', 'MS MARCO')\n\n"
+    "Disambiguation examples:\n"
+    "- 'transformer' -> model if referring to the original paper's model, "
+    "method if referring to the architecture in general\n"
+    "- 'BERT' -> always model (it's a named system)\n"
+    "- 'self-attention' -> always method (it's a technique)\n\n"
     "Return only keywords that are specific and meaningful. "
     "Avoid generic terms like 'model', 'method', 'approach', 'paper', 'results'."
 )
@@ -48,7 +66,14 @@ EXTRACTION_USER_PROMPT = (
     "Title: {title}\n\n"
     "Abstract: {abstract}\n\n"
     "Return the keywords as structured JSON with fields: "
-    "acronyms, methods, concepts."
+    "task, method, model, domain, dataset."
+)
+
+EXTRACTION_USER_PROMPT_TITLE_ONLY = (
+    "Extract keywords from this research paper based on its title:\n\n"
+    "Title: {title}\n\n"
+    "Return the keywords as structured JSON with fields: "
+    "task, method, model, domain, dataset."
 )
 
 JUDGE_SYSTEM_PROMPT = (
@@ -84,15 +109,17 @@ class BaseLLMExtractor(ABC):
     """Abstract base class for LLM-based keyword extractors."""
 
     @abstractmethod
-    async def extract_keywords(self, title: str, abstract: str) -> list[str]:
-        """Extract keywords from a paper's title and abstract.
+    async def extract_keywords(
+        self, title: str, abstract: str | None = None
+    ) -> ExtractedKeywords | None:
+        """Extract keywords from a paper's title and optional abstract.
 
         Args:
             title: Paper title.
-            abstract: Paper abstract.
+            abstract: Paper abstract (optional).
 
         Returns:
-            Flat list of extracted keywords.
+            Structured extracted keywords, or None on failure.
         """
 
     @abstractmethod
@@ -103,9 +130,8 @@ class BaseLLMExtractor(ABC):
     def _flatten_extraction(result: ExtractedKeywords) -> list[str]:
         """Flatten an ExtractedKeywords model into a single keyword list."""
         keywords: list[str] = []
-        keywords.extend(result.acronyms)
-        keywords.extend(result.methods)
-        keywords.extend(result.concepts)
+        for field in ("task", "method", "model", "domain", "dataset"):
+            keywords.extend(getattr(result, field))
         return keywords
 
 

@@ -417,7 +417,7 @@ User Query: "Recent LLM evaluation benchmarks"
 
 ### 7.4 ML/NLP
 - **Embeddings**: sentence-transformers (all-MiniLM-L6-v2 or SPECTER2)
-- **Keyword Extraction**: KeyBERT
+- **Keyword Extraction**: LLM-first (Gemini/Ollama) with KeyBERT fallback
 - **NL Processing**: spaCy
 
 ---

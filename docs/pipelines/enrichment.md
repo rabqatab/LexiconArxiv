@@ -343,31 +343,33 @@ Papers lack searchable keywords/acronyms, making exact paper retrieval difficult
 
 ### Solution
 
-Multi-phase extraction pipeline with optional LLM enhancement:
+LLM-first extraction pipeline with regex + KeyBERT as fallback:
 
-1. **Regex-based Acronym Extraction**: Extract explicit acronyms from titles/abstracts
-2. **KeyBERT Semantic Extraction**: Extract semantic keywords from abstracts
-3. **LLM Extraction** (optional): Extract keywords via Gemini API or local Ollama
-4. **LLM Judge** (optional): Validate and filter keywords for relevance
+1. **LLM Extraction** (primary): Extract structured keywords via Gemini API or local Ollama
+2. **Fallback**: Regex + KeyBERT (only when LLM is unavailable or fails)
+3. **LLM Judge** (optional): Validate and filter keywords for relevance
 
 ### Architecture
 
 ```
-Regex → KeyBERT → LLM Extraction → Normalize → Judge → Qdrant
-(always)  (opt)      (opt)                       (opt)
+LLM Extraction ──success──▶ Normalize → Judge → Qdrant
+   (primary)                              (opt)
+       │ failure
+       ▼
+Regex + KeyBERT (fallback)
 ```
 
 ### CLI Commands
 
 ```bash
-# Default extraction (regex + KeyBERT)
-uv run python -m src.cli.core_collect extract-keywords
-
-# Full pipeline with Gemini LLM + judge
+# LLM-first pipeline with Gemini + judge (recommended)
 uv run python -m src.cli.core_collect extract-keywords --llm --judge
 
-# Local Ollama pipeline
+# LLM-first with local Ollama
 uv run python -m src.cli.core_collect extract-keywords --llm --judge --llm-backend ollama
+
+# Fallback only: regex + KeyBERT (no LLM)
+uv run python -m src.cli.core_collect extract-keywords
 
 # Regex only (faster)
 uv run python -m src.cli.core_collect extract-keywords --no-keybert

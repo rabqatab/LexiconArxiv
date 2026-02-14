@@ -49,6 +49,12 @@ def register_commands(cli: click.Group):
         default="gemini-2.0-flash",
         help="Gemini model name (default: gemini-2.0-flash)",
     )
+    @click.option(
+        "--ollama-timeout",
+        type=float,
+        default=180.0,
+        help="Ollama request timeout in seconds (default: 180)",
+    )
     def extract_keywords(
         dry_run: bool,
         limit: int | None,
@@ -62,14 +68,14 @@ def register_commands(cli: click.Group):
         judge_backend: str | None,
         ollama_model: str,
         gemini_model: str,
+        ollama_timeout: float,
     ) -> None:
         """Extract keywords from paper titles and abstracts.
 
-        Uses a multi-phase extraction pipeline:
-        1. Regex patterns for acronyms (BERT, HyDE, RAG, etc.)
-        2. KeyBERT for semantic keywords (optional)
-        3. LLM extraction via Gemini or Ollama (optional)
-        4. LLM judge validation (optional)
+        LLM-first extraction pipeline:
+        1. LLM extraction via Gemini or Ollama (primary, always attempted)
+        2. Fallback: regex + KeyBERT (only when LLM is unavailable or fails)
+        3. LLM judge validation (optional)
 
         Examples:
 
@@ -105,6 +111,7 @@ def register_commands(cli: click.Group):
                     judge_backend=judge_backend or llm_backend,
                     ollama_model=ollama_model,
                     gemini_model=gemini_model,
+                    ollama_timeout=ollama_timeout,
                 )
             )
         else:
@@ -277,6 +284,7 @@ async def _extract_keywords_async(
     judge_backend: str,
     ollama_model: str,
     gemini_model: str,
+    ollama_timeout: float,
 ) -> None:
     """Async keyword extraction (with LLM and/or judge)."""
     from src.core.keyword import KeywordExtractor
@@ -291,13 +299,19 @@ async def _extract_keywords_async(
         judge_backend=judge_backend,
         ollama_model=ollama_model,
         gemini_model=gemini_model,
+        ollama_timeout=ollama_timeout,
     )
 
-    parts = ["regex"]
-    if not no_keybert:
-        parts.append("KeyBERT")
     if use_llm:
-        parts.append(f"LLM ({llm_backend})")
+        parts = [f"LLM ({llm_backend})"]
+        if not no_keybert:
+            parts.append("fallback: regex + KeyBERT")
+        else:
+            parts.append("fallback: regex")
+    else:
+        parts = ["regex"]
+        if not no_keybert:
+            parts.append("KeyBERT")
     if use_judge:
         parts.append(f"judge ({judge_backend})")
     click.echo(f"Keyword extraction mode: {' + '.join(parts)}")
@@ -364,8 +378,8 @@ def _run_extraction_loop(
 
             updates.append((point_id, keywords, source))
 
-            if dry_run and len(samples) < 5 and keywords:
-                samples.append((title[:60], source, keywords[:5]))
+            if dry_run and len(samples) < 10 and keywords:
+                samples.append((title[:80], source, keywords))
 
             processed += 1
             if limit and processed >= limit:
@@ -395,13 +409,13 @@ async def _run_extraction_loop_async(
     limit: int | None,
     force: bool,
     dry_run: bool,
-) -> tuple[int, int, int, list[tuple[str, str, list[str]]]]:
+) -> tuple[int, int, int, list[tuple[str, str, list[str], dict | None]]]:
     """Async extraction loop (with LLM and/or judge)."""
     processed = 0
     papers_with_keywords = 0
     total_keywords = 0
     offset = None
-    samples: list[tuple[str, str, list[str]]] = []
+    samples: list[tuple[str, str, list[str], dict | None]] = []
 
     while True:
         papers, next_offset = storage.get_papers_for_keyword_extraction(
@@ -413,24 +427,24 @@ async def _run_extraction_loop_async(
         if not papers:
             break
 
-        updates: list[tuple[str, list[str], str]] = []
+        updates: list[tuple[str, list[str], str, dict | None]] = []
 
         for point_id, payload in papers:
             title = payload.get("title", "")
             abstract = payload.get("abstract")
 
-            keywords, source = await extractor.extract_pipeline_with_source(
-                title, abstract
+            keywords, source, structured = (
+                await extractor.extract_pipeline_with_source(title, abstract)
             )
 
             if keywords:
                 papers_with_keywords += 1
                 total_keywords += len(keywords)
 
-            updates.append((point_id, keywords, source))
+            updates.append((point_id, keywords, source, structured))
 
-            if dry_run and len(samples) < 5 and keywords:
-                samples.append((title[:60], source, keywords[:5]))
+            if dry_run and len(samples) < 10 and keywords:
+                samples.append((title[:80], source, keywords, structured))
 
             processed += 1
             if limit and processed >= limit:
@@ -457,7 +471,7 @@ def _display_results(
     processed: int,
     papers_with_keywords: int,
     total_keywords: int,
-    samples: list[tuple[str, str, list[str]]],
+    samples: list,
     dry_run: bool,
 ) -> None:
     """Display extraction results summary."""
@@ -476,10 +490,21 @@ def _display_results(
     # Show samples in dry run
     if dry_run and samples:
         click.echo(f"\n=== Sample Extractions ===\n")
-        for title, source, keywords in samples:
+        for sample in samples:
+            # Support both 3-tuple (sync) and 4-tuple (async with structured)
+            if len(sample) == 4:
+                title, source, keywords, structured = sample
+            else:
+                title, source, keywords = sample
+                structured = None
+
             click.echo(f"Title:    {title}...")
             click.echo(f"Source:   {source}")
             click.echo(f"Keywords: {keywords}")
+            if structured:
+                for category in ("task", "method", "model", "domain", "dataset"):
+                    values = structured.get(category, [])
+                    click.echo(f"  {category:>8}: {values}")
             click.echo()
 
     if dry_run:

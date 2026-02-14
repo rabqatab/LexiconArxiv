@@ -627,8 +627,9 @@ results = qdrant.search(
 ```
 
 Keyword extraction methods:
-- **Regex patterns**: Extract explicit acronyms from title/abstract (e.g., "BERT:", "(RAG)")
-- **KeyBERT**: Extract semantic key keywords from abstracts
+- **LLM extraction** (primary): Structured keyword extraction via Gemini or Ollama
+- **Regex patterns** (fallback): Extract explicit acronyms from title/abstract (e.g., "BERT:", "(RAG)")
+- **KeyBERT** (fallback): Extract semantic keywords from abstracts
 
 See [Keyword Extraction Design](./keyword_extraction.md) for details.
 

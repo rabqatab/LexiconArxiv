@@ -28,23 +28,23 @@ This document describes the keyword/acronym extraction pipeline for papers in th
 ### 2.1 Extract Keywords
 
 ```bash
-# Extract keywords for all papers (regex + KeyBERT)
-uv run python -m src.cli.core_collect extract-keywords
-
-# Use only regex patterns (faster, no model loading)
-uv run python -m src.cli.core_collect extract-keywords --no-keybert
-
-# Better embedding model for KeyBERT
-uv run python -m src.cli.core_collect extract-keywords --embedding-model all-mpnet-base-v2
-
-# Full pipeline: regex + KeyBERT + Gemini LLM + judge
+# LLM-first extraction with Gemini (primary) + fallback: regex + KeyBERT
 uv run python -m src.cli.core_collect extract-keywords --llm --judge
 
-# Full pipeline with Ollama (local)
+# LLM-first with Ollama (local)
 uv run python -m src.cli.core_collect extract-keywords --llm --judge --llm-backend ollama
 
-# Regex + judge only (validate regex output without LLM extraction)
-uv run python -m src.cli.core_collect extract-keywords --no-keybert --judge
+# LLM-first, fallback: regex only (no KeyBERT)
+uv run python -m src.cli.core_collect extract-keywords --llm --judge --no-keybert
+
+# Fallback-only: regex + KeyBERT (no LLM)
+uv run python -m src.cli.core_collect extract-keywords
+
+# Regex only (fastest, no model loading)
+uv run python -m src.cli.core_collect extract-keywords --no-keybert
+
+# Better embedding model for KeyBERT fallback
+uv run python -m src.cli.core_collect extract-keywords --embedding-model all-mpnet-base-v2
 
 # Preview without saving
 uv run python -m src.cli.core_collect extract-keywords --dry-run --limit 10
@@ -105,34 +105,39 @@ uv run python -m src.cli.core_collect extract-keywords --force
 
 | Mode | Command | Description |
 |------|---------|-------------|
-| **Full (default)** | `extract-keywords` | Regex + KeyBERT |
-| **Regex Only** | `extract-keywords --no-keybert` | Fast, acronyms only |
-| **LLM Pipeline** | `extract-keywords --llm --judge` | Regex + KeyBERT + LLM + Judge |
+| **LLM Pipeline (recommended)** | `extract-keywords --llm --judge` | LLM-first + fallback: regex + KeyBERT + Judge |
 | **Ollama Pipeline** | `extract-keywords --llm --judge --llm-backend ollama` | Local LLM pipeline |
+| **Fallback Only (default)** | `extract-keywords` | Regex + KeyBERT (no LLM) |
+| **Regex Only** | `extract-keywords --no-keybert` | Fast, acronyms only |
 | **Re-extract** | `extract-keywords --force` | Replace existing keywords |
 
 ---
 
-## 4. Multi-Phase Extraction Pipeline
+## 4. LLM-First Extraction Pipeline
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                   Keyword Extraction Pipeline                        │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                      │
-│  ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────────────┐ │
-│  │  Qdrant  │──▶│ Phase 1  │──▶│ Phase 2  │──▶│    Phase 3       │ │
-│  │ (papers) │   │  Regex   │   │ KeyBERT  │   │  LLM Extraction  │ │
-│  └──────────┘   └────┬─────┘   └────┬─────┘   │ (Gemini/Ollama)  │ │
-│                      │              │          └───────┬──────────┘ │
-│                      ▼              ▼                  ▼            │
+│  ┌──────────┐   ┌──────────────────┐                                │
+│  │  Qdrant  │──▶│  LLM Extraction  │──── success ──┐               │
+│  │ (papers) │   │ (Gemini/Ollama)  │                │               │
+│  └──────────┘   └───────┬──────────┘                │               │
+│                         │ failure                    │               │
+│                         ▼                            │               │
+│               ┌──────────────────┐                   │               │
+│               │    Fallback:     │                   │               │
+│               │  Regex + KeyBERT │                   │               │
+│               └────────┬─────────┘                   │               │
+│                        │                             │               │
+│                        ▼                             ▼               │
 │               ┌─────────────────────────────────────────────┐      │
 │               │          Normalize & Deduplicate             │      │
 │               └──────────────────┬──────────────────────────┘      │
 │                                  │                                  │
 │                                  ▼                                  │
 │                        ┌──────────────────┐                        │
-│                        │     Phase 4      │                        │
 │                        │   LLM Judge      │                        │
 │                        │ (Gemini/Ollama)  │                        │
 │                        └────────┬─────────┘                        │
@@ -144,13 +149,12 @@ uv run python -m src.cli.core_collect extract-keywords --force
 │                        └──────────────────┘                        │
 └─────────────────────────────────────────────────────────────────────┘
 
-Phase 1 (Regex):          always runs
-Phase 2 (KeyBERT):        optional (--no-keybert to skip)
-Phase 3 (LLM Extraction): optional (--llm to enable)
-Phase 4 (LLM Judge):      optional (--judge to enable)
+LLM Extraction:  primary (--llm to enable, always attempted with or without abstract)
+Fallback:        regex + KeyBERT (only when LLM fails or is not enabled)
+LLM Judge:       optional (--judge to enable)
 ```
 
-Each phase adds keywords. Deduplication happens before the Judge. The Judge filters the merged list.
+LLM extraction is the primary method. Regex + KeyBERT only run as fallback when LLM produces no results. The Judge filters the final keyword list.
 
 ### 4.1 Phase 1: Regex-based Acronym Extraction
 
@@ -212,9 +216,9 @@ keywords = kw_model.extract_keywords(
 | `min_score` | 0.3 | Minimum confidence threshold |
 | `embedding_model` | `all-MiniLM-L6-v2` | Default sentence-transformers model (configurable) |
 
-### 4.3 Phase 3: LLM Keyword Extraction (Optional)
+### 4.3 LLM Keyword Extraction (Primary)
 
-Uses Gemini API or local Ollama to extract structured keywords from title and abstract.
+Uses Gemini API or local Ollama to extract structured keywords from title and/or abstract. This is the primary extraction method — always attempted when `--llm` is enabled, even for papers without abstracts (title-only extraction). Includes retry logic with exponential backoff (up to 5 attempts).
 
 **Structured Output** (Pydantic model used as JSON schema):
 
@@ -239,11 +243,11 @@ class ExtractedKeywords(BaseModel):
 - Passes `format=ExtractedKeywords.model_json_schema()`
 - Default model: `llama3.1:8b`
 - Default concurrency: 1 (local model)
-- Timeout: 60s
+- Timeout: 180s (configurable via `--ollama-timeout`)
 
-### 4.4 Phase 4: LLM Judge Validation (Optional)
+### 4.4 LLM Judge Validation (Optional)
 
-Validates the merged keyword list by classifying each keyword as relevant or irrelevant.
+Validates the keyword list by classifying each keyword as relevant or irrelevant.
 
 **Structured Output**:
 
@@ -313,20 +317,22 @@ The `keywords_source` field uses a pipe-delimited format to track which phases c
 
 | Source Value | Meaning |
 |-------------|---------|
-| `"regex"` | Regex extraction only |
-| `"regex\|keybert"` | Regex + KeyBERT |
-| `"regex\|keybert\|gemini\|judge"` | Full Gemini pipeline |
-| `"regex\|ollama\|judge"` | Regex + Ollama + judge (no KeyBERT) |
+| `"gemini"` | Gemini LLM extraction |
+| `"gemini\|judge"` | Gemini LLM + judge validation |
+| `"ollama\|judge"` | Ollama LLM + judge validation |
+| `"regex"` | Regex fallback only |
+| `"regex\|keybert"` | Regex + KeyBERT fallback |
+| `"regex\|keybert\|judge"` | Fallback + judge |
 | `"none"` | No keywords extracted |
 
-This format is backward-compatible with the old values (`"regex"`, `"keybert"`, `"both"`).
+When LLM succeeds, regex/KeyBERT do not run (no mixing). Fallback sources only appear when LLM is unavailable or fails.
 
 ### 6.2 Qdrant Payload Fields
 
 ```json
 {
   "keywords": ["BERT", "NLP", "language model"],
-  "keywords_source": "regex|keybert|gemini|judge"
+  "keywords_source": "gemini|judge"
 }
 ```
 
@@ -386,6 +392,7 @@ Output format:
 | `--judge-backend` | same as `--llm-backend` | Judge backend: `gemini` or `ollama` |
 | `--ollama-model` | `llama3.1:8b` | Ollama model name |
 | `--gemini-model` | `gemini-2.0-flash` | Gemini model name |
+| `--ollama-timeout` | `180` | Ollama request timeout in seconds |
 
 ---
 

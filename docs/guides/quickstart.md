@@ -131,7 +131,7 @@ uv run python -m src.cli.core_collect enrich-abstracts --parallel 10
 uv run python -m src.cli.core_collect resolve-refs
 
 # 8. Extract keywords (for BM25 search)
-uv run python -m src.cli.core_collect extract-keywords
+uv run python -m src.cli.core_collect extract-keywords --llm --judge
 
 # 9. Check final status
 uv run python -m src.cli.core_collect status
@@ -223,20 +223,20 @@ uv run python -m src.cli.core_collect collect-openreview --all --since-year 2018
 ### Keyword Extraction Options
 
 ```bash
-# Preview without saving
-uv run python -m src.cli.core_collect extract-keywords --dry-run --limit 10
-
-# Regex-only extraction (faster, no KeyBERT model loading)
-uv run python -m src.cli.core_collect extract-keywords --no-keybert
-
-# Better embedding model for KeyBERT
-uv run python -m src.cli.core_collect extract-keywords --embedding-model all-mpnet-base-v2
-
-# Full LLM-enhanced pipeline (requires GEMINI_API_KEY in .env)
+# LLM-first pipeline (recommended, requires GEMINI_API_KEY in .env)
 uv run python -m src.cli.core_collect extract-keywords --llm --judge
 
 # Local Ollama pipeline (requires running Ollama server)
 uv run python -m src.cli.core_collect extract-keywords --llm --judge --llm-backend ollama
+
+# Fallback only: regex + KeyBERT (no LLM)
+uv run python -m src.cli.core_collect extract-keywords
+
+# Regex-only extraction (faster, no KeyBERT model loading)
+uv run python -m src.cli.core_collect extract-keywords --no-keybert
+
+# Preview without saving
+uv run python -m src.cli.core_collect extract-keywords --dry-run --limit 10
 
 # Re-extract ALL papers (replace existing keywords)
 uv run python -m src.cli.core_collect extract-keywords --force

@@ -1082,13 +1082,14 @@ Keywords enable exact paper retrieval:
 
 Without keywords, these queries rely solely on title/abstract text matching.
 
-### Two-Phase Extraction
+### LLM-First Extraction
 
-1. **Regex Extraction**: Explicit acronyms from titles/abstracts
+1. **LLM Extraction** (primary): Structured keyword extraction via Gemini or Ollama
+   - Works with or without abstract (title-only supported)
+   - Returns categorized keywords: task, method, model, domain, dataset
+
+2. **Fallback**: Regex + KeyBERT (only when LLM is unavailable or fails)
    - `"BERT: Pre-training..."` → `["BERT"]`
-   - `"...(RAG)..."` → `["RAG"]`
-
-2. **KeyBERT Extraction**: Semantic keywords from abstracts
    - `"...retrieval augmented generation..."` → `["retrieval augmented", "generation"]`
 
 ### Running Keyword Extraction
@@ -1097,10 +1098,13 @@ Without keywords, these queries rely solely on title/abstract text matching.
 # Check statistics first
 uv run python -m src.cli.core_collect keyword-stats
 
-# Preview extraction (dry run)
-uv run python -m src.cli.core_collect extract-keywords --dry-run
+# LLM-first pipeline (recommended)
+uv run python -m src.cli.core_collect extract-keywords --llm --judge
 
-# Full extraction (regex + KeyBERT)
+# Preview extraction (dry run)
+uv run python -m src.cli.core_collect extract-keywords --llm --judge --dry-run --limit 10
+
+# Fallback only: regex + KeyBERT (no LLM)
 uv run python -m src.cli.core_collect extract-keywords
 
 # Regex only (faster, no ML model)
@@ -1140,7 +1144,7 @@ After extraction, papers have:
 ```python
 {
     "keywords": ["BERT", "language model", "pre-training"],
-    "keywords_source": "both"  # "regex", "keybert", or "both"
+    "keywords_source": "gemini|judge"  # e.g., "gemini", "ollama|judge", "regex|keybert"
 }
 ```
 
@@ -1168,7 +1172,7 @@ uv run python -m src.cli.core_collect resolve-refs
 uv run python -m src.cli.core_collect build-cited-by
 
 # 6. Extract keywords (for BM25 search)
-uv run python -m src.cli.core_collect extract-keywords
+uv run python -m src.cli.core_collect extract-keywords --llm --judge
 ```
 
 ---

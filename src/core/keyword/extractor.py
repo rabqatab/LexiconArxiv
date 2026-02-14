@@ -1,10 +1,9 @@
 """Main keyword extraction class combining regex, KeyBERT, and LLM approaches.
 
-Multi-phase extraction pipeline:
-1. Regex: Extract explicit acronyms from title/abstract
-2. KeyBERT: Extract semantic keywords from abstract (optional)
-3. LLM: Extract keywords via Gemini or Ollama (optional)
-4. Judge: Validate keywords via LLM judge (optional)
+LLM-first extraction pipeline:
+1. LLM: Extract keywords via Gemini or Ollama (primary, always attempted)
+2. Fallback: Regex + KeyBERT only when LLM is unavailable or produces nothing
+3. Judge: Validate keywords via LLM judge (optional)
 """
 
 import logging
@@ -26,12 +25,11 @@ logger = logging.getLogger(__name__)
 
 
 class KeywordExtractor:
-    """Multi-phase keyword extractor for academic papers.
+    """LLM-first keyword extractor for academic papers.
 
-    Phase 1: Regex-based acronym extraction from title and abstract
-    Phase 2: KeyBERT semantic keyword extraction from abstract (optional)
-    Phase 3: LLM-based keyword extraction via Gemini or Ollama (optional)
-    Phase 4: LLM judge validation of merged keywords (optional)
+    Primary: LLM-based keyword extraction via Gemini or Ollama (always attempted)
+    Fallback: Regex + KeyBERT only when LLM produces nothing
+    Optional: LLM judge validation of extracted keywords
 
     Example:
         >>> extractor = KeywordExtractor(use_keybert=True)
@@ -58,6 +56,7 @@ class KeywordExtractor:
         judge_backend: str | None = None,
         ollama_model: str = "llama3.1:8b",
         gemini_model: str = "gemini-2.0-flash",
+        ollama_timeout: float = 180.0,
     ):
         """Initialize keyword extractor.
 
@@ -75,6 +74,7 @@ class KeywordExtractor:
             judge_backend: Judge backend ("gemini" or "ollama"). Defaults to llm_backend.
             ollama_model: Ollama model name.
             gemini_model: Gemini model name.
+            ollama_timeout: Ollama request timeout in seconds.
         """
         self.use_keybert = use_keybert
         self.keybert_top_n = keybert_top_n
@@ -90,6 +90,7 @@ class KeywordExtractor:
         self.judge_backend = judge_backend or llm_backend
         self.ollama_model = ollama_model
         self.gemini_model = gemini_model
+        self.ollama_timeout = ollama_timeout
 
         self._kw_model: "KeyBERT | None" = None
         self._keybert_initialized = False
@@ -131,7 +132,9 @@ class KeywordExtractor:
                 self._llm_extractor = GeminiKeywordExtractor(model=self.gemini_model)
             elif self.llm_backend == "ollama":
                 from src.core.keyword.ollama import OllamaKeywordExtractor
-                self._llm_extractor = OllamaKeywordExtractor(model=self.ollama_model)
+                self._llm_extractor = OllamaKeywordExtractor(
+                    model=self.ollama_model, timeout=self.ollama_timeout
+                )
             else:
                 logger.warning(f"Unknown LLM backend: {self.llm_backend}")
                 return None
@@ -156,7 +159,9 @@ class KeywordExtractor:
                 backend = GeminiJudge(model=self.gemini_model)
             elif self.judge_backend == "ollama":
                 from src.core.keyword.ollama import OllamaJudge
-                backend = OllamaJudge(model=self.ollama_model)
+                backend = OllamaJudge(
+                    model=self.ollama_model, timeout=self.ollama_timeout
+                )
             else:
                 logger.warning(f"Unknown judge backend: {self.judge_backend}")
                 return None
@@ -216,9 +221,9 @@ class KeywordExtractor:
     async def extract_pipeline(
         self, title: str, abstract: str | None = None
     ) -> list[str]:
-        """Extract keywords using the full async pipeline.
+        """Extract keywords using the LLM-first async pipeline.
 
-        Regex -> KeyBERT -> LLM -> normalize -> Judge
+        LLM (primary) -> fallback: regex + KeyBERT -> normalize -> Judge
 
         Args:
             title: Paper title.
@@ -227,50 +232,59 @@ class KeywordExtractor:
         Returns:
             List of unique, validated keywords.
         """
-        keywords, _ = await self.extract_pipeline_with_source(title, abstract)
+        keywords, _, _ = await self.extract_pipeline_with_source(title, abstract)
         return keywords
 
     async def extract_pipeline_with_source(
         self, title: str, abstract: str | None = None
-    ) -> tuple[list[str], str]:
-        """Extract keywords using the full async pipeline, with source tracking.
+    ) -> tuple[list[str], str, dict[str, list[str]] | None]:
+        """Extract keywords using the LLM-first pipeline, with source tracking.
+
+        Primary: LLM extraction (always attempted, even without abstract).
+        Fallback: Regex + KeyBERT only when LLM produced nothing.
 
         Args:
             title: Paper title.
             abstract: Paper abstract (optional).
 
         Returns:
-            Tuple of (keywords, pipe-delimited source string).
+            Tuple of (keywords, pipe-delimited source string, structured_categories).
+            structured_categories is a dict with keys task/method/model/domain/dataset,
+            or None if LLM extraction was not used or failed.
         """
         sources: list[str] = []
         keywords: list[str] = []
+        structured: dict[str, list[str]] | None = None
 
-        # Phase 1: Regex
-        regex_kws = self.extract_regex_only(title, abstract)
-        if regex_kws:
-            keywords.extend(regex_kws)
-            sources.append("regex")
-
-        # Phase 2: KeyBERT
-        if self.use_keybert and abstract:
-            keybert_kws = self._extract_keybert(abstract)
-            if keybert_kws:
-                keywords.extend(keybert_kws)
-                sources.append("keybert")
-
-        # Phase 3: LLM extraction
-        if self.use_llm and abstract:
+        # Primary: LLM extraction (always attempted)
+        if self.use_llm:
             llm_extractor = self._ensure_llm_extractor()
             if llm_extractor:
-                llm_kws = await llm_extractor.extract_keywords(title, abstract)
-                if llm_kws:
-                    keywords.extend(llm_kws)
+                from src.core.keyword.llm_base import BaseLLMExtractor
+
+                result = await llm_extractor.extract_keywords(title, abstract)
+                if result:
+                    keywords.extend(BaseLLMExtractor._flatten_extraction(result))
+                    structured = result.to_dict()
                     sources.append(self.llm_backend)
+
+        # Fallback: regex + KeyBERT (only if LLM produced nothing)
+        if not keywords:
+            regex_kws = self.extract_regex_only(title, abstract)
+            if regex_kws:
+                keywords.extend(regex_kws)
+                sources.append("regex")
+
+            if self.use_keybert and abstract:
+                keybert_kws = self._extract_keybert(abstract)
+                if keybert_kws:
+                    keywords.extend(keybert_kws)
+                    sources.append("keybert")
 
         # Normalize before judge
         keywords = self._normalize_keywords(keywords)
 
-        # Phase 4: Judge
+        # Judge
         if self.use_judge and keywords:
             judge = self._ensure_judge()
             if judge:
@@ -278,7 +292,7 @@ class KeywordExtractor:
                 sources.append("judge")
 
         source = "|".join(sources) if sources else "none"
-        return keywords, source
+        return keywords, source, structured
 
     def _extract_keybert(self, abstract: str) -> list[str]:
         """Extract semantic keywords using KeyBERT.

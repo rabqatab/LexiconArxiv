@@ -14,6 +14,7 @@ from src.core.keyword.llm_base import (
     JudgeResult,
     EXTRACTION_SYSTEM_PROMPT,
     EXTRACTION_USER_PROMPT,
+    EXTRACTION_USER_PROMPT_TITLE_ONLY,
     JUDGE_SYSTEM_PROMPT,
     JUDGE_USER_PROMPT,
 )
@@ -29,6 +30,7 @@ class GeminiKeywordExtractor(BaseLLMExtractor):
         model: str = "gemini-2.0-flash",
         max_concurrent: int = 5,
         delay: float = 0.1,
+        max_retries: int = 5,
     ):
         api_key = get_gemini_api_key()
         if not api_key:
@@ -40,32 +42,48 @@ class GeminiKeywordExtractor(BaseLLMExtractor):
         self._model = model
         self._semaphore = asyncio.Semaphore(max_concurrent)
         self._delay = delay
+        self._max_retries = max_retries
 
-    async def extract_keywords(self, title: str, abstract: str) -> list[str]:
-        async with self._semaphore:
-            try:
-                response = await self._client.aio.models.generate_content(
-                    model=self._model,
-                    contents=EXTRACTION_USER_PROMPT.format(
-                        title=title, abstract=abstract
-                    ),
-                    config=types.GenerateContentConfig(
-                        system_instruction=EXTRACTION_SYSTEM_PROMPT,
-                        response_mime_type="application/json",
-                        response_schema=ExtractedKeywords,
-                        temperature=0.1,
-                    ),
-                )
+    async def extract_keywords(
+        self, title: str, abstract: str | None = None
+    ) -> ExtractedKeywords | None:
+        if abstract:
+            user_prompt = EXTRACTION_USER_PROMPT.format(title=title, abstract=abstract)
+        else:
+            user_prompt = EXTRACTION_USER_PROMPT_TITLE_ONLY.format(title=title)
 
-                if self._delay > 0:
-                    await asyncio.sleep(self._delay)
+        for attempt in range(self._max_retries):
+            async with self._semaphore:
+                try:
+                    response = await self._client.aio.models.generate_content(
+                        model=self._model,
+                        contents=user_prompt,
+                        config=types.GenerateContentConfig(
+                            system_instruction=EXTRACTION_SYSTEM_PROMPT,
+                            response_mime_type="application/json",
+                            response_schema=ExtractedKeywords,
+                            temperature=0.1,
+                        ),
+                    )
 
-                parsed = ExtractedKeywords.model_validate_json(response.text)
-                return self._flatten_extraction(parsed)
+                    if self._delay > 0:
+                        await asyncio.sleep(self._delay)
 
-            except Exception as e:
-                logger.warning(f"Gemini extraction failed: {e}")
-                return []
+                    return ExtractedKeywords.model_validate_json(response.text)
+
+                except Exception as e:
+                    if attempt < self._max_retries - 1:
+                        wait_time = 2 ** attempt
+                        logger.warning(
+                            f"Gemini extraction failed (attempt {attempt + 1}/{self._max_retries}), "
+                            f"retrying in {wait_time}s: {e}"
+                        )
+                        await asyncio.sleep(wait_time)
+                    else:
+                        logger.warning(
+                            f"Gemini extraction failed after {self._max_retries} attempts: {e}"
+                        )
+                        return None
 
     async def close(self) -> None:
         pass

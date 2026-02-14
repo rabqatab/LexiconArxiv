@@ -244,24 +244,37 @@ class BatchWriter:
 
     def batch_update_keywords_with_source(
         self,
-        updates: list[tuple[str, list[str], str]],  # [(point_id, keywords, source), ...]
+        updates: list[tuple[str, list[str], str]]
+        | list[tuple[str, list[str], str, dict | None]],
     ) -> int:
         """Batch update keywords and extraction source for multiple papers.
 
         Args:
-            updates: List of (point_id, keywords, keywords_source) tuples.
-                     keywords_source is one of: "regex", "keybert", "both", "none"
+            updates: List of (point_id, keywords, source) or
+                     (point_id, keywords, source, structured) tuples.
+                     When structured is provided and not None, it is stored
+                     as keywords_structured.
 
         Returns:
             Number of papers updated.
         """
-        for point_id, keywords, source in updates:
+        for update in updates:
+            if len(update) == 4:
+                point_id, keywords, source, structured = update
+            else:
+                point_id, keywords, source = update
+                structured = None
+
+            payload: dict = {
+                "keywords": keywords,
+                "keywords_source": source,
+            }
+            if structured:
+                payload["keywords_structured"] = structured
+
             self.client.set_payload(
                 collection_name=self.collection_name,
-                payload={
-                    "keywords": keywords,
-                    "keywords_source": source,
-                },
+                payload=payload,
                 points=[point_id],
             )
         return len(updates)
