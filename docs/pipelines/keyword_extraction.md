@@ -143,14 +143,21 @@ Extracts explicit acronyms and model names from title and abstract.
 | `ACRONYM: Description` | "BERT: Pre-training of..." | `^([A-Z][A-Za-z0-9\-]{1,10}):\s` |
 | `ACRONYM - Description` | "ColBERT - Efficient..." | `^([A-Z][A-Za-z0-9]{1,10})\s*[-–—]\s` |
 | `Description (ACRONYM)` | "...Understanding (BERT)" | `\(([A-Z][A-Za-z0-9\-]{1,10})\)\s*$` |
-| Inline ACRONYM | "BERT-based Models..." | `\b([A-Z]{2,10})\b` (with validation) |
+| Inline ACRONYM | "BERT-based Models..." | `\b([A-Z]{2,10}(?:-[A-Z0-9]+)?)\b` (with validation) |
+| CamelCase name | "ChatGPT", "FastText", "PyTorch" | `\b([A-Z][a-z]+(?:[A-Z][A-Za-z0-9]*)+)\b` |
 
 #### Abstract Patterns
 
 | Pattern | Example | Regex |
 |---------|---------|-------|
-| "We propose X" | "We introduce HyDE, a method..." | `(?:introduce\|propose\|present)\s+([A-Z][A-Za-z0-9\-]+)` |
+| "We propose X" | "We introduce HyDE, a method..." | `(?:introduce\|propose\|present)\s+([A-Z][A-Za-z0-9\-]+)(?:,\|\s+(?:a\|an\|the\|for\|to\|which\|that)\b)` |
 | "called X" | "...called BERT..." | `called\s+([A-Z][A-Za-z0-9]+)` |
+| "named X" | "...model named GPT-4..." | `named\s+([A-Z][A-Za-z0-9\-]+)` |
+| Model version | "GPT-4", "BERT-large", "T5-base" | `\b([A-Z][A-Za-z]*-(?:small\|base\|large\|xl\|xxl\|\d+(?:\.\d+)?[bB]?))\b` |
+| "dubbed/termed X" | "...dubbed AlphaFold..." | `(?:dubbed\|termed)\s+([A-Z][A-Za-z0-9\-]+)` |
+| "known as X" | "...known as ResNet..." | `(?:known\s+as\|referred\s+to\s+as)\s+([A-Z][A-Za-z0-9\-]+)` |
+| ", the Name," | "..., the Transformer, ..." | `,\s+the\s+([A-Z][A-Za-z0-9\-]+)(?:,\|\.\s)` |
+| CamelCase name | "ChatGPT", "LangChain" | `\b([A-Z][a-z]+(?:[A-Z][A-Za-z0-9]*)+)\b` |
 | Defined acronym | "...Retrieval-Augmented Generation (RAG)..." | `\(([A-Z]{2,8})\)` |
 | Inline acronym | "...using LLMs for..." | `\b([A-Z]{2,10}s?)\b` |
 
@@ -190,22 +197,34 @@ keywords = kw_model.extract_keywords(
 
 ### 5.1 Stopword List
 
-Common words and meaningless acronyms are filtered:
+Common words and meaningless acronyms are filtered. Stopwords are organized into four categories:
 
 ```python
-STOPWORDS = {
-    # Common words
+# Common English words that may match acronym patterns
+COMMON_WORDS = {
     "IT", "IS", "OR", "AN", "AS", "AT", "BE", "BY", "THE", "FOR", "AND",
-
-    # Section headers
-    "INTRODUCTION", "CONCLUSION", "ABSTRACT", "METHODS",
-
-    # Generic terms
-    "PAPER", "STUDY", "MODEL", "SYSTEM", "APPROACH",
-
-    # Common title words
-    "LEARNING", "NEURAL", "NETWORK", "DEEP", "DATA",
+    "USING", "BASED", "LEARNING", "NEURAL", "NETWORK", "DEEP", "DATA", ...
 }
+
+# Section headers and structural terms
+SECTION_HEADERS = {
+    "INTRODUCTION", "CONCLUSION", "ABSTRACT", "METHODS",
+    "RESULTS", "DISCUSSION", "REFERENCES", "BACKGROUND", ...
+}
+
+# Generic academic terms
+GENERIC_TERMS = {
+    "PAPER", "STUDY", "MODEL", "SYSTEM", "APPROACH",
+    "FRAMEWORK", "ANALYSIS", "RESEARCH", "SURVEY", ...
+}
+
+# Roman numerals and numbering
+NUMBERING = {
+    "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", ...
+}
+
+# Combined stopwords set
+STOPWORDS = COMMON_WORDS | SECTION_HEADERS | GENERIC_TERMS | NUMBERING
 ```
 
 ### 5.2 Validation Rules
@@ -214,8 +233,11 @@ STOPWORDS = {
 |------|-------------|
 | Min length | 2+ characters |
 | Max length | 15 characters or less |
+| Contains letter | Must contain at least one letter |
 | Characters | Letters, numbers, hyphens only |
 | Stopwords | Filtered out |
+| CamelCase filter | Rejects CamelCase matches where all segments are common English words (filters HTML artifacts) |
+| Plural normalization | All-caps plural forms (e.g., "LLMs") also emit the singular ("LLM") |
 
 ---
 
