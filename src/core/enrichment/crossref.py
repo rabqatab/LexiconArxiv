@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, Any
 import httpx
 
 from src.core.enrichment.base import BaseEnricher, CrossRefMixin
+from src.core.exceptions import APIRateLimitError
 
 if TYPE_CHECKING:
     from src.core.storage import QdrantStorage
@@ -242,6 +243,13 @@ class CrossRefEnricher(BaseEnricher, CrossRefMixin):
 
         for (point_id, payload), result in zip(to_process, results):
             progress.processed += 1
+
+            if isinstance(result, APIRateLimitError):
+                # Don't mark as processed — will retry on next run
+                progress.errors += 1
+                continue
+
+            # Mark as processed (success, not-found, or other error)
             progress.processed_point_ids.add(point_id)
 
             if isinstance(result, Exception):

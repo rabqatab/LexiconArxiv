@@ -103,7 +103,7 @@ OpenAlex free API key credits reset daily. When exhausted, all requests return 4
 4. If persistent, reduce parallelism:
 
 ```bash
-python -m src.cli.core_collect enrich-citations --parallel 5
+uv run python -m src.cli.core_collect enrich-citations --parallel 5
 ```
 
 **Note:** Both the enrichment pipeline and the reference resolver share the same `OpenAlexMixin` for API key exhaustion handling and automatic email fallback.
@@ -120,7 +120,7 @@ python -m src.cli.core_collect enrich-citations --parallel 5
 3. Keep parallelism low:
 
 ```bash
-python -m src.cli.core_collect enrich-s2 --parallel 3
+uv run python -m src.cli.core_collect enrich-s2 --parallel 3
 ```
 
 ---
@@ -133,13 +133,13 @@ Collections are checkpointed automatically. Simply re-run the same command:
 
 ```bash
 # This will resume from where it left off
-python -m src.cli.core_collect collect --all --since-year 2020
+uv run python -m src.cli.core_collect collect --all --since-year 2020
 ```
 
 To start fresh:
 
 ```bash
-python -m src.cli.core_collect clear-checkpoint
+uv run python -m src.cli.core_collect clear-checkpoint
 ```
 
 ### OpenReview Returns 0 Papers
@@ -183,8 +183,8 @@ The collector automatically selects the correct API version. If issues persist:
 1. Collect venue-by-venue instead of all at once:
 
 ```bash
-python -m src.cli.core_collect collect --venue neurips --since-year 2020
-python -m src.cli.core_collect collect --venue icml --since-year 2020
+uv run python -m src.cli.core_collect collect --venue neurips --since-year 2020
+uv run python -m src.cli.core_collect collect --venue icml --since-year 2020
 ```
 
 2. Restart Python between venues (clears deduplicator memory)
@@ -196,7 +196,7 @@ python -m src.cli.core_collect collect --venue icml --since-year 2020
 Reduce parallelism:
 
 ```bash
-python -m src.cli.core_collect enrich-citations --parallel 5
+uv run python -m src.cli.core_collect enrich-citations --parallel 5
 ```
 
 ---
@@ -239,16 +239,16 @@ Run the full enrichment pipeline:
 
 ```bash
 # 1. OpenAlex (best for papers with DOIs)
-python -m src.cli.core_collect enrich-citations --parallel 10
+uv run python -m src.cli.core_collect enrich-citations --parallel 10
 
 # 2. By title (for papers without DOIs)
-python -m src.cli.core_collect enrich-citations-by-title --parallel 5
+uv run python -m src.cli.core_collect enrich-citations-by-title --parallel 5
 
 # 3. Semantic Scholar fallback
-python -m src.cli.core_collect enrich-s2 --parallel 3
+uv run python -m src.cli.core_collect enrich-s2 --parallel 3
 
 # 4. PDF extraction (last resort)
-python -m src.cli.core_collect extract-pdf-refs --parallel 2
+uv run python -m src.cli.core_collect extract-pdf-refs --parallel 2
 ```
 
 ### Missing Abstracts
@@ -258,7 +258,7 @@ python -m src.cli.core_collect extract-pdf-refs --parallel 2
 **Solution:**
 
 ```bash
-python -m src.cli.core_collect enrich-abstracts --parallel 10
+uv run python -m src.cli.core_collect enrich-abstracts --parallel 10
 ```
 
 ### Duplicate Papers
@@ -271,10 +271,10 @@ python -m src.cli.core_collect enrich-abstracts --parallel 10
 
 ```bash
 # Preview duplicates
-python -m src.cli.core_collect deduplicate --dry-run
+uv run python -m src.cli.core_collect deduplicate --dry-run
 
 # Remove duplicates
-python -m src.cli.core_collect deduplicate
+uv run python -m src.cli.core_collect deduplicate
 ```
 
 ---
@@ -293,17 +293,17 @@ Clear the relevant checkpoint:
 
 ```bash
 # Collection checkpoint
-python -m src.cli.core_collect clear-checkpoint
+uv run python -m src.cli.core_collect clear-checkpoint
 
 # Enrichment checkpoints
-python -m src.cli.core_collect clear-enrichment-checkpoint
-python -m src.cli.core_collect clear-enrichment-checkpoint --type abstracts
+uv run python -m src.cli.core_collect clear-enrichment-checkpoint
+uv run python -m src.cli.core_collect clear-enrichment-checkpoint --type abstracts
 
 # Resolution checkpoint
-python -m src.cli.core_collect clear-resolve-checkpoint
+uv run python -m src.cli.core_collect clear-resolve-checkpoint
 
 # Keyword checkpoint
-python -m src.cli.core_collect clear-keyword-checkpoint
+uv run python -m src.cli.core_collect clear-keyword-checkpoint
 ```
 
 ---
@@ -320,8 +320,6 @@ python -m src.cli.core_collect clear-keyword-checkpoint
 Install KeyBERT dependencies:
 
 ```bash
-pip install keybert sentence-transformers
-# or
 uv pip install keybert sentence-transformers
 ```
 
@@ -334,13 +332,13 @@ uv pip install keybert sentence-transformers
 1. Use regex-only mode (faster):
 
 ```bash
-python -m src.cli.core_collect extract-keywords --no-keybert
+uv run python -m src.cli.core_collect extract-keywords --no-keybert
 ```
 
 2. Limit batch size:
 
 ```bash
-python -m src.cli.core_collect extract-keywords --limit 1000
+uv run python -m src.cli.core_collect extract-keywords --limit 1000
 ```
 
 ---

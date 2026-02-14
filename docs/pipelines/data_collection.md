@@ -344,10 +344,10 @@ ACL Anthology includes 90+ workshop venues that are dynamically collected:
 **CLI Commands:**
 ```bash
 # Collect workshops only
-python -m src.cli.core_collect collect-acl --workshops-only
+uv run python -m src.cli.core_collect collect-acl --workshops-only
 
 # Collect all including workshops
-python -m src.cli.core_collect collect-acl --all --include-workshops
+uv run python -m src.cli.core_collect collect-acl --all --include-workshops
 ```
 
 ### 5.1 ACL Anthology Structure
@@ -893,41 +893,41 @@ See [Citation Graph Design](./citation_graph.md) for details.
 
 ```bash
 # Collect papers from a venue
-python -m src.cli.core_collect collect --venue neurips --since-year 2020
+uv run python -m src.cli.core_collect collect --venue neurips --since-year 2020
 
 # Collect all Tier 0 venues
-python -m src.cli.core_collect collect --tier 0
+uv run python -m src.cli.core_collect collect --tier 0
 
 # Collect all discovered venues
-python -m src.cli.core_collect collect --all
+uv run python -m src.cli.core_collect collect --all
 
 # Check collection status
-python -m src.cli.core_collect status
+uv run python -m src.cli.core_collect status
 
 # Discover OpenAlex Source IDs for venues
-python -m src.cli.core_collect discover-sources --venue icml
-python -m src.cli.core_collect discover-sources --all
+uv run python -m src.cli.core_collect discover-sources --venue icml
+uv run python -m src.cli.core_collect discover-sources --all
 
 # List configured venues
-python -m src.cli.core_collect list-venues
-python -m src.cli.core_collect list-venues --tier 0
+uv run python -m src.cli.core_collect list-venues
+uv run python -m src.cli.core_collect list-venues --tier 0
 
 # Initialize Qdrant storage
-python -m src.cli.core_collect init-storage
+uv run python -m src.cli.core_collect init-storage
 
 # Clear checkpoint (reset progress)
-python -m src.cli.core_collect clear-checkpoint
+uv run python -m src.cli.core_collect clear-checkpoint
 
 # Citation graph commands
-python -m src.cli.core_collect citation-graph-stats
-python -m src.cli.core_collect build-citation-graph -o graph.json
-python -m src.cli.core_collect build-citation-graph -o graph.graphml --format graphml
-python -m src.cli.core_collect build-citation-graph -o /tmp/graph --streaming  # Low memory
-python -m src.cli.core_collect analyze-citation-graph --all --top-n 50
-python -m src.cli.core_collect analyze-citation-graph --compute-pagerank --store
-python -m src.cli.core_collect get-citing-papers <paper_id>
-python -m src.cli.core_collect export-graph-subgraph <paper_id> --hops 2 -o subgraph.json
-python -m src.cli.core_collect build-cited-by  # Build reverse citations for GraphRAG
+uv run python -m src.cli.core_collect citation-graph-stats
+uv run python -m src.cli.core_collect build-citation-graph -o graph.json
+uv run python -m src.cli.core_collect build-citation-graph -o graph.graphml --format graphml
+uv run python -m src.cli.core_collect build-citation-graph -o /tmp/graph --streaming  # Low memory
+uv run python -m src.cli.core_collect analyze-citation-graph --all --top-n 50
+uv run python -m src.cli.core_collect analyze-citation-graph --compute-pagerank --store
+uv run python -m src.cli.core_collect get-citing-papers <paper_id>
+uv run python -m src.cli.core_collect export-graph-subgraph <paper_id> --hops 2 -o subgraph.json
+uv run python -m src.cli.core_collect build-cited-by  # Build reverse citations for GraphRAG
 ```
 
 ### 11.4 Remaining Work (Application Layer)
@@ -1103,19 +1103,19 @@ Papers from various sources lack certain metadata. The unified enrichment pipeli
 
 ```bash
 # Data quality dashboard
-python -m src.cli.core_collect data-quality
-python -m src.cli.core_collect data-quality --json
-python -m src.cli.core_collect data-quality --by-venue
+uv run python -m src.cli.core_collect data-quality
+uv run python -m src.cli.core_collect data-quality --json
+uv run python -m src.cli.core_collect data-quality --by-venue
 
 # Citation enrichment
-python -m src.cli.core_collect enrich-citations --dry-run
-python -m src.cli.core_collect enrich-citations --parallel 10
-python -m src.cli.core_collect clear-enrichment-checkpoint
+uv run python -m src.cli.core_collect enrich-citations --dry-run
+uv run python -m src.cli.core_collect enrich-citations --parallel 10
+uv run python -m src.cli.core_collect clear-enrichment-checkpoint
 
 # Abstract enrichment
-python -m src.cli.core_collect enrich-abstracts --dry-run
-python -m src.cli.core_collect enrich-abstracts --parallel 10
-python -m src.cli.core_collect clear-abstract-checkpoint
+uv run python -m src.cli.core_collect enrich-abstracts --dry-run
+uv run python -m src.cli.core_collect enrich-abstracts --parallel 10
+uv run python -m src.cli.core_collect clear-abstract-checkpoint
 ```
 
 **Implementation:**
@@ -1153,10 +1153,10 @@ Workshop papers are now collected dynamically from ACL Anthology:
 **CLI Commands:**
 ```bash
 # Collect workshops only
-python -m src.cli.core_collect collect-acl --workshops-only --since-year 2024
+uv run python -m src.cli.core_collect collect-acl --workshops-only --since-year 2024
 
 # Collect all sources with workshops
-python -m src.cli.core_collect collect-all-sources --include-workshops
+uv run python -m src.cli.core_collect collect-all-sources --include-workshops
 ```
 
 **Storage Schema Update:**

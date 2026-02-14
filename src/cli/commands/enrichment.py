@@ -19,12 +19,14 @@ def register_commands(cli: click.Group):
     @click.option("--batch-size", type=int, default=100, help="Batch size")
     @click.option("--delay", type=float, default=0.1, help="Delay between API calls")
     @click.option("--parallel", "-p", type=int, default=1, help="Number of concurrent requests")
+    @click.option("--retry-incomplete", is_flag=True, help="Re-process papers still missing data (clears checkpoint)")
     def enrich_citations(
         dry_run: bool,
         limit: int | None,
         batch_size: int,
         delay: float,
         parallel: int,
+        retry_incomplete: bool,
     ) -> None:
         """Enrich papers with citation data from OpenAlex.
 
@@ -45,7 +47,7 @@ def register_commands(cli: click.Group):
           # Enrich first 1000 papers
           python -m src.cli.core_collect enrich-citations --limit 1000
         """
-        from src.core.enrichment.openalex import PaperEnricher
+        from src.core.enrichment.openalex import EnrichmentType, PaperEnricher
 
         async def run_enrichment():
             storage = QdrantStorage()
@@ -55,6 +57,9 @@ def register_commands(cli: click.Group):
                 delay=delay,
                 max_concurrent=parallel,
             ) as enricher:
+                if retry_incomplete:
+                    enricher.clear_checkpoint(EnrichmentType.CITATIONS)
+                    click.echo("Checkpoint cleared — retrying papers still missing citations.")
                 progress = await enricher.enrich_citations(dry_run=dry_run, limit=limit)
 
                 click.echo(f"\nCitation Enrichment Results:")
@@ -75,12 +80,14 @@ def register_commands(cli: click.Group):
     @click.option("--batch-size", type=int, default=100, help="Batch size")
     @click.option("--delay", type=float, default=0.1, help="Delay between API calls")
     @click.option("--parallel", "-p", type=int, default=1, help="Number of concurrent requests")
+    @click.option("--retry-incomplete", is_flag=True, help="Re-process papers still missing data (clears checkpoint)")
     def enrich_abstracts(
         dry_run: bool,
         limit: int | None,
         batch_size: int,
         delay: float,
         parallel: int,
+        retry_incomplete: bool,
     ) -> None:
         """Enrich papers with abstracts from OpenAlex.
 
@@ -101,7 +108,7 @@ def register_commands(cli: click.Group):
           # Enrich first 100 papers
           python -m src.cli.core_collect enrich-abstracts --limit 100
         """
-        from src.core.enrichment.openalex import PaperEnricher
+        from src.core.enrichment.openalex import EnrichmentType, PaperEnricher
 
         async def run_enrichment():
             storage = QdrantStorage()
@@ -111,6 +118,9 @@ def register_commands(cli: click.Group):
                 delay=delay,
                 max_concurrent=parallel,
             ) as enricher:
+                if retry_incomplete:
+                    enricher.clear_checkpoint(EnrichmentType.ABSTRACTS)
+                    click.echo("Checkpoint cleared — retrying papers still missing abstracts.")
                 progress = await enricher.enrich_abstracts(dry_run=dry_run, limit=limit)
 
                 click.echo(f"\nAbstract Enrichment Results:")
@@ -130,9 +140,10 @@ def register_commands(cli: click.Group):
     @click.option("--limit", "-n", type=int, help="Max papers to process")
     @click.option("--batch-size", type=int, default=100, help="Batch size")
     @click.option("--delay", type=float, default=0.1, help="Delay between API calls")
-    @click.option("--parallel", "-p", type=int, default=None, help="Concurrent requests (auto: 5 for API key, 1 for email)")
+    @click.option("--parallel", "-p", type=int, default=None, help="Concurrent requests (auto: 3 for API key, 1 for email)")
     @click.option("--venue", "-v", multiple=True, help="Filter by venue (can repeat)")
     @click.option("--min-refs", type=int, default=1, help="Minimum refs required for match")
+    @click.option("--retry-incomplete", is_flag=True, help="Re-process papers still missing data (clears checkpoint)")
     def enrich_citations_by_title(
         dry_run: bool,
         limit: int | None,
@@ -141,6 +152,7 @@ def register_commands(cli: click.Group):
         parallel: int | None,
         venue: tuple[str, ...],
         min_refs: int,
+        retry_incomplete: bool,
     ) -> None:
         """Enrich papers WITHOUT DOIs by searching OpenAlex by title.
 
@@ -166,7 +178,7 @@ def register_commands(cli: click.Group):
           # Only accept matches with 5+ references
           python -m src.cli.core_collect enrich-citations-by-title --min-refs 5
         """
-        from src.core.enrichment.openalex import PaperEnricher
+        from src.core.enrichment.openalex import EnrichmentType, PaperEnricher
 
         venues_list = list(venue) if venue else None
 
@@ -178,6 +190,9 @@ def register_commands(cli: click.Group):
                 delay=delay,
                 max_concurrent=parallel,
             ) as enricher:
+                if retry_incomplete:
+                    enricher.clear_checkpoint(EnrichmentType.TITLE_CITATIONS)
+                    click.echo("Checkpoint cleared — retrying papers still missing citations.")
                 progress = await enricher.enrich_citations_by_title(
                     dry_run=dry_run,
                     limit=limit,
@@ -353,12 +368,14 @@ def register_commands(cli: click.Group):
     @click.option("--batch-size", type=int, default=100, help="Batch size")
     @click.option("--delay", type=float, default=0.1, help="Delay between API calls (default: 0.1s = 10 req/sec)")
     @click.option("--parallel", "-p", type=int, default=5, help="Concurrent requests (default: 5)")
+    @click.option("--retry-incomplete", is_flag=True, help="Re-process papers still missing data (clears checkpoint)")
     def enrich_crossref(
         dry_run: bool,
         limit: int | None,
         batch_size: int,
         delay: float,
         parallel: int,
+        retry_incomplete: bool,
     ) -> None:
         """Enrich papers with references from CrossRef.
 
@@ -392,6 +409,9 @@ def register_commands(cli: click.Group):
                 delay=delay,
                 max_concurrent=parallel,
             ) as enricher:
+                if retry_incomplete:
+                    enricher.clear_checkpoint()
+                    click.echo("Checkpoint cleared — retrying papers still missing CrossRef data.")
                 progress = await enricher.enrich_by_doi(
                     dry_run=dry_run,
                     limit=limit,

@@ -51,25 +51,25 @@ cp .env.example .env
 # Edit .env with your OPENALEX_EMAIL
 
 # Initialize storage
-python -m src.cli.core_collect init-storage
+uv run python -m src.cli.core_collect init-storage
 ```
 
 ### Collection
 
 ```bash
 # Collect from all sources (recommended)
-python -m src.cli.core_collect collect-all-sources --since-year 2020
+uv run python -m src.cli.core_collect collect-all-sources --since-year 2020
 
 # Include workshop papers
-python -m src.cli.core_collect collect-all-sources --since-year 2020 --include-workshops
+uv run python -m src.cli.core_collect collect-all-sources --since-year 2020 --include-workshops
 
 # Collect specific source
-python -m src.cli.core_collect collect-acl --all --include-workshops
-python -m src.cli.core_collect collect-openreview --all
-python -m src.cli.core_collect collect-acm --all
+uv run python -m src.cli.core_collect collect-acl --all --include-workshops
+uv run python -m src.cli.core_collect collect-openreview --all
+uv run python -m src.cli.core_collect collect-acm --all
 
 # Check status
-python -m src.cli.core_collect status
+uv run python -m src.cli.core_collect status
 ```
 
 ### Graph Visualization API
@@ -128,50 +128,55 @@ open http://localhost:8000/docs
 
 ```bash
 # List available venues
-python -m src.cli.core_collect list-venues
-python -m src.cli.core_collect list-acl-venues
-python -m src.cli.core_collect list-openreview-venues
+uv run python -m src.cli.core_collect list-venues
+uv run python -m src.cli.core_collect list-acl-venues
+uv run python -m src.cli.core_collect list-openreview-venues
 
 # Collection commands
-python -m src.cli.core_collect collect-all-sources [options]
-python -m src.cli.core_collect collect-acl [options]
-python -m src.cli.core_collect collect-openreview [options]
-python -m src.cli.core_collect collect-acm [options]
-python -m src.cli.core_collect collect-dblp [options]
-python -m src.cli.core_collect collect-aaai [options]
+uv run python -m src.cli.core_collect collect-all-sources [options]
+uv run python -m src.cli.core_collect collect-acl [options]
+uv run python -m src.cli.core_collect collect-openreview [options]
+uv run python -m src.cli.core_collect collect-acm [options]
+uv run python -m src.cli.core_collect collect-dblp [options]
+uv run python -m src.cli.core_collect collect-aaai [options]
 
 # Maintenance
-python -m src.cli.core_collect status
-python -m src.cli.core_collect deduplicate --dry-run
-python -m src.cli.core_collect clear-checkpoint
+uv run python -m src.cli.core_collect status
+uv run python -m src.cli.core_collect deduplicate --dry-run
+uv run python -m src.cli.core_collect clear-checkpoint
 
 # Enrichment (add citations/abstracts)
-python -m src.cli.core_collect enrich-citations --parallel 10    # OpenAlex
-python -m src.cli.core_collect enrich-crossref --parallel 5      # CrossRef (ACM/Springer)
-python -m src.cli.core_collect enrich-s2                         # Semantic Scholar
-python -m src.cli.core_collect enrich-abstracts --parallel 10    # Abstracts
+uv run python -m src.cli.core_collect enrich-citations --parallel 10    # OpenAlex
+uv run python -m src.cli.core_collect enrich-crossref --parallel 5      # CrossRef (ACM/Springer)
+uv run python -m src.cli.core_collect enrich-s2                         # Semantic Scholar
+uv run python -m src.cli.core_collect enrich-abstracts --parallel 10    # Abstracts
+
+# Retry enrichment for papers still missing data after rate limits
+uv run python -m src.cli.core_collect enrich-citations --retry-incomplete
+uv run python -m src.cli.core_collect enrich-citations-by-title --retry-incomplete
+uv run python -m src.cli.core_collect enrich-crossref --retry-incomplete
 
 # Reference Resolution (build citation graph)
-python -m src.cli.core_collect ref-stats
-python -m src.cli.core_collect resolve-refs
-python -m src.cli.core_collect resolve-refs --create-stubs       # Create stub papers
+uv run python -m src.cli.core_collect ref-stats
+uv run python -m src.cli.core_collect resolve-refs
+uv run python -m src.cli.core_collect resolve-refs --create-stubs       # Create stub papers
 
 # Citation Graph Analysis
-python -m src.cli.core_collect citation-graph-stats
-python -m src.cli.core_collect build-citation-graph -o graph.json
-python -m src.cli.core_collect analyze-citation-graph --all --top-n 10
-python -m src.cli.core_collect get-citing-papers <paper_id>
-python -m src.cli.core_collect build-cited-by  # Required for GraphRAG
+uv run python -m src.cli.core_collect citation-graph-stats
+uv run python -m src.cli.core_collect build-citation-graph -o graph.json
+uv run python -m src.cli.core_collect analyze-citation-graph --all --top-n 10
+uv run python -m src.cli.core_collect get-citing-papers <paper_id>
+uv run python -m src.cli.core_collect build-cited-by  # Required for GraphRAG
 
 # Stub Papers (external references)
-python -m src.cli.core_collect stub-stats                        # Most-cited external papers
-python -m src.cli.core_collect enrich-stubs --limit 1000         # Fetch metadata for stubs
+uv run python -m src.cli.core_collect stub-stats                        # Most-cited external papers
+uv run python -m src.cli.core_collect enrich-stubs --limit 1000         # Fetch metadata for stubs
 
 # Keyword Extraction (for BM25 search)
-python -m src.cli.core_collect extract-keywords              # Full extraction
-python -m src.cli.core_collect extract-keywords --dry-run    # Preview mode
-python -m src.cli.core_collect extract-keywords --no-keybert # Regex only (faster)
-python -m src.cli.core_collect keyword-stats                 # Show statistics
+uv run python -m src.cli.core_collect extract-keywords              # Full extraction
+uv run python -m src.cli.core_collect extract-keywords --dry-run    # Preview mode
+uv run python -m src.cli.core_collect extract-keywords --no-keybert # Regex only (faster)
+uv run python -m src.cli.core_collect keyword-stats                 # Show statistics
 ```
 
 ## Documentation
@@ -193,9 +198,10 @@ lexiconarxiv/
 │   │   ├── models/responses.py  # Pydantic response models
 │   │   └── static/index.html    # D3.js visualization UI
 │   ├── cli/                     # CLI tools
-│   │   └── core_collect.py      # Main collection CLI
+│   │   ├── core_collect.py      # Main CLI entry point
+│   │   └── commands/            # CLI command modules
 │   ├── core/                    # Core modules
-│   │   ├── storage.py           # Qdrant vector database
+│   │   ├── storage/             # Qdrant storage package
 │   │   ├── checkpoint.py        # Resume support
 │   │   ├── checkpoint_mixin.py  # Reusable checkpoint mixin
 │   │   ├── config.py            # Venue configurations

@@ -25,6 +25,7 @@ SKIP_TITLE=${SKIP_TITLE:-false}
 SKIP_ABSTRACTS=${SKIP_ABSTRACTS:-false}
 SKIP_PDF=${SKIP_PDF:-false}
 ENRICH_STUBS=${ENRICH_STUBS:-false}
+RETRY_INCOMPLETE=${RETRY_INCOMPLETE:-false}
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -61,6 +62,10 @@ while [[ $# -gt 0 ]]; do
             ENRICH_STUBS=true
             shift
             ;;
+        --retry-incomplete)
+            RETRY_INCOMPLETE=true
+            shift
+            ;;
         --citations-only)
             SKIP_ABSTRACTS=true
             shift
@@ -85,6 +90,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --skip-abstracts   Skip abstract enrichment"
             echo "  --skip-pdf         Skip PDF/GROBID extraction"
             echo "  --enrich-stubs     Also enrich stub papers (expensive)"
+            echo "  --retry-incomplete Re-process papers still missing data"
             echo "  --citations-only   Only enrich citations (skip abstracts)"
             echo "  --abstracts-only   Only enrich abstracts"
             echo "  --help             Show this help message"
@@ -122,13 +128,16 @@ echo "Skip Title Lookup: $SKIP_TITLE"
 echo "Skip Abstracts: $SKIP_ABSTRACTS"
 echo "Skip PDF/GROBID: $SKIP_PDF"
 echo "Enrich Stubs: $ENRICH_STUBS"
+echo "Retry Incomplete: $RETRY_INCOMPLETE"
 echo "=========================================="
 echo ""
 
 # Step 3.1: OpenAlex DOI-based enrichment
 if [ "$SKIP_OPENALEX" = false ]; then
     echo "--- [3.1/$TOTAL_STEPS] OpenAlex (DOI) ---"
-    "$SCRIPT_DIR/enrich_openalex.sh" --parallel "$PARALLEL" --batch-size "$BATCH_SIZE"
+    CMD="$SCRIPT_DIR/enrich_openalex.sh --parallel $PARALLEL --batch-size $BATCH_SIZE"
+    [ "$RETRY_INCOMPLETE" = true ] && CMD="$CMD --retry-incomplete"
+    $CMD
     echo ""
 else
     echo "--- [3.1/$TOTAL_STEPS] OpenAlex (SKIPPED) ---"
@@ -138,7 +147,9 @@ fi
 # Step 3.2: CrossRef enrichment
 if [ "$SKIP_CROSSREF" = false ]; then
     echo "--- [3.2/$TOTAL_STEPS] CrossRef ---"
-    "$SCRIPT_DIR/enrich_crossref.sh" --parallel 5 --batch-size "$BATCH_SIZE"
+    CMD="$SCRIPT_DIR/enrich_crossref.sh --parallel 5 --batch-size $BATCH_SIZE"
+    [ "$RETRY_INCOMPLETE" = true ] && CMD="$CMD --retry-incomplete"
+    $CMD
     echo ""
 else
     echo "--- [3.2/$TOTAL_STEPS] CrossRef (SKIPPED) ---"
@@ -148,7 +159,9 @@ fi
 # Step 3.3: Title-based enrichment (parallel auto-detected: 5 for API key, 1 for email)
 if [ "$SKIP_TITLE" = false ]; then
     echo "--- [3.3/$TOTAL_STEPS] Title Lookup ---"
-    "$SCRIPT_DIR/enrich_by_title.sh"
+    CMD="$SCRIPT_DIR/enrich_by_title.sh"
+    [ "$RETRY_INCOMPLETE" = true ] && CMD="$CMD --retry-incomplete"
+    $CMD
     echo ""
 else
     echo "--- [3.3/$TOTAL_STEPS] Title Lookup (SKIPPED) ---"
@@ -158,7 +171,9 @@ fi
 # Step 3.4: Abstract enrichment
 if [ "$SKIP_ABSTRACTS" = false ]; then
     echo "--- [3.4/$TOTAL_STEPS] Abstracts ---"
-    "$SCRIPT_DIR/enrich_abstracts.sh" --parallel "$PARALLEL" --batch-size "$BATCH_SIZE"
+    CMD="$SCRIPT_DIR/enrich_abstracts.sh --parallel $PARALLEL --batch-size $BATCH_SIZE"
+    [ "$RETRY_INCOMPLETE" = true ] && CMD="$CMD --retry-incomplete"
+    $CMD
     echo ""
 else
     echo "--- [3.4/$TOTAL_STEPS] Abstracts (SKIPPED) ---"

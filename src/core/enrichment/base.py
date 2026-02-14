@@ -484,7 +484,7 @@ class CrossRefMixin:
                 return None
 
         logger.warning(f"CrossRef max retries exceeded for {doi}")
-        return None
+        raise APIRateLimitError(f"CrossRef max retries exceeded for {doi}")
 
     def parse_crossref_work(self, message: dict[str, Any]) -> dict[str, Any]:
         """Parse CrossRef work data into standardized metadata.

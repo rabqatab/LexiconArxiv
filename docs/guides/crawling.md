@@ -40,7 +40,7 @@ docker-compose up -d qdrant
 ### 3. Initialize Storage
 
 ```bash
-python -m src.cli.core_collect init-storage
+uv run python -m src.cli.core_collect init-storage
 ```
 
 ---
@@ -53,10 +53,10 @@ Before starting a full collection, check how many papers you'll be collecting:
 
 ```bash
 # Count all papers from all OpenAlex venues (2020-present)
-python -m src.cli.core_collect collect --all --count-only
+uv run python -m src.cli.core_collect collect --all --count-only
 
 # Count for specific year range
-python -m src.cli.core_collect collect --all --count-only --since-year 2022
+uv run python -m src.cli.core_collect collect --all --count-only --since-year 2022
 ```
 
 This shows:
@@ -68,7 +68,7 @@ This shows:
 
 ```bash
 # Collect from all sources (OpenAlex + ACL + DBLP + OpenReview + ACM + AAAI)
-python -m src.cli.core_collect collect-all-sources --since-year 2020
+uv run python -m src.cli.core_collect collect-all-sources --since-year 2020
 ```
 
 ---
@@ -113,7 +113,7 @@ python -m src.cli.core_collect collect-all-sources --since-year 2020
 
 ```bash
 # List ACL venues
-python -m src.cli.core_collect list-acl-venues
+uv run python -m src.cli.core_collect list-acl-venues
 ```
 
 ### DBLP (IR/Legal Focus)
@@ -133,7 +133,7 @@ python -m src.cli.core_collect list-acl-venues
 
 ```bash
 # List DBLP venues
-python -m src.cli.core_collect list-dblp-venues
+uv run python -m src.cli.core_collect list-dblp-venues
 ```
 
 ### OpenReview (ML Venues - High Coverage)
@@ -157,16 +157,16 @@ The collector automatically selects the correct API version based on venue and y
 
 ```bash
 # List OpenReview venues
-python -m src.cli.core_collect list-openreview-venues
+uv run python -m src.cli.core_collect list-openreview-venues
 
 # Collect from specific venue (accepted papers only)
-python -m src.cli.core_collect collect-openreview --venue iclr --since-year 2020
+uv run python -m src.cli.core_collect collect-openreview --venue iclr --since-year 2020
 
 # Include rejected/withdrawn submissions
-python -m src.cli.core_collect collect-openreview --venue iclr --include-rejected
+uv run python -m src.cli.core_collect collect-openreview --venue iclr --include-rejected
 
 # Collect all ML venues
-python -m src.cli.core_collect collect-openreview --all
+uv run python -m src.cli.core_collect collect-openreview --all
 ```
 
 ### ACM Digital Library (Now Open Access)
@@ -182,13 +182,13 @@ python -m src.cli.core_collect collect-openreview --all
 
 ```bash
 # List ACM venues
-python -m src.cli.core_collect list-acm-venues
+uv run python -m src.cli.core_collect list-acm-venues
 
 # Collect from specific venue
-python -m src.cli.core_collect collect-acm --venue kdd --since-year 2020
+uv run python -m src.cli.core_collect collect-acm --venue kdd --since-year 2020
 
 # Collect all ACM venues
-python -m src.cli.core_collect collect-acm --all
+uv run python -m src.cli.core_collect collect-acm --all
 ```
 
 ### AAAI OJS (AI Conference)
@@ -204,10 +204,10 @@ python -m src.cli.core_collect collect-acm --all
 
 ```bash
 # List AAAI venues
-python -m src.cli.core_collect list-aaai-venues
+uv run python -m src.cli.core_collect list-aaai-venues
 
 # Collect AAAI papers
-python -m src.cli.core_collect collect-aaai --since-year 2020
+uv run python -m src.cli.core_collect collect-aaai --since-year 2020
 ```
 
 ---
@@ -218,105 +218,105 @@ python -m src.cli.core_collect collect-aaai --since-year 2020
 
 ```bash
 # Collect from a specific venue
-python -m src.cli.core_collect collect --venue neurips --since-year 2020
+uv run python -m src.cli.core_collect collect --venue neurips --since-year 2020
 
 # Collect from a tier
-python -m src.cli.core_collect collect --tier 0 --since-year 2020
+uv run python -m src.cli.core_collect collect --tier 0 --since-year 2020
 
 # Collect all venues
-python -m src.cli.core_collect collect --all --since-year 2020
+uv run python -m src.cli.core_collect collect --all --since-year 2020
 
 # Count only (dry run)
-python -m src.cli.core_collect collect --all --count-only
+uv run python -m src.cli.core_collect collect --all --count-only
 ```
 
 ### ACL Anthology Collection
 
 ```bash
 # Collect from a specific venue
-python -m src.cli.core_collect collect-acl --venue acl --since-year 2020
+uv run python -m src.cli.core_collect collect-acl --venue acl --since-year 2020
 
 # Collect all ACL main venues (no workshops)
-python -m src.cli.core_collect collect-acl --all
+uv run python -m src.cli.core_collect collect-acl --all
 
 # Collect all ACL venues including workshops
-python -m src.cli.core_collect collect-acl --all --include-workshops
+uv run python -m src.cli.core_collect collect-acl --all --include-workshops
 
 # Collect only workshop papers
-python -m src.cli.core_collect collect-acl --workshops-only --since-year 2024
+uv run python -m src.cli.core_collect collect-acl --workshops-only --since-year 2024
 ```
 
 ### DBLP Collection
 
 ```bash
 # Collect from a specific venue
-python -m src.cli.core_collect collect-dblp --venue icail --since-year 2020
+uv run python -m src.cli.core_collect collect-dblp --venue icail --since-year 2020
 
 # Collect all DBLP venues
-python -m src.cli.core_collect collect-dblp --all
+uv run python -m src.cli.core_collect collect-dblp --all
 ```
 
 ### OpenReview Collection
 
 ```bash
 # Collect from a specific venue
-python -m src.cli.core_collect collect-openreview --venue iclr --since-year 2020
+uv run python -m src.cli.core_collect collect-openreview --venue iclr --since-year 2020
 
 # Collect all OpenReview venues
-python -m src.cli.core_collect collect-openreview --all
+uv run python -m src.cli.core_collect collect-openreview --all
 ```
 
 ### ACM Collection
 
 ```bash
 # Collect from a specific venue
-python -m src.cli.core_collect collect-acm --venue kdd --since-year 2020
+uv run python -m src.cli.core_collect collect-acm --venue kdd --since-year 2020
 
 # Collect all ACM venues
-python -m src.cli.core_collect collect-acm --all
+uv run python -m src.cli.core_collect collect-acm --all
 
 # Fast collection without abstracts
-python -m src.cli.core_collect collect-acm --venue www --no-abstracts
+uv run python -m src.cli.core_collect collect-acm --venue www --no-abstracts
 ```
 
 ### AAAI OJS Collection
 
 ```bash
 # Collect from AAAI
-python -m src.cli.core_collect collect-aaai --venue aaai --since-year 2020
+uv run python -m src.cli.core_collect collect-aaai --venue aaai --since-year 2020
 
 # Collect all AAAI venues
-python -m src.cli.core_collect collect-aaai --all
+uv run python -m src.cli.core_collect collect-aaai --all
 ```
 
 ### Multi-Source Collection
 
 ```bash
 # Collect from all sources
-python -m src.cli.core_collect collect-all-sources --since-year 2020
+uv run python -m src.cli.core_collect collect-all-sources --since-year 2020
 
 # Include ACL workshop papers
-python -m src.cli.core_collect collect-all-sources --since-year 2020 --include-workshops
+uv run python -m src.cli.core_collect collect-all-sources --since-year 2020 --include-workshops
 
 # Skip specific sources (if already collected)
-python -m src.cli.core_collect collect-all-sources --skip-openalex
-python -m src.cli.core_collect collect-all-sources --skip-acl --skip-dblp
+uv run python -m src.cli.core_collect collect-all-sources --skip-openalex
+uv run python -m src.cli.core_collect collect-all-sources --skip-acl --skip-dblp
 
 # Collect only new sources (OpenReview, ACM, AAAI)
-python -m src.cli.core_collect collect-all-sources --skip-openalex --skip-acl --skip-dblp
+uv run python -m src.cli.core_collect collect-all-sources --skip-openalex --skip-acl --skip-dblp
 ```
 
 ### Status & Management
 
 ```bash
 # Check collection status
-python -m src.cli.core_collect status
+uv run python -m src.cli.core_collect status
 
 # List all configured venues
-python -m src.cli.core_collect list-venues
+uv run python -m src.cli.core_collect list-venues
 
 # Clear checkpoint (reset progress)
-python -m src.cli.core_collect clear-checkpoint
+uv run python -m src.cli.core_collect clear-checkpoint
 ```
 
 ---
@@ -329,10 +329,10 @@ Best for initial corpus building:
 
 ```bash
 # Step 1: Check paper counts
-python -m src.cli.core_collect collect --all --count-only --since-year 2020
+uv run python -m src.cli.core_collect collect --all --count-only --since-year 2020
 
 # Step 2: Collect from all sources
-python -m src.cli.core_collect collect-all-sources --since-year 2020
+uv run python -m src.cli.core_collect collect-all-sources --since-year 2020
 ```
 
 **Order:** OpenAlex → ACL Anthology → DBLP
@@ -347,13 +347,13 @@ If you're worried about rate limits:
 
 ```bash
 # Day 1: ACL Anthology (fastest, no strict limits)
-python -m src.cli.core_collect collect-acl --all --since-year 2020
+uv run python -m src.cli.core_collect collect-acl --all --since-year 2020
 
 # Day 2: DBLP (slow but small)
-python -m src.cli.core_collect collect-dblp --all --since-year 2020
+uv run python -m src.cli.core_collect collect-dblp --all --since-year 2020
 
 # Day 3+: OpenAlex (largest, with checkpoints)
-python -m src.cli.core_collect collect --all --since-year 2020
+uv run python -m src.cli.core_collect collect --all --since-year 2020
 ```
 
 **Note:** This order means ACL/DBLP versions are kept when duplicates exist. OpenAlex versions are skipped.
@@ -364,10 +364,10 @@ For prioritizing top venues:
 
 ```bash
 # Tier 0 first (most important)
-python -m src.cli.core_collect collect --tier 0 --since-year 2020
+uv run python -m src.cli.core_collect collect --tier 0 --since-year 2020
 
 # Then Tier 1
-python -m src.cli.core_collect collect --tier 1 --since-year 2020
+uv run python -m src.cli.core_collect collect --tier 1 --since-year 2020
 ```
 
 ---
@@ -380,13 +380,13 @@ For keeping the corpus up-to-date after initial collection.
 
 ```bash
 # Papers updated in last 24 hours
-python -m src.cli.core_collect collect-incremental
+uv run python -m src.cli.core_collect collect-incremental
 
 # Papers updated in last 7 days (weekly catch-up)
-python -m src.cli.core_collect collect-incremental --days 7
+uv run python -m src.cli.core_collect collect-incremental --days 7
 
 # Only specific source
-python -m src.cli.core_collect collect-incremental --source openalex
+uv run python -m src.cli.core_collect collect-incremental --source openalex
 ```
 
 ### Crontab Setup
@@ -403,7 +403,7 @@ Add daily job (runs at 2 AM):
 
 Or with virtual environment:
 ```cron
-0 2 * * * cd /path/to/LexiconArxiv && .venv/bin/python -m src.cli.core_collect collect-incremental >> /var/log/lexicon_cron.log 2>&1
+0 2 * * * cd /path/to/LexiconArxiv && .venv/bin/uv run python -m src.cli.core_collect collect-incremental >> /var/log/lexicon_cron.log 2>&1
 ```
 
 ### How Incremental Works
@@ -465,13 +465,13 @@ If you collected from sources separately (not using `collect-all-sources`), dupl
 
 ```bash
 # Preview duplicates (shows what would be removed)
-python -m src.cli.core_collect deduplicate --dry-run
+uv run python -m src.cli.core_collect deduplicate --dry-run
 
 # Remove duplicates (keeps first occurrence)
-python -m src.cli.core_collect deduplicate
+uv run python -m src.cli.core_collect deduplicate
 
 # Specify collection name
-python -m src.cli.core_collect deduplicate --collection my_collection
+uv run python -m src.cli.core_collect deduplicate --collection my_collection
 ```
 
 The deduplication identifies:
@@ -485,17 +485,17 @@ By default, OpenReview collection only includes **accepted papers**. This filter
 To include all submissions (including rejected):
 
 ```bash
-python -m src.cli.core_collect collect-openreview --venue iclr --include-rejected
+uv run python -m src.cli.core_collect collect-openreview --venue iclr --include-rejected
 ```
 
 ### Checking for Duplicates
 
 ```bash
 # Check collection status for duplicate stats
-python -m src.cli.core_collect status
+uv run python -m src.cli.core_collect status
 
 # Preview duplicates without removing
-python -m src.cli.core_collect deduplicate --dry-run
+uv run python -m src.cli.core_collect deduplicate --dry-run
 ```
 
 ---
@@ -519,12 +519,12 @@ Collections are checkpointed automatically. Simply re-run the same command:
 
 ```bash
 # This will resume from where it left off
-python -m src.cli.core_collect collect --all --since-year 2020
+uv run python -m src.cli.core_collect collect --all --since-year 2020
 ```
 
 To start fresh:
 ```bash
-python -m src.cli.core_collect clear-checkpoint
+uv run python -m src.cli.core_collect clear-checkpoint
 ```
 
 ### OpenReview Returns 0 Papers
@@ -546,10 +546,10 @@ The collector automatically selects the correct API version based on venue and y
 
 ```bash
 # Test Qdrant connection
-python -m src.cli.core_collect init-storage
+uv run python -m src.cli.core_collect init-storage
 
 # Test OpenAlex connection
-python -m src.cli.core_collect collect --venue neurips --count-only
+uv run python -m src.cli.core_collect collect --venue neurips --count-only
 ```
 
 ### Memory Issues
@@ -625,13 +625,13 @@ ACL Anthology includes 90+ workshop venues co-located with main NLP conferences.
 
 ```bash
 # Collect only workshops for 2024
-python -m src.cli.core_collect collect-acl --workshops-only --since-year 2024
+uv run python -m src.cli.core_collect collect-acl --workshops-only --since-year 2024
 
 # Collect all main venues + workshops
-python -m src.cli.core_collect collect-acl --all --include-workshops
+uv run python -m src.cli.core_collect collect-acl --all --include-workshops
 
 # Use with collect-all-sources
-python -m src.cli.core_collect collect-all-sources --include-workshops
+uv run python -m src.cli.core_collect collect-all-sources --include-workshops
 ```
 
 ### Workshop Venue Type
@@ -657,13 +657,13 @@ Before running enrichment, check data quality to understand coverage gaps.
 
 ```bash
 # Show data quality report
-python -m src.cli.core_collect data-quality
+uv run python -m src.cli.core_collect data-quality
 
 # Output as JSON (for scripting)
-python -m src.cli.core_collect data-quality --json
+uv run python -m src.cli.core_collect data-quality --json
 
 # Show breakdown by venue
-python -m src.cli.core_collect data-quality --by-venue
+uv run python -m src.cli.core_collect data-quality --by-venue
 ```
 
 ### Sample Output
@@ -708,23 +708,23 @@ Only ~19% of papers have citation data after initial collection. Enrichment can 
 
 ```bash
 # Count papers needing enrichment (dry run)
-python -m src.cli.core_collect enrich-citations --dry-run
+uv run python -m src.cli.core_collect enrich-citations --dry-run
 ```
 
 ### Run Enrichment
 
 ```bash
 # Enrich all papers with DOI (sequential)
-python -m src.cli.core_collect enrich-citations
+uv run python -m src.cli.core_collect enrich-citations
 
 # Enrich with parallel requests (faster)
-python -m src.cli.core_collect enrich-citations --parallel 10
+uv run python -m src.cli.core_collect enrich-citations --parallel 10
 
 # Enrich with limit (for testing)
-python -m src.cli.core_collect enrich-citations --limit 1000
+uv run python -m src.cli.core_collect enrich-citations --limit 1000
 
 # Resume from checkpoint (automatic)
-python -m src.cli.core_collect enrich-citations
+uv run python -m src.cli.core_collect enrich-citations
 ```
 
 ### Checkpoint & Resume
@@ -734,7 +734,7 @@ If interrupted, simply run the command again to resume.
 
 ```bash
 # Clear checkpoint to start fresh
-python -m src.cli.core_collect clear-enrichment-checkpoint
+uv run python -m src.cli.core_collect clear-enrichment-checkpoint
 ```
 
 ### Rate Limits & Parallelism
@@ -775,27 +775,27 @@ Use abstract enrichment to fetch missing abstracts from OpenAlex.
 
 ```bash
 # Count papers needing abstract enrichment
-python -m src.cli.core_collect enrich-abstracts --dry-run
+uv run python -m src.cli.core_collect enrich-abstracts --dry-run
 ```
 
 ### Run Abstract Enrichment
 
 ```bash
 # Enrich all papers missing abstracts
-python -m src.cli.core_collect enrich-abstracts
+uv run python -m src.cli.core_collect enrich-abstracts
 
 # Enrich with parallel requests
-python -m src.cli.core_collect enrich-abstracts --parallel 10
+uv run python -m src.cli.core_collect enrich-abstracts --parallel 10
 
 # Enrich with limit (for testing)
-python -m src.cli.core_collect enrich-abstracts --limit 100
+uv run python -m src.cli.core_collect enrich-abstracts --limit 100
 ```
 
 ### Checkpoint & Resume
 
 ```bash
 # Clear checkpoint for fresh start
-python -m src.cli.core_collect clear-enrichment-checkpoint --type abstracts
+uv run python -m src.cli.core_collect clear-enrichment-checkpoint --type abstracts
 ```
 
 ---
@@ -816,13 +816,13 @@ S2_API_KEY=your-api-key
 
 ```bash
 # Enrich papers that have DOIs but OpenAlex failed
-python -m src.cli.core_collect enrich-s2
+uv run python -m src.cli.core_collect enrich-s2
 
 # With parallel requests (S2 has strict limits, keep low)
-python -m src.cli.core_collect enrich-s2 --parallel 3
+uv run python -m src.cli.core_collect enrich-s2 --parallel 3
 
 # Limit to specific number of papers
-python -m src.cli.core_collect enrich-s2 --limit 500
+uv run python -m src.cli.core_collect enrich-s2 --limit 500
 ```
 
 ### Enrich by Title (For Papers Without DOIs)
@@ -831,21 +831,21 @@ This is essential for OpenReview papers (NeurIPS, ICML, ICLR) which have no DOIs
 
 ```bash
 # Search S2 by title for papers without DOIs
-python -m src.cli.core_collect enrich-s2 --by-title
+uv run python -m src.cli.core_collect enrich-s2 --by-title
 
 # Target specific venues
-python -m src.cli.core_collect enrich-s2 --by-title -v "NeurIPS 2024 poster"
-python -m src.cli.core_collect enrich-s2 --by-title -v "ICML 2024 Poster" -v "ICLR 2024 poster"
+uv run python -m src.cli.core_collect enrich-s2 --by-title -v "NeurIPS 2024 poster"
+uv run python -m src.cli.core_collect enrich-s2 --by-title -v "ICML 2024 Poster" -v "ICLR 2024 poster"
 
 # Require minimum references for match quality
-python -m src.cli.core_collect enrich-s2 --by-title --min-refs 5
+uv run python -m src.cli.core_collect enrich-s2 --by-title --min-refs 5
 ```
 
 ### Checkpoint & Resume
 
 ```bash
 # Clear S2 checkpoint
-python -m src.cli.core_collect clear-s2-checkpoint
+uv run python -m src.cli.core_collect clear-s2-checkpoint
 ```
 
 ### Expected Results
@@ -870,23 +870,23 @@ docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.0
 
 ```bash
 # Count papers with PDF URLs
-python -m src.cli.core_collect extract-pdf-refs --dry-run
+uv run python -m src.cli.core_collect extract-pdf-refs --dry-run
 
 # Extract from all PDFs
-python -m src.cli.core_collect extract-pdf-refs --parallel 2
+uv run python -m src.cli.core_collect extract-pdf-refs --parallel 2
 
 # Target specific venues
-python -m src.cli.core_collect extract-pdf-refs -v "NeurIPS 2024 poster"
+uv run python -m src.cli.core_collect extract-pdf-refs -v "NeurIPS 2024 poster"
 
 # Limit for testing
-python -m src.cli.core_collect extract-pdf-refs --limit 100
+uv run python -m src.cli.core_collect extract-pdf-refs --limit 100
 ```
 
 ### Checkpoint & Resume
 
 ```bash
 # Clear PDF extraction checkpoint
-python -m src.cli.core_collect clear-pdf-checkpoint
+uv run python -m src.cli.core_collect clear-pdf-checkpoint
 ```
 
 ### Limitations
@@ -903,17 +903,17 @@ Run enrichments in this order for best results:
 
 ```bash
 # 1. OpenAlex (fast, best for older papers)
-python -m src.cli.core_collect enrich-citations --parallel 10
+uv run python -m src.cli.core_collect enrich-citations --parallel 10
 
 # 2. Semantic Scholar DOI (fallback for papers OpenAlex missed)
-python -m src.cli.core_collect enrich-s2 --parallel 3
+uv run python -m src.cli.core_collect enrich-s2 --parallel 3
 
 # 3. Semantic Scholar Title (for papers without DOIs)
-python -m src.cli.core_collect enrich-s2 --by-title --parallel 3
+uv run python -m src.cli.core_collect enrich-s2 --by-title --parallel 3
 
 # 4. PDF Extraction (last resort, slowest)
 docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.0 &
-python -m src.cli.core_collect extract-pdf-refs --parallel 2
+uv run python -m src.cli.core_collect extract-pdf-refs --parallel 2
 ```
 
 ---
@@ -948,27 +948,27 @@ TITLE:attention...→  TITLE:attention...             →  point_id (UUID)
 
 ```bash
 # Check statistics first
-python -m src.cli.core_collect ref-stats
+uv run python -m src.cli.core_collect ref-stats
 
 # Run full pipeline (dry run to preview)
-python -m src.cli.core_collect resolve-refs --dry-run
+uv run python -m src.cli.core_collect resolve-refs --dry-run
 
 # Run full pipeline
-python -m src.cli.core_collect resolve-refs
+uv run python -m src.cli.core_collect resolve-refs
 
 # Run specific steps
-python -m src.cli.core_collect resolve-refs --step normalize
-python -m src.cli.core_collect resolve-refs --step arxiv
-python -m src.cli.core_collect resolve-refs --step internal
+uv run python -m src.cli.core_collect resolve-refs --step normalize
+uv run python -m src.cli.core_collect resolve-refs --step arxiv
+uv run python -m src.cli.core_collect resolve-refs --step internal
 
 # With fuzzy title matching (slower but better coverage)
-python -m src.cli.core_collect resolve-refs --step internal --fuzzy-matching
+uv run python -m src.cli.core_collect resolve-refs --step internal --fuzzy-matching
 
 # Search external APIs for unresolved titles (adds papers to corpus)
-python -m src.cli.core_collect resolve-refs --step internal --external-search
+uv run python -m src.cli.core_collect resolve-refs --step internal --external-search
 
 # Limit papers processed
-python -m src.cli.core_collect resolve-refs --limit 1000
+uv run python -m src.cli.core_collect resolve-refs --limit 1000
 ```
 
 ### Step Details
@@ -981,8 +981,8 @@ Fixes malformed identifiers:
 - Prefix standardization
 
 ```bash
-python -m src.cli.core_collect resolve-refs --step normalize --limit 100
-python -m src.cli.core_collect ref-stats
+uv run python -m src.cli.core_collect resolve-refs --step normalize --limit 100
+uv run python -m src.cli.core_collect ref-stats
 # Verify no "arXiv:arXiv:" duplicates remain
 ```
 
@@ -991,8 +991,8 @@ python -m src.cli.core_collect ref-stats
 Converts arXiv references to DOIs via OpenAlex lookup:
 
 ```bash
-python -m src.cli.core_collect resolve-refs --step arxiv --limit 100
-python -m src.cli.core_collect ref-stats
+uv run python -m src.cli.core_collect resolve-refs --step arxiv --limit 100
+uv run python -m src.cli.core_collect ref-stats
 # Check arXiv count decreased, DOI count increased
 ```
 
@@ -1001,8 +1001,8 @@ python -m src.cli.core_collect ref-stats
 Maps identifiers to Qdrant point IDs:
 
 ```bash
-python -m src.cli.core_collect resolve-refs --step internal --limit 100
-python -m src.cli.core_collect ref-stats
+uv run python -m src.cli.core_collect resolve-refs --step internal --limit 100
+uv run python -m src.cli.core_collect ref-stats
 # Should show papers_with_resolved > 0
 ```
 
@@ -1012,12 +1012,12 @@ Progress is automatically checkpointed for resumable operation:
 
 ```bash
 # Clear all checkpoints
-python -m src.cli.core_collect clear-resolve-checkpoint
+uv run python -m src.cli.core_collect clear-resolve-checkpoint
 
 # Clear specific step
-python -m src.cli.core_collect clear-resolve-checkpoint --step normalize
-python -m src.cli.core_collect clear-resolve-checkpoint --step arxiv
-python -m src.cli.core_collect clear-resolve-checkpoint --step internal
+uv run python -m src.cli.core_collect clear-resolve-checkpoint --step normalize
+uv run python -m src.cli.core_collect clear-resolve-checkpoint --step arxiv
+uv run python -m src.cli.core_collect clear-resolve-checkpoint --step internal
 ```
 
 ### Verifying Graph Connectivity
@@ -1095,26 +1095,26 @@ Without keywords, these queries rely solely on title/abstract text matching.
 
 ```bash
 # Check statistics first
-python -m src.cli.core_collect keyword-stats
+uv run python -m src.cli.core_collect keyword-stats
 
 # Preview extraction (dry run)
-python -m src.cli.core_collect extract-keywords --dry-run
+uv run python -m src.cli.core_collect extract-keywords --dry-run
 
 # Full extraction (regex + KeyBERT)
-python -m src.cli.core_collect extract-keywords
+uv run python -m src.cli.core_collect extract-keywords
 
 # Regex only (faster, no ML model)
-python -m src.cli.core_collect extract-keywords --no-keybert
+uv run python -m src.cli.core_collect extract-keywords --no-keybert
 
 # Limit for testing
-python -m src.cli.core_collect extract-keywords --limit 1000
+uv run python -m src.cli.core_collect extract-keywords --limit 1000
 ```
 
 ### Checkpoint Management
 
 ```bash
 # Clear checkpoint to start fresh
-python -m src.cli.core_collect clear-keyword-checkpoint
+uv run python -m src.cli.core_collect clear-keyword-checkpoint
 ```
 
 ### Expected Results
@@ -1130,7 +1130,7 @@ python -m src.cli.core_collect clear-keyword-checkpoint
 KeyBERT requires additional dependencies:
 
 ```bash
-pip install keybert sentence-transformers
+uv pip install keybert sentence-transformers
 ```
 
 ### Schema Changes
@@ -1152,23 +1152,23 @@ For a complete corpus with all enrichments:
 
 ```bash
 # 1. Collect from all sources
-python -m src.cli.core_collect collect-all-sources --since-year 2020 --include-workshops
+uv run python -m src.cli.core_collect collect-all-sources --since-year 2020 --include-workshops
 
 # 2. Deduplicate
-python -m src.cli.core_collect deduplicate
+uv run python -m src.cli.core_collect deduplicate
 
 # 3. Enrich citations and abstracts
-python -m src.cli.core_collect enrich-citations --parallel 10
-python -m src.cli.core_collect enrich-abstracts --parallel 10
+uv run python -m src.cli.core_collect enrich-citations --parallel 10
+uv run python -m src.cli.core_collect enrich-abstracts --parallel 10
 
 # 4. Resolve references (build citation graph)
-python -m src.cli.core_collect resolve-refs
+uv run python -m src.cli.core_collect resolve-refs
 
 # 5. Build citation graph metrics
-python -m src.cli.core_collect build-cited-by
+uv run python -m src.cli.core_collect build-cited-by
 
 # 6. Extract keywords (for BM25 search)
-python -m src.cli.core_collect extract-keywords
+uv run python -m src.cli.core_collect extract-keywords
 ```
 
 ---

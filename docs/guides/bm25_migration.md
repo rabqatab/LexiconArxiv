@@ -386,7 +386,7 @@ def enable_bm25(dry_run: bool):
 ### 1. Check Index Status
 
 ```bash
-python -c "
+uv run python -c "
 from src.core.storage import QdrantStorage
 storage = QdrantStorage()
 info = storage.client.get_collection(storage.collection_name)

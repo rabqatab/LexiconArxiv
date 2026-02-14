@@ -11,11 +11,11 @@ Complete reference for all CLI commands in LexiconArxiv.
 ./scripts/run_full_pipeline.sh --since-year 2018 --include-workshops
 
 # Or step by step
-python -m src.cli.core_collect collect-all-sources --since-year 2020
-python -m src.cli.core_collect deduplicate
-python -m src.cli.core_collect enrich-citations --parallel 10
-python -m src.cli.core_collect resolve-refs
-python -m src.cli.core_collect extract-keywords
+uv run python -m src.cli.core_collect collect-all-sources --since-year 2020
+uv run python -m src.cli.core_collect deduplicate
+uv run python -m src.cli.core_collect enrich-citations --parallel 10
+uv run python -m src.cli.core_collect resolve-refs
+uv run python -m src.cli.core_collect extract-keywords
 ```
 
 ---
@@ -27,7 +27,7 @@ python -m src.cli.core_collect extract-keywords
 Initialize Qdrant collection with proper schema.
 
 ```bash
-python -m src.cli.core_collect init-storage
+uv run python -m src.cli.core_collect init-storage
 ```
 
 ### status
@@ -35,7 +35,7 @@ python -m src.cli.core_collect init-storage
 Check collection status and statistics.
 
 ```bash
-python -m src.cli.core_collect status
+uv run python -m src.cli.core_collect status
 ```
 
 ---
@@ -48,16 +48,16 @@ Collect papers from OpenAlex by venue or tier.
 
 ```bash
 # Single venue
-python -m src.cli.core_collect collect --venue neurips --since-year 2020
+uv run python -m src.cli.core_collect collect --venue neurips --since-year 2020
 
 # By tier
-python -m src.cli.core_collect collect --tier 0 --since-year 2020
+uv run python -m src.cli.core_collect collect --tier 0 --since-year 2020
 
 # All venues
-python -m src.cli.core_collect collect --all --since-year 2020
+uv run python -m src.cli.core_collect collect --all --since-year 2020
 
 # Count only (dry run)
-python -m src.cli.core_collect collect --all --count-only
+uv run python -m src.cli.core_collect collect --all --count-only
 ```
 
 ### collect-acl
@@ -66,16 +66,16 @@ Collect papers from ACL Anthology.
 
 ```bash
 # Single venue
-python -m src.cli.core_collect collect-acl --venue acl --since-year 2020
+uv run python -m src.cli.core_collect collect-acl --venue acl --since-year 2020
 
 # All main venues
-python -m src.cli.core_collect collect-acl --all
+uv run python -m src.cli.core_collect collect-acl --all
 
 # Include workshops
-python -m src.cli.core_collect collect-acl --all --include-workshops
+uv run python -m src.cli.core_collect collect-acl --all --include-workshops
 
 # Workshops only
-python -m src.cli.core_collect collect-acl --workshops-only --since-year 2024
+uv run python -m src.cli.core_collect collect-acl --workshops-only --since-year 2024
 ```
 
 ### collect-dblp
@@ -84,10 +84,10 @@ Collect papers from DBLP.
 
 ```bash
 # Single venue
-python -m src.cli.core_collect collect-dblp --venue icail --since-year 2020
+uv run python -m src.cli.core_collect collect-dblp --venue icail --since-year 2020
 
 # All DBLP venues
-python -m src.cli.core_collect collect-dblp --all
+uv run python -m src.cli.core_collect collect-dblp --all
 ```
 
 ### collect-openreview
@@ -96,13 +96,13 @@ Collect papers from OpenReview (ICLR, NeurIPS, ICML).
 
 ```bash
 # Single venue
-python -m src.cli.core_collect collect-openreview --venue iclr --since-year 2020
+uv run python -m src.cli.core_collect collect-openreview --venue iclr --since-year 2020
 
 # All venues
-python -m src.cli.core_collect collect-openreview --all
+uv run python -m src.cli.core_collect collect-openreview --all
 
 # Include rejected papers
-python -m src.cli.core_collect collect-openreview --venue iclr --include-rejected
+uv run python -m src.cli.core_collect collect-openreview --venue iclr --include-rejected
 ```
 
 ### collect-acm
@@ -111,13 +111,13 @@ Collect papers from ACM Digital Library.
 
 ```bash
 # Single venue
-python -m src.cli.core_collect collect-acm --venue kdd --since-year 2020
+uv run python -m src.cli.core_collect collect-acm --venue kdd --since-year 2020
 
 # All venues
-python -m src.cli.core_collect collect-acm --all
+uv run python -m src.cli.core_collect collect-acm --all
 
 # Without abstracts (faster)
-python -m src.cli.core_collect collect-acm --venue www --no-abstracts
+uv run python -m src.cli.core_collect collect-acm --venue www --no-abstracts
 ```
 
 ### collect-aaai
@@ -126,10 +126,10 @@ Collect papers from AAAI OJS (2020-2023).
 
 ```bash
 # AAAI papers
-python -m src.cli.core_collect collect-aaai --venue aaai --since-year 2020
+uv run python -m src.cli.core_collect collect-aaai --venue aaai --since-year 2020
 
 # All AAAI venues
-python -m src.cli.core_collect collect-aaai --all
+uv run python -m src.cli.core_collect collect-aaai --all
 ```
 
 ### collect-all-sources
@@ -138,14 +138,14 @@ Collect from all sources in optimal order.
 
 ```bash
 # Standard collection
-python -m src.cli.core_collect collect-all-sources --since-year 2020
+uv run python -m src.cli.core_collect collect-all-sources --since-year 2020
 
 # Include workshops
-python -m src.cli.core_collect collect-all-sources --since-year 2020 --include-workshops
+uv run python -m src.cli.core_collect collect-all-sources --since-year 2020 --include-workshops
 
 # Skip specific sources
-python -m src.cli.core_collect collect-all-sources --skip-openalex
-python -m src.cli.core_collect collect-all-sources --skip-acl --skip-dblp
+uv run python -m src.cli.core_collect collect-all-sources --skip-openalex
+uv run python -m src.cli.core_collect collect-all-sources --skip-acl --skip-dblp
 ```
 
 ### collect-incremental
@@ -154,19 +154,19 @@ Incremental collection for daily cron jobs.
 
 ```bash
 # Daily cron job (papers updated in last 24 hours)
-python -m src.cli.core_collect collect-incremental
+uv run python -m src.cli.core_collect collect-incremental
 
 # Weekly catch-up
-python -m src.cli.core_collect collect-incremental --days 7
+uv run python -m src.cli.core_collect collect-incremental --days 7
 
 # Only specific source
-python -m src.cli.core_collect collect-incremental --source openalex
-python -m src.cli.core_collect collect-incremental --source openreview
+uv run python -m src.cli.core_collect collect-incremental --source openalex
+uv run python -m src.cli.core_collect collect-incremental --source openreview
 ```
 
 **Crontab example (daily at 2 AM):**
 ```bash
-0 2 * * * cd /path/to/project && python -m src.cli.core_collect collect-incremental >> /var/log/lexicon_cron.log 2>&1
+0 2 * * * cd /path/to/project && uv run python -m src.cli.core_collect collect-incremental >> /var/log/lexicon_cron.log 2>&1
 ```
 
 ---
@@ -179,13 +179,13 @@ Remove duplicate papers across sources.
 
 ```bash
 # Preview duplicates
-python -m src.cli.core_collect deduplicate --dry-run
+uv run python -m src.cli.core_collect deduplicate --dry-run
 
 # Remove duplicates
-python -m src.cli.core_collect deduplicate
+uv run python -m src.cli.core_collect deduplicate
 
 # Specific collection
-python -m src.cli.core_collect deduplicate --collection my_collection
+uv run python -m src.cli.core_collect deduplicate --collection my_collection
 ```
 
 ---
@@ -198,16 +198,16 @@ Fetch citation data from OpenAlex for papers with DOIs.
 
 ```bash
 # Preview
-python -m src.cli.core_collect enrich-citations --dry-run
+uv run python -m src.cli.core_collect enrich-citations --dry-run
 
 # Sequential
-python -m src.cli.core_collect enrich-citations
+uv run python -m src.cli.core_collect enrich-citations
 
 # Parallel (recommended)
-python -m src.cli.core_collect enrich-citations --parallel 10
+uv run python -m src.cli.core_collect enrich-citations --parallel 10
 
 # With limit
-python -m src.cli.core_collect enrich-citations --limit 1000
+uv run python -m src.cli.core_collect enrich-citations --limit 1000
 ```
 
 ### enrich-citations-by-title
@@ -215,7 +215,7 @@ python -m src.cli.core_collect enrich-citations --limit 1000
 Enrich papers without DOIs using title search.
 
 ```bash
-python -m src.cli.core_collect enrich-citations-by-title --parallel 5
+uv run python -m src.cli.core_collect enrich-citations-by-title --parallel 5
 ```
 
 ### enrich-abstracts
@@ -224,10 +224,10 @@ Fetch missing abstracts from OpenAlex.
 
 ```bash
 # Preview
-python -m src.cli.core_collect enrich-abstracts --dry-run
+uv run python -m src.cli.core_collect enrich-abstracts --dry-run
 
 # Run
-python -m src.cli.core_collect enrich-abstracts --parallel 10
+uv run python -m src.cli.core_collect enrich-abstracts --parallel 10
 ```
 
 ### enrich-s2
@@ -236,13 +236,13 @@ Enrich using Semantic Scholar (fallback).
 
 ```bash
 # By DOI
-python -m src.cli.core_collect enrich-s2 --parallel 3
+uv run python -m src.cli.core_collect enrich-s2 --parallel 3
 
 # By title (for papers without DOIs)
-python -m src.cli.core_collect enrich-s2 --by-title
+uv run python -m src.cli.core_collect enrich-s2 --by-title
 
 # Target specific venues
-python -m src.cli.core_collect enrich-s2 --by-title -v "NeurIPS 2024 poster"
+uv run python -m src.cli.core_collect enrich-s2 --by-title -v "NeurIPS 2024 poster"
 ```
 
 ### enrich-crossref
@@ -251,16 +251,16 @@ Enrich papers with references from CrossRef (excellent for ACM/Springer papers).
 
 ```bash
 # Preview
-python -m src.cli.core_collect enrich-crossref --dry-run
+uv run python -m src.cli.core_collect enrich-crossref --dry-run
 
 # Enrich all papers with DOIs
-python -m src.cli.core_collect enrich-crossref
+uv run python -m src.cli.core_collect enrich-crossref
 
 # Limit papers
-python -m src.cli.core_collect enrich-crossref --limit 500
+uv run python -m src.cli.core_collect enrich-crossref --limit 500
 
 # Adjust concurrency (default: 5)
-python -m src.cli.core_collect enrich-crossref --parallel 20
+uv run python -m src.cli.core_collect enrich-crossref --parallel 20
 ```
 
 **Note:** CrossRef has 97% success rate for ACM papers where Semantic Scholar fails. For polite pool access, set `CROSSREF_EMAIL` env var.
@@ -271,16 +271,16 @@ Enrich stub papers (external references) with metadata.
 
 ```bash
 # Enrich top 100 most-cited stubs
-python -m src.cli.core_collect enrich-stubs
+uv run python -m src.cli.core_collect enrich-stubs
 
 # Enrich DOI stubs only
-python -m src.cli.core_collect enrich-stubs --limit 1000 --type doi
+uv run python -m src.cli.core_collect enrich-stubs --limit 1000 --type doi
 
 # Only highly-cited stubs (5+ citations)
-python -m src.cli.core_collect enrich-stubs --min-citations 5
+uv run python -m src.cli.core_collect enrich-stubs --min-citations 5
 
 # Preview
-python -m src.cli.core_collect enrich-stubs --dry-run
+uv run python -m src.cli.core_collect enrich-stubs --dry-run
 ```
 
 **Options:**
@@ -300,10 +300,10 @@ Extract references from PDFs using GROBID.
 docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.0
 
 # Preview
-python -m src.cli.core_collect extract-pdf-refs --dry-run
+uv run python -m src.cli.core_collect extract-pdf-refs --dry-run
 
 # Run
-python -m src.cli.core_collect extract-pdf-refs --parallel 2
+uv run python -m src.cli.core_collect extract-pdf-refs --parallel 2
 ```
 
 ---
@@ -316,24 +316,24 @@ Resolve reference identifiers to internal paper IDs.
 
 ```bash
 # Full pipeline
-python -m src.cli.core_collect resolve-refs
+uv run python -m src.cli.core_collect resolve-refs
 
 # Dry run
-python -m src.cli.core_collect resolve-refs --dry-run
+uv run python -m src.cli.core_collect resolve-refs --dry-run
 
 # Specific steps
-python -m src.cli.core_collect resolve-refs --step normalize
-python -m src.cli.core_collect resolve-refs --step arxiv
-python -m src.cli.core_collect resolve-refs --step internal
+uv run python -m src.cli.core_collect resolve-refs --step normalize
+uv run python -m src.cli.core_collect resolve-refs --step arxiv
+uv run python -m src.cli.core_collect resolve-refs --step internal
 
 # With fuzzy matching
-python -m src.cli.core_collect resolve-refs --step internal --fuzzy-matching
+uv run python -m src.cli.core_collect resolve-refs --step internal --fuzzy-matching
 
 # External search for unresolved titles
-python -m src.cli.core_collect resolve-refs --step internal --external-search
+uv run python -m src.cli.core_collect resolve-refs --step internal --external-search
 
 # Skip stub paper creation (stubs are created by default)
-python -m src.cli.core_collect resolve-refs --no-create-stubs
+uv run python -m src.cli.core_collect resolve-refs --no-create-stubs
 ```
 
 **Options:**
@@ -351,7 +351,7 @@ python -m src.cli.core_collect resolve-refs --no-create-stubs
 Show reference resolution statistics.
 
 ```bash
-python -m src.cli.core_collect ref-stats
+uv run python -m src.cli.core_collect ref-stats
 ```
 
 ### stub-stats
@@ -360,13 +360,13 @@ Show statistics about stub papers (external references).
 
 ```bash
 # Summary view
-python -m src.cli.core_collect stub-stats
+uv run python -m src.cli.core_collect stub-stats
 
 # Show top 50 most-cited stubs
-python -m src.cli.core_collect stub-stats --top 50
+uv run python -m src.cli.core_collect stub-stats --top 50
 
 # JSON output
-python -m src.cli.core_collect stub-stats --json
+uv run python -m src.cli.core_collect stub-stats --json
 ```
 
 ---
@@ -378,7 +378,7 @@ python -m src.cli.core_collect stub-stats --json
 Build reverse citation index for GraphRAG.
 
 ```bash
-python -m src.cli.core_collect build-cited-by
+uv run python -m src.cli.core_collect build-cited-by
 ```
 
 ### citation-graph-stats
@@ -386,7 +386,7 @@ python -m src.cli.core_collect build-cited-by
 Show citation graph statistics.
 
 ```bash
-python -m src.cli.core_collect citation-graph-stats
+uv run python -m src.cli.core_collect citation-graph-stats
 ```
 
 ### build-citation-graph
@@ -395,13 +395,13 @@ Export citation graph to file.
 
 ```bash
 # JSON format
-python -m src.cli.core_collect build-citation-graph -o graph.json
+uv run python -m src.cli.core_collect build-citation-graph -o graph.json
 
 # GraphML format
-python -m src.cli.core_collect build-citation-graph -o graph.graphml --format graphml
+uv run python -m src.cli.core_collect build-citation-graph -o graph.graphml --format graphml
 
 # Streaming (low memory)
-python -m src.cli.core_collect build-citation-graph -o /tmp/graph --streaming
+uv run python -m src.cli.core_collect build-citation-graph -o /tmp/graph --streaming
 ```
 
 ### analyze-citation-graph
@@ -410,10 +410,10 @@ Compute graph metrics (PageRank, HITS, etc.).
 
 ```bash
 # All metrics
-python -m src.cli.core_collect analyze-citation-graph --all --top-n 50
+uv run python -m src.cli.core_collect analyze-citation-graph --all --top-n 50
 
 # Compute and store PageRank
-python -m src.cli.core_collect analyze-citation-graph --compute-pagerank --store
+uv run python -m src.cli.core_collect analyze-citation-graph --compute-pagerank --store
 ```
 
 ### get-citing-papers
@@ -421,7 +421,7 @@ python -m src.cli.core_collect analyze-citation-graph --compute-pagerank --store
 Get papers that cite a specific paper.
 
 ```bash
-python -m src.cli.core_collect get-citing-papers <paper_id>
+uv run python -m src.cli.core_collect get-citing-papers <paper_id>
 ```
 
 ### export-graph-subgraph
@@ -429,7 +429,7 @@ python -m src.cli.core_collect get-citing-papers <paper_id>
 Export citation subgraph around a paper.
 
 ```bash
-python -m src.cli.core_collect export-graph-subgraph <paper_id> --hops 2 -o subgraph.json
+uv run python -m src.cli.core_collect export-graph-subgraph <paper_id> --hops 2 -o subgraph.json
 ```
 
 ---
@@ -442,22 +442,22 @@ Extract keywords using regex patterns and KeyBERT.
 
 ```bash
 # Full extraction (regex + KeyBERT)
-python -m src.cli.core_collect extract-keywords
+uv run python -m src.cli.core_collect extract-keywords
 
 # Preview without saving
-python -m src.cli.core_collect extract-keywords --dry-run --limit 10
+uv run python -m src.cli.core_collect extract-keywords --dry-run --limit 10
 
 # Regex only (faster, no model loading)
-python -m src.cli.core_collect extract-keywords --no-keybert
+uv run python -m src.cli.core_collect extract-keywords --no-keybert
 
 # Re-extract ALL papers (replace existing keywords)
-python -m src.cli.core_collect extract-keywords --force
+uv run python -m src.cli.core_collect extract-keywords --force
 
 # With limit
-python -m src.cli.core_collect extract-keywords --limit 1000
+uv run python -m src.cli.core_collect extract-keywords --limit 1000
 
 # Custom batch size
-python -m src.cli.core_collect extract-keywords --batch-size 200
+uv run python -m src.cli.core_collect extract-keywords --batch-size 200
 ```
 
 **Options:**
@@ -479,10 +479,10 @@ Show keyword extraction statistics.
 
 ```bash
 # Summary view
-python -m src.cli.core_collect keyword-stats
+uv run python -m src.cli.core_collect keyword-stats
 
 # JSON output
-python -m src.cli.core_collect keyword-stats --json
+uv run python -m src.cli.core_collect keyword-stats --json
 ```
 
 ### clear-keywords
@@ -490,7 +490,7 @@ python -m src.cli.core_collect keyword-stats --json
 Remove all keywords from corpus.
 
 ```bash
-python -m src.cli.core_collect clear-keywords --confirm
+uv run python -m src.cli.core_collect clear-keywords --confirm
 ```
 
 ---
@@ -503,13 +503,13 @@ Show data quality report.
 
 ```bash
 # Summary
-python -m src.cli.core_collect data-quality
+uv run python -m src.cli.core_collect data-quality
 
 # JSON output
-python -m src.cli.core_collect data-quality --json
+uv run python -m src.cli.core_collect data-quality --json
 
 # By venue breakdown
-python -m src.cli.core_collect data-quality --by-venue
+uv run python -m src.cli.core_collect data-quality --by-venue
 ```
 
 ---
@@ -522,10 +522,10 @@ List configured venues.
 
 ```bash
 # All venues
-python -m src.cli.core_collect list-venues
+uv run python -m src.cli.core_collect list-venues
 
 # By tier
-python -m src.cli.core_collect list-venues --tier 0
+uv run python -m src.cli.core_collect list-venues --tier 0
 ```
 
 ### list-acl-venues
@@ -533,7 +533,7 @@ python -m src.cli.core_collect list-venues --tier 0
 List ACL Anthology venues.
 
 ```bash
-python -m src.cli.core_collect list-acl-venues
+uv run python -m src.cli.core_collect list-acl-venues
 ```
 
 ### list-dblp-venues
@@ -541,7 +541,7 @@ python -m src.cli.core_collect list-acl-venues
 List DBLP venues.
 
 ```bash
-python -m src.cli.core_collect list-dblp-venues
+uv run python -m src.cli.core_collect list-dblp-venues
 ```
 
 ### list-openreview-venues
@@ -549,7 +549,7 @@ python -m src.cli.core_collect list-dblp-venues
 List OpenReview venues.
 
 ```bash
-python -m src.cli.core_collect list-openreview-venues
+uv run python -m src.cli.core_collect list-openreview-venues
 ```
 
 ### list-acm-venues
@@ -557,7 +557,7 @@ python -m src.cli.core_collect list-openreview-venues
 List ACM Digital Library venues.
 
 ```bash
-python -m src.cli.core_collect list-acm-venues
+uv run python -m src.cli.core_collect list-acm-venues
 ```
 
 ### list-aaai-venues
@@ -565,7 +565,7 @@ python -m src.cli.core_collect list-acm-venues
 List AAAI OJS venues.
 
 ```bash
-python -m src.cli.core_collect list-aaai-venues
+uv run python -m src.cli.core_collect list-aaai-venues
 ```
 
 ### discover-sources
@@ -574,10 +574,10 @@ Discover OpenAlex Source IDs for venues.
 
 ```bash
 # Single venue
-python -m src.cli.core_collect discover-sources --venue icml
+uv run python -m src.cli.core_collect discover-sources --venue icml
 
 # All venues
-python -m src.cli.core_collect discover-sources --all
+uv run python -m src.cli.core_collect discover-sources --all
 ```
 
 ---
@@ -589,7 +589,7 @@ python -m src.cli.core_collect discover-sources --all
 Clear collection checkpoint.
 
 ```bash
-python -m src.cli.core_collect clear-checkpoint
+uv run python -m src.cli.core_collect clear-checkpoint
 ```
 
 ### clear-enrichment-checkpoint
@@ -598,10 +598,10 @@ Clear enrichment checkpoint.
 
 ```bash
 # Citation enrichment
-python -m src.cli.core_collect clear-enrichment-checkpoint
+uv run python -m src.cli.core_collect clear-enrichment-checkpoint
 
 # Abstract enrichment
-python -m src.cli.core_collect clear-enrichment-checkpoint --type abstracts
+uv run python -m src.cli.core_collect clear-enrichment-checkpoint --type abstracts
 ```
 
 ### clear-s2-checkpoint
@@ -609,7 +609,7 @@ python -m src.cli.core_collect clear-enrichment-checkpoint --type abstracts
 Clear Semantic Scholar enrichment checkpoint.
 
 ```bash
-python -m src.cli.core_collect clear-s2-checkpoint
+uv run python -m src.cli.core_collect clear-s2-checkpoint
 ```
 
 ### clear-crossref-checkpoint
@@ -617,7 +617,7 @@ python -m src.cli.core_collect clear-s2-checkpoint
 Clear CrossRef enrichment checkpoint.
 
 ```bash
-python -m src.cli.core_collect clear-crossref-checkpoint
+uv run python -m src.cli.core_collect clear-crossref-checkpoint
 ```
 
 ### clear-pdf-checkpoint
@@ -625,7 +625,7 @@ python -m src.cli.core_collect clear-crossref-checkpoint
 Clear PDF extraction checkpoint.
 
 ```bash
-python -m src.cli.core_collect clear-pdf-checkpoint
+uv run python -m src.cli.core_collect clear-pdf-checkpoint
 ```
 
 ### clear-resolve-checkpoint
@@ -634,10 +634,10 @@ Clear reference resolution checkpoint.
 
 ```bash
 # All steps
-python -m src.cli.core_collect clear-resolve-checkpoint
+uv run python -m src.cli.core_collect clear-resolve-checkpoint
 
 # Specific step
-python -m src.cli.core_collect clear-resolve-checkpoint --step normalize
+uv run python -m src.cli.core_collect clear-resolve-checkpoint --step normalize
 ```
 
 ### clear-keyword-checkpoint
@@ -645,7 +645,7 @@ python -m src.cli.core_collect clear-resolve-checkpoint --step normalize
 Clear keyword extraction checkpoint.
 
 ```bash
-python -m src.cli.core_collect clear-keyword-checkpoint
+uv run python -m src.cli.core_collect clear-keyword-checkpoint
 ```
 
 ---

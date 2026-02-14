@@ -85,7 +85,7 @@ curl http://localhost:8070/api/isalive
 ## 4. Initialize Storage
 
 ```bash
-python -m src.cli.core_collect init-storage
+uv run python -m src.cli.core_collect init-storage
 ```
 
 ---
@@ -109,34 +109,34 @@ This runs all 5 stages:
 
 ```bash
 # 1. Collect from all sources (2018+)
-python -m src.cli.core_collect collect-all-sources --since-year 2018 --include-workshops
+uv run python -m src.cli.core_collect collect-all-sources --since-year 2018 --include-workshops
 
 # 2. Deduplicate
-python -m src.cli.core_collect deduplicate
+uv run python -m src.cli.core_collect deduplicate
 
 # 3. Enrich citations (papers WITH DOIs)
-python -m src.cli.core_collect enrich-citations --parallel 10
+uv run python -m src.cli.core_collect enrich-citations --parallel 10
 
 # 4. Enrich citations by title (papers WITHOUT DOIs - e.g., OpenReview)
-python -m src.cli.core_collect enrich-citations-by-title --parallel 5
+uv run python -m src.cli.core_collect enrich-citations-by-title --parallel 5
 
 # 5. Extract refs from PDFs (papers still missing refs - requires GROBID)
 # Start GROBID first: docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.0
-python -m src.cli.core_collect extract-pdf-refs
+uv run python -m src.cli.core_collect extract-pdf-refs
 
 # 6. Enrich abstracts
-python -m src.cli.core_collect enrich-abstracts --parallel 10
+uv run python -m src.cli.core_collect enrich-abstracts --parallel 10
 
 # 7. Resolve references (build citation graph)
-python -m src.cli.core_collect resolve-refs
+uv run python -m src.cli.core_collect resolve-refs
 
 # 8. Extract keywords (for BM25 search)
-python -m src.cli.core_collect extract-keywords
+uv run python -m src.cli.core_collect extract-keywords
 
 # 9. Check final status
-python -m src.cli.core_collect status
-python -m src.cli.core_collect ref-stats
-python -m src.cli.core_collect keyword-stats
+uv run python -m src.cli.core_collect status
+uv run python -m src.cli.core_collect ref-stats
+uv run python -m src.cli.core_collect keyword-stats
 ```
 
 ---
@@ -145,13 +145,13 @@ python -m src.cli.core_collect keyword-stats
 
 ```bash
 # Check collection status
-python -m src.cli.core_collect status
+uv run python -m src.cli.core_collect status
 
 # Check reference resolution stats
-python -m src.cli.core_collect ref-stats
+uv run python -m src.cli.core_collect ref-stats
 
 # List venues
-python -m src.cli.core_collect list-venues
+uv run python -m src.cli.core_collect list-venues
 ```
 
 ---
@@ -186,7 +186,7 @@ Collection is checkpointed. If interrupted, just re-run the same command:
 
 ```bash
 # Will resume from last checkpoint
-python -m src.cli.core_collect collect-all-sources --since-year 2018
+uv run python -m src.cli.core_collect collect-all-sources --since-year 2018
 ```
 
 ### Clear Checkpoints
@@ -194,20 +194,20 @@ python -m src.cli.core_collect collect-all-sources --since-year 2018
 If you want to restart collection from scratch:
 
 ```bash
-python -m src.cli.core_collect clear-checkpoint
+uv run python -m src.cli.core_collect clear-checkpoint
 ```
 
 ### Collect Specific Sources Only
 
 ```bash
 # OpenAlex only
-python -m src.cli.core_collect collect --venue neurips --since-year 2018
+uv run python -m src.cli.core_collect collect --venue neurips --since-year 2018
 
 # ACL Anthology only
-python -m src.cli.core_collect collect-acl --all --include-workshops --since-year 2018
+uv run python -m src.cli.core_collect collect-acl --all --include-workshops --since-year 2018
 
 # OpenReview only
-python -m src.cli.core_collect collect-openreview --all --since-year 2018
+uv run python -m src.cli.core_collect collect-openreview --all --since-year 2018
 ```
 
 ### Skip Stages in Full Pipeline
@@ -224,16 +224,16 @@ python -m src.cli.core_collect collect-openreview --all --since-year 2018
 
 ```bash
 # Preview without saving
-python -m src.cli.core_collect extract-keywords --dry-run --limit 10
+uv run python -m src.cli.core_collect extract-keywords --dry-run --limit 10
 
 # Regex-only extraction (faster, no KeyBERT model loading)
-python -m src.cli.core_collect extract-keywords --no-keybert
+uv run python -m src.cli.core_collect extract-keywords --no-keybert
 
 # Re-extract ALL papers (replace existing keywords)
-python -m src.cli.core_collect extract-keywords --force
+uv run python -m src.cli.core_collect extract-keywords --force
 
 # Custom batch size
-python -m src.cli.core_collect extract-keywords --batch-size 200
+uv run python -m src.cli.core_collect extract-keywords --batch-size 200
 ```
 
 By default, papers with existing keywords are skipped. Use `--force` to re-extract.
@@ -258,11 +258,28 @@ docker restart qdrant
 
 Make sure `OPENALEX_EMAIL` is set in `.env` for polite pool access (10 req/sec vs 1 req/sec).
 
+If you have an OpenAlex API key, set `OPENALEX_API_KEY` in `.env` for higher limits. If the key's daily credits are exhausted, the system automatically falls back to email and retries the key after 5 minutes.
+
+### Recovering Rate-Limited Papers
+
+If enrichment was interrupted by rate limits, papers that failed are **not** marked as processed. Re-run to automatically retry them. For papers lost in older runs, use `--retry-incomplete` to clear the checkpoint and re-process only papers still missing data:
+
+```bash
+# Retry all enrichment stages for incomplete papers
+./scripts/enrichment/run_enrichment.sh --retry-incomplete
+
+# Or individually:
+uv run python -m src.cli.core_collect enrich-citations --retry-incomplete
+uv run python -m src.cli.core_collect enrich-citations-by-title --retry-incomplete
+uv run python -m src.cli.core_collect enrich-crossref --retry-incomplete
+uv run python -m src.cli.core_collect enrich-abstracts --retry-incomplete
+```
+
 ### Out of Memory
 
 Reduce parallelism:
 ```bash
-python -m src.cli.core_collect enrich-citations --parallel 5
+uv run python -m src.cli.core_collect enrich-citations --parallel 5
 ```
 
 ### GROBID on ARM64 (Apple Silicon)
@@ -328,9 +345,9 @@ Logs are saved to `logs/incremental_pipeline.log`.
 
 After pipeline completion:
 
-1. **Verify data quality**: `python -m src.cli.core_collect status`
-2. **Check citation graph**: `python -m src.cli.core_collect ref-stats`
-3. **Check keyword coverage**: `python -m src.cli.core_collect keyword-stats`
+1. **Verify data quality**: `uv run python -m src.cli.core_collect status`
+2. **Check citation graph**: `uv run python -m src.cli.core_collect ref-stats`
+3. **Check keyword coverage**: `uv run python -m src.cli.core_collect keyword-stats`
 4. **Start API server**: `uvicorn app.main:app --reload`
 
 ---

@@ -139,7 +139,7 @@ Workshop papers are stored with `venue_type: "workshop"` and `tier: 2`.
 
 - **Alt IDs**: Some venues have multiple Source IDs in OpenAlex due to year-specific entries
 - **OR Condition**: When querying, combine all IDs with OR: `primary_location.source.id:S123|S456`
-- **Discovery**: Use `python -m src.cli.core_collect discover-sources --venue <name>` to find IDs
+- **Discovery**: Use `uv run python -m src.cli.core_collect discover-sources --venue <name>` to find IDs
 
 ---
 

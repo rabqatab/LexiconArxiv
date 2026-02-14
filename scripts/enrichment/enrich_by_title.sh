@@ -12,8 +12,9 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 cd "$PROJECT_ROOT"
 
-# Default values - parallel auto-detected by Python code (5 for API key, 1 for email)
+# Default values - parallel auto-detected by Python code (3 for API key, 1 for email)
 PARALLEL=""
+RETRY_INCOMPLETE=false
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -22,14 +23,19 @@ while [[ $# -gt 0 ]]; do
             PARALLEL="$2"
             shift 2
             ;;
+        --retry-incomplete)
+            RETRY_INCOMPLETE=true
+            shift
+            ;;
         --help)
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Enrich papers WITHOUT DOIs by title search"
             echo ""
             echo "Options:"
-            echo "  --parallel N  Concurrent requests (auto: 5 for API key, 1 for email)"
-            echo "  --help        Show this help message"
+            echo "  --parallel N          Concurrent requests (auto: 3 for API key, 1 for email)"
+            echo "  --retry-incomplete    Re-process papers still missing data"
+            echo "  --help                Show this help message"
             exit 0
             ;;
         *)
@@ -42,9 +48,8 @@ done
 echo "[Title Lookup] Enriching citations by title..."
 
 CMD="uv run python -m src.cli.core_collect enrich-citations-by-title"
-if [ -n "$PARALLEL" ]; then
-    CMD="$CMD --parallel $PARALLEL"
-fi
+[ -n "$PARALLEL" ] && CMD="$CMD --parallel $PARALLEL"
+[ "$RETRY_INCOMPLETE" = true ] && CMD="$CMD --retry-incomplete"
 $CMD
 
 echo "[Title Lookup] Enrichment complete."

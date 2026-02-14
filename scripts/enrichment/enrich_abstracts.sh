@@ -12,6 +12,7 @@ cd "$PROJECT_ROOT"
 # Default values
 PARALLEL=${PARALLEL:-10}
 BATCH_SIZE=${BATCH_SIZE:-50}
+RETRY_INCOMPLETE=false
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -24,15 +25,20 @@ while [[ $# -gt 0 ]]; do
             BATCH_SIZE="$2"
             shift 2
             ;;
+        --retry-incomplete)
+            RETRY_INCOMPLETE=true
+            shift
+            ;;
         --help)
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Enrich papers with missing abstracts"
             echo ""
             echo "Options:"
-            echo "  --parallel N     Concurrent requests (default: 10)"
-            echo "  --batch-size N   Batch size for updates (default: 50)"
-            echo "  --help           Show this help message"
+            echo "  --parallel N          Concurrent requests (default: 10)"
+            echo "  --batch-size N        Batch size for updates (default: 50)"
+            echo "  --retry-incomplete    Re-process papers still missing data"
+            echo "  --help                Show this help message"
             exit 0
             ;;
         *)
@@ -44,6 +50,8 @@ done
 
 echo "[Abstracts] Enriching missing abstracts..."
 
-uv run python -m src.cli.core_collect enrich-abstracts --parallel "$PARALLEL" --batch-size "$BATCH_SIZE"
+CMD="uv run python -m src.cli.core_collect enrich-abstracts --parallel $PARALLEL --batch-size $BATCH_SIZE"
+[ "$RETRY_INCOMPLETE" = true ] && CMD="$CMD --retry-incomplete"
+$CMD
 
 echo "[Abstracts] Enrichment complete."

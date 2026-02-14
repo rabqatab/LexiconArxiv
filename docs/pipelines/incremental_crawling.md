@@ -23,13 +23,13 @@ The `collect-incremental` command provides basic incremental updates:
 
 ```bash
 # Papers updated in last 24 hours
-python -m src.cli.core_collect collect-incremental
+uv run python -m src.cli.core_collect collect-incremental
 
 # Papers updated in last 7 days
-python -m src.cli.core_collect collect-incremental --days 7
+uv run python -m src.cli.core_collect collect-incremental --days 7
 
 # Only specific source
-python -m src.cli.core_collect collect-incremental --source openalex
+uv run python -m src.cli.core_collect collect-incremental --source openalex
 ```
 
 **How it works:**
@@ -229,10 +229,10 @@ After major conferences publish proceedings, run targeted collection manually:
 
 ```bash
 # After ACL 2025 proceedings are published
-python -m src.cli.core_collect collect-acl --venue acl --since-year 2025
+uv run python -m src.cli.core_collect collect-acl --venue acl --since-year 2025
 
 # After NeurIPS 2025
-python -m src.cli.core_collect collect-openreview --venue neurips --since-year 2025
+uv run python -m src.cli.core_collect collect-openreview --venue neurips --since-year 2025
 
 # Then run enrichment pipeline
 ./scripts/run_incremental_pipeline.sh --days 1 --skip-graph
@@ -259,10 +259,10 @@ Track these metrics to detect collection issues:
 
 ```bash
 # Overall status
-python -m src.cli.core_collect status
+uv run python -m src.cli.core_collect status
 
 # Papers by year and venue
-python -m src.cli.core_collect stats --by-year --by-venue
+uv run python -m src.cli.core_collect stats --by-year --by-venue
 ```
 
 ---
@@ -316,7 +316,7 @@ GITHUB_TREES_API = "https://api.github.com/repos/acl-org/acl-anthology/git/trees
 # Running in March 2026 with --days 90
 # Before: Only collected 2026 papers (missed late 2025)
 # After:  Collects 2025-2026 papers correctly
-python -m src.cli.core_collect collect-incremental --days 90
+uv run python -m src.cli.core_collect collect-incremental --days 90
 ```
 
 ### 6.6 build_cited_by Connection Reset (Fixed in v0.7.2)
@@ -368,19 +368,19 @@ python -m src.cli.core_collect collect-incremental --days 90
 
 2. Clear checkpoint for specific venue:
    ```bash
-   python -m src.cli.core_collect clear-checkpoint --venue acl_acl
+   uv run python -m src.cli.core_collect clear-checkpoint --venue acl_acl
    ```
 
 3. Re-run collection:
    ```bash
-   python -m src.cli.core_collect collect-acl --venue acl --since-year 2025
+   uv run python -m src.cli.core_collect collect-acl --venue acl --since-year 2025
    ```
 
 ### New Venue/Year Not Collected
 
 1. Check if venue exists in config:
    ```bash
-   python -m src.cli.core_collect list-openreview-venues
+   uv run python -m src.cli.core_collect list-openreview-venues
    ```
 
 2. If new track (e.g., NeurIPS D&B 2025), check invitation pattern:

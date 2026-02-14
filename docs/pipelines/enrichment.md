@@ -287,19 +287,19 @@ After implementation:
 
 ```bash
 # Citation enrichment
-python -m src.cli.core_collect enrich-citations --dry-run
-python -m src.cli.core_collect enrich-citations --limit 1000 --parallel 10
-python -m src.cli.core_collect clear-enrichment-checkpoint
+uv run python -m src.cli.core_collect enrich-citations --dry-run
+uv run python -m src.cli.core_collect enrich-citations --limit 1000 --parallel 10
+uv run python -m src.cli.core_collect clear-enrichment-checkpoint
 
 # Abstract enrichment
-python -m src.cli.core_collect enrich-abstracts --dry-run
-python -m src.cli.core_collect enrich-abstracts --limit 1000 --parallel 10
-python -m src.cli.core_collect clear-abstract-checkpoint
+uv run python -m src.cli.core_collect enrich-abstracts --dry-run
+uv run python -m src.cli.core_collect enrich-abstracts --limit 1000 --parallel 10
+uv run python -m src.cli.core_collect clear-abstract-checkpoint
 
 # Data quality
-python -m src.cli.core_collect data-quality
-python -m src.cli.core_collect data-quality --json
-python -m src.cli.core_collect data-quality --by-venue
+uv run python -m src.cli.core_collect data-quality
+uv run python -m src.cli.core_collect data-quality --json
+uv run python -m src.cli.core_collect data-quality --by-venue
 ```
 
 ---
@@ -377,12 +377,12 @@ Two-phase extraction pipeline:
 
 ```bash
 # Keyword extraction
-python -m src.cli.core_collect extract-keywords              # Full extraction
-python -m src.cli.core_collect extract-keywords --dry-run    # Preview
-python -m src.cli.core_collect extract-keywords --no-keybert # Regex only
+uv run python -m src.cli.core_collect extract-keywords              # Full extraction
+uv run python -m src.cli.core_collect extract-keywords --dry-run    # Preview
+uv run python -m src.cli.core_collect extract-keywords --no-keybert # Regex only
 
 # Statistics
-python -m src.cli.core_collect keyword-stats
+uv run python -m src.cli.core_collect keyword-stats
 ```
 
 See [Keyword Extraction Design](./keyword_extraction.md) for full details.
@@ -416,22 +416,22 @@ All enrichment pipeline enhancements have been implemented:
 
 ```bash
 # Multi-source enrichment pipeline (recommended order)
-python -m src.cli.core_collect enrich-citations --parallel 10       # Step 1: OpenAlex DOI lookup
-python -m src.cli.core_collect enrich-crossref --parallel 10        # Step 2: CrossRef (ACM/Springer)
-python -m src.cli.core_collect enrich-citations-by-title --parallel 5  # Step 3: Title lookup
-python -m src.cli.core_collect extract-pdf-refs                      # Step 4: PDF extraction
-python -m src.cli.core_collect enrich-abstracts --parallel 10        # Step 5: Abstracts
+uv run python -m src.cli.core_collect enrich-citations --parallel 10       # Step 1: OpenAlex DOI lookup
+uv run python -m src.cli.core_collect enrich-crossref --parallel 10        # Step 2: CrossRef (ACM/Springer)
+uv run python -m src.cli.core_collect enrich-citations-by-title --parallel 5  # Step 3: Title lookup
+uv run python -m src.cli.core_collect extract-pdf-refs                      # Step 4: PDF extraction
+uv run python -m src.cli.core_collect enrich-abstracts --parallel 10        # Step 5: Abstracts
 
 # Semantic Scholar fallback (alternative for papers not in CrossRef)
-python -m src.cli.core_collect enrich-s2                            # DOI-based
-python -m src.cli.core_collect enrich-s2 --by-title                 # Title-based
+uv run python -m src.cli.core_collect enrich-s2                            # DOI-based
+uv run python -m src.cli.core_collect enrich-s2 --by-title                 # Title-based
 
 # CrossRef enrichment (excellent for ACM papers - 97% success rate)
-python -m src.cli.core_collect enrich-crossref                      # DOI-based
-python -m src.cli.core_collect enrich-crossref --dry-run            # Preview only
+uv run python -m src.cli.core_collect enrich-crossref                      # DOI-based
+uv run python -m src.cli.core_collect enrich-crossref --dry-run            # Preview only
 
 # Data quality
-python -m src.cli.core_collect data-quality
+uv run python -m src.cli.core_collect data-quality
 ```
 
 ---
@@ -470,16 +470,16 @@ Rate limits are **auto-adjusted** based on API key presence.
 
 ```bash
 # Basic enrichment (auto-detects API key)
-python -m src.cli.core_collect enrich-s2
+uv run python -m src.cli.core_collect enrich-s2
 
 # With explicit API key
-S2_API_KEY=your_key python -m src.cli.core_collect enrich-s2
+S2_API_KEY=your_key uv run python -m src.cli.core_collect enrich-s2
 
 # Title-based search (for papers without DOI)
-python -m src.cli.core_collect enrich-s2 --by-title
+uv run python -m src.cli.core_collect enrich-s2 --by-title
 
 # Override rate limits manually
-python -m src.cli.core_collect enrich-s2 --delay 0.5 --parallel 3
+uv run python -m src.cli.core_collect enrich-s2 --delay 0.5 --parallel 3
 ```
 
 ### Implementation
@@ -537,19 +537,19 @@ Typical breakdown: ~67% of references have DOIs.
 
 ```bash
 # Basic enrichment (targets papers with DOI but no refs)
-python -m src.cli.core_collect enrich-crossref
+uv run python -m src.cli.core_collect enrich-crossref
 
 # Dry run to see what would be enriched
-python -m src.cli.core_collect enrich-crossref --dry-run
+uv run python -m src.cli.core_collect enrich-crossref --dry-run
 
 # Limit number of papers to process
-python -m src.cli.core_collect enrich-crossref --limit 500
+uv run python -m src.cli.core_collect enrich-crossref --limit 500
 
 # Adjust concurrent requests (default: 10)
-python -m src.cli.core_collect enrich-crossref --parallel 20
+uv run python -m src.cli.core_collect enrich-crossref --parallel 20
 
 # Clear checkpoint to restart from beginning
-python -m src.cli.core_collect clear-crossref-checkpoint
+uv run python -m src.cli.core_collect clear-crossref-checkpoint
 ```
 
 ### Implementation
@@ -581,28 +581,28 @@ For maximum coverage, run enrichment sources in this order:
 
 ```bash
 # 1. OpenAlex (primary source, highest quality)
-python -m src.cli.core_collect enrich-citations --parallel 10
+uv run python -m src.cli.core_collect enrich-citations --parallel 10
 
 # 2. CrossRef (excellent for ACM/Springer papers)
-python -m src.cli.core_collect enrich-crossref --parallel 10
+uv run python -m src.cli.core_collect enrich-crossref --parallel 10
 
 # 3. Semantic Scholar (fallback for remaining papers)
-python -m src.cli.core_collect enrich-s2
+uv run python -m src.cli.core_collect enrich-s2
 
 # 4. GROBID PDF extraction (for papers with accessible PDFs)
-python -m src.cli.core_collect extract-pdf-refs
+uv run python -m src.cli.core_collect extract-pdf-refs
 
 # 5. Resolve references to internal IDs (with stub paper creation)
-python -m src.cli.core_collect resolve-refs
+uv run python -m src.cli.core_collect resolve-refs
 
 # 6. Build cited_by index
-python -m src.cli.core_collect build-cited-by
+uv run python -m src.cli.core_collect build-cited-by
 
 # 7. (Optional) Enrich stub papers with metadata
-python -m src.cli.core_collect enrich-stubs --limit 1000
+uv run python -m src.cli.core_collect enrich-stubs --limit 1000
 
 # 8. (Optional) Check most-cited external papers
-python -m src.cli.core_collect stub-stats
+uv run python -m src.cli.core_collect stub-stats
 ```
 
 ### Expected Coverage Impact
@@ -666,17 +666,17 @@ After:  1 stub × 15 citations = accurate count
 
 ```bash
 # Enrich stubs with automatic deduplication
-python -m src.cli.core_collect enrich-stubs --limit 1000
+uv run python -m src.cli.core_collect enrich-stubs --limit 1000
 
 # Filter by identifier type
-python -m src.cli.core_collect enrich-stubs --type doi --limit 500
-python -m src.cli.core_collect enrich-stubs --type arxiv --limit 500
+uv run python -m src.cli.core_collect enrich-stubs --type doi --limit 500
+uv run python -m src.cli.core_collect enrich-stubs --type arxiv --limit 500
 
 # Only enrich highly-cited stubs
-python -m src.cli.core_collect enrich-stubs --min-citations 5
+uv run python -m src.cli.core_collect enrich-stubs --min-citations 5
 
 # Check results
-python -m src.cli.core_collect stub-stats
+uv run python -m src.cli.core_collect stub-stats
 ```
 
 ### Output Example

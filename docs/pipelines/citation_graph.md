@@ -312,49 +312,49 @@ For GraphRAG with 1-2 hop expansion, storing `cited_by` in Qdrant is sufficient 
 
 ```bash
 # Build and export full graph
-python -m src.cli.core_collect build-citation-graph -o graph.json
+uv run python -m src.cli.core_collect build-citation-graph -o graph.json
 
 # Export for Gephi visualization
-python -m src.cli.core_collect build-citation-graph -o graph.graphml --format graphml
+uv run python -m src.cli.core_collect build-citation-graph -o graph.graphml --format graphml
 
 # Filter by venue
-python -m src.cli.core_collect build-citation-graph -v ACL -v EMNLP -o nlp_graph.json
+uv run python -m src.cli.core_collect build-citation-graph -v ACL -v EMNLP -o nlp_graph.json
 
 # Large graph: use streaming export (low memory)
-python -m src.cli.core_collect build-citation-graph -o /tmp/graph --streaming
+uv run python -m src.cli.core_collect build-citation-graph -o /tmp/graph --streaming
 ```
 
 ### Graph Analysis
 
 ```bash
 # Compute all metrics and show top papers
-python -m src.cli.core_collect analyze-citation-graph --all --top-n 50
+uv run python -m src.cli.core_collect analyze-citation-graph --all --top-n 50
 
 # Compute PageRank and store to Qdrant
-python -m src.cli.core_collect analyze-citation-graph --compute-pagerank --store
+uv run python -m src.cli.core_collect analyze-citation-graph --compute-pagerank --store
 
 # Detect communities
-python -m src.cli.core_collect analyze-citation-graph --compute-communities
+uv run python -m src.cli.core_collect analyze-citation-graph --compute-communities
 ```
 
 ### Reverse Citation Lookup
 
 ```bash
 # Get papers citing a specific paper
-python -m src.cli.core_collect get-citing-papers <point_id>
+uv run python -m src.cli.core_collect get-citing-papers <point_id>
 
 # Export 2-hop neighborhood
-python -m src.cli.core_collect export-graph-subgraph <point_id> --hops 2 -o subgraph.json
+uv run python -m src.cli.core_collect export-graph-subgraph <point_id> --hops 2 -o subgraph.json
 ```
 
 ### GraphRAG Preparation
 
 ```bash
 # Build cited_by field for all papers (required for GraphRAG)
-python -m src.cli.core_collect build-cited-by
+uv run python -m src.cli.core_collect build-cited-by
 
 # Check citation graph statistics
-python -m src.cli.core_collect citation-graph-stats
+uv run python -m src.cli.core_collect citation-graph-stats
 ```
 
 ---
@@ -478,16 +478,16 @@ Many papers cite the same foundational works, so deduplication significantly red
 
 ```bash
 # Create stub papers during resolution
-python -m src.cli.core_collect resolve-refs
+uv run python -m src.cli.core_collect resolve-refs
 
 # Show stub statistics and most-cited external papers
-python -m src.cli.core_collect stub-stats
+uv run python -m src.cli.core_collect stub-stats
 
 # Enrich stubs with metadata from OpenAlex/CrossRef
-python -m src.cli.core_collect enrich-stubs --limit 1000
+uv run python -m src.cli.core_collect enrich-stubs --limit 1000
 
 # Promote enriched stubs to full papers (with embedding)
-python -m src.cli.core_collect promote-stubs --min-citations 10
+uv run python -m src.cli.core_collect promote-stubs --min-citations 10
 ```
 
 ### Stub Statistics Example
@@ -513,7 +513,7 @@ Rank  Citations  Identifier
 === Recommendations ===
 
 Consider adding these highly-cited external papers to your corpus:
-  python -m src.cli.core_collect collect-by-doi doi:10.5555/3295222.3295349
+  uv run python -m src.cli.core_collect collect-by-doi doi:10.5555/3295222.3295349
 ```
 
 ### Query Patterns
@@ -625,10 +625,10 @@ Stubs now include `alternate_identifiers` for cross-reference:
 
 ```bash
 # Enrichment automatically deduplicates
-python -m src.cli.core_collect enrich-stubs --limit 1000
+uv run python -m src.cli.core_collect enrich-stubs --limit 1000
 
 # Check merge results
-python -m src.cli.core_collect stub-stats
+uv run python -m src.cli.core_collect stub-stats
 ```
 
 ---

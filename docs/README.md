@@ -94,11 +94,11 @@ cp .env.example .env  # Edit with OPENALEX_EMAIL
 docker run -d -p 6333:6333 --name qdrant -v qdrant_storage:/qdrant/storage qdrant/qdrant
 
 # Run full pipeline
-python -m src.cli.core_collect init-storage
+uv run python -m src.cli.core_collect init-storage
 ./scripts/run_full_pipeline.sh --since-year 2018 --include-workshops
 
 # Check status
-python -m src.cli.core_collect status
+uv run python -m src.cli.core_collect status
 
 # Start Graph Visualization API
 uv run uvicorn src.api.main:app --reload --port 8000

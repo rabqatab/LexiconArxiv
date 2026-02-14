@@ -27,42 +27,42 @@ This document describes the keyword/acronym extraction pipeline for papers in th
 
 ```bash
 # Extract keywords for all papers (regex + KeyBERT)
-python -m src.cli.core_collect extract-keywords
+uv run python -m src.cli.core_collect extract-keywords
 
 # Use only regex patterns (faster, no model loading)
-python -m src.cli.core_collect extract-keywords --no-keybert
+uv run python -m src.cli.core_collect extract-keywords --no-keybert
 
 # Preview without saving
-python -m src.cli.core_collect extract-keywords --dry-run --limit 10
+uv run python -m src.cli.core_collect extract-keywords --dry-run --limit 10
 
 # Re-extract for ALL papers (including those with existing keywords)
-python -m src.cli.core_collect extract-keywords --force
+uv run python -m src.cli.core_collect extract-keywords --force
 
 # Limit number of papers to process
-python -m src.cli.core_collect extract-keywords --limit 1000
+uv run python -m src.cli.core_collect extract-keywords --limit 1000
 
 # Adjust batch size
-python -m src.cli.core_collect extract-keywords --batch-size 200
+uv run python -m src.cli.core_collect extract-keywords --batch-size 200
 ```
 
 ### 2.2 View Statistics
 
 ```bash
 # Show keyword extraction statistics
-python -m src.cli.core_collect keyword-stats
+uv run python -m src.cli.core_collect keyword-stats
 
 # Output as JSON
-python -m src.cli.core_collect keyword-stats --json
+uv run python -m src.cli.core_collect keyword-stats --json
 ```
 
 ### 2.3 Clear Keywords
 
 ```bash
 # Clear checkpoint (restart from beginning)
-python -m src.cli.core_collect clear-keyword-checkpoint
+uv run python -m src.cli.core_collect clear-keyword-checkpoint
 
 # Clear all keywords from corpus
-python -m src.cli.core_collect clear-keywords --confirm
+uv run python -m src.cli.core_collect clear-keywords --confirm
 ```
 
 ---
@@ -74,7 +74,7 @@ python -m src.cli.core_collect clear-keywords --confirm
 By default, papers that already have keywords are **skipped**:
 
 ```bash
-python -m src.cli.core_collect extract-keywords
+uv run python -m src.cli.core_collect extract-keywords
 # Only processes papers where keywords = []
 ```
 
@@ -83,7 +83,7 @@ python -m src.cli.core_collect extract-keywords
 With `--force`, all papers are re-processed and keywords are **replaced**:
 
 ```bash
-python -m src.cli.core_collect extract-keywords --force
+uv run python -m src.cli.core_collect extract-keywords --force
 # Re-extracts for ALL papers, replacing existing keywords
 ```
 
@@ -236,7 +236,7 @@ Keywords can be exported to JSON:
 
 ```bash
 # Export is done via Python script
-python -c "
+uv run python -c "
 from src.core.storage import QdrantStorage
 import json
 
