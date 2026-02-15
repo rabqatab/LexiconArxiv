@@ -224,7 +224,7 @@ uv run python -m src.cli.core_collect collect-openreview --all --since-year 2018
 ### Keyword Extraction Options
 
 ```bash
-# LLM-first pipeline (recommended, requires GEMINI_API_KEY in .env)
+# LLM-first pipeline (recommended, requires GEMINI_API_KEYS in .env)
 uv run python -m src.cli.core_collect extract-keywords --llm --judge
 
 # Local Ollama pipeline (requires running Ollama server)

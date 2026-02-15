@@ -47,8 +47,9 @@ QDRANT_URL_ENV = "QDRANT_URL"
 QDRANT_COLLECTION_ENV = "QDRANT_COLLECTION"
 
 # Gemini
-GEMINI_API_KEY_ENV = "GEMINI_API_KEY"
-GOOGLE_API_KEY_ENV = "GOOGLE_API_KEY"
+GEMINI_API_KEYS_ENV = "GEMINI_API_KEYS"
+GEMINI_API_KEY_ENV = "GEMINI_API_KEY"       # fallback (singular)
+GOOGLE_API_KEY_ENV = "GOOGLE_API_KEY"       # fallback (legacy)
 
 # Ollama
 OLLAMA_BASE_URL_ENV = "OLLAMA_BASE_URL"
@@ -74,7 +75,7 @@ def get_openalex_api_keys() -> list[str]:
     """Get OpenAlex API keys from environment.
 
     Reads OPENALEX_API_KEYS (comma-separated) first, falls back to
-    OPENALEX_API_KEY (single key wrapped in list).
+    OPENALEX_API_KEY (also split on commas for convenience).
 
     Returns:
         List of API key strings (may be empty).
@@ -86,7 +87,10 @@ def get_openalex_api_keys() -> list[str]:
             return keys
     single = os.getenv(OPENALEX_API_KEY_ENV)
     if single and single.strip():
-        return [single.strip()]
+        # Also split on commas in case user put multiple keys in the singular var
+        keys = [k.strip() for k in single.split(",") if k.strip()]
+        if keys:
+            return keys
     return []
 
 
@@ -116,7 +120,7 @@ def get_qdrant_collection() -> str:
 def get_gemini_api_key() -> str | None:
     """Get first Gemini API key from environment.
 
-    Checks both GEMINI_API_KEY and GOOGLE_API_KEY.
+    Checks GEMINI_API_KEYS, GEMINI_API_KEY, and GOOGLE_API_KEY.
     For multiple keys, use get_gemini_api_keys().
     """
     keys = get_gemini_api_keys()
@@ -126,13 +130,18 @@ def get_gemini_api_key() -> str | None:
 def get_gemini_api_keys() -> list[str]:
     """Get all Gemini API keys from environment.
 
-    Supports comma-separated keys in GEMINI_API_KEY or GOOGLE_API_KEY
-    for round-robin rotation across rate limits.
+    Supports comma-separated keys for round-robin rotation.
+    Checks: GEMINI_API_KEYS → GEMINI_API_KEY → GOOGLE_API_KEY.
 
     Returns:
         List of API key strings (may be empty).
     """
-    raw = os.getenv(GEMINI_API_KEY_ENV) or os.getenv(GOOGLE_API_KEY_ENV) or ""
+    raw = (
+        os.getenv(GEMINI_API_KEYS_ENV)
+        or os.getenv(GEMINI_API_KEY_ENV)
+        or os.getenv(GOOGLE_API_KEY_ENV)
+        or ""
+    )
     return [k.strip() for k in raw.split(",") if k.strip()]
 
 

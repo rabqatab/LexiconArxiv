@@ -346,14 +346,14 @@ uv run python -m src.cli.core_collect extract-keywords --limit 1000
 ### Gemini API Key Not Found
 
 **Symptoms:**
-- `ValueError: Gemini API key not found. Set GEMINI_API_KEY or GOOGLE_API_KEY.`
+- `ValueError: Gemini API key not found. Set GEMINI_API_KEYS or GEMINI_API_KEY.`
 
 **Solution:**
 
 Set the API key in your `.env` file:
 
 ```bash
-GEMINI_API_KEY=your_api_key_here
+GEMINI_API_KEYS=your_api_key_here
 ```
 
 Get a key at: https://aistudio.google.com/app/apikey

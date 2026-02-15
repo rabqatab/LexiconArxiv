@@ -35,7 +35,7 @@ class GeminiAbstractLabeler(BaseAbstractLabeler):
         api_keys = get_gemini_api_keys()
         if not api_keys:
             raise ValueError(
-                "Gemini API key not found. Set GEMINI_API_KEY or GOOGLE_API_KEY."
+                "Gemini API key not found. Set GEMINI_API_KEYS or GEMINI_API_KEY."
             )
 
         self._clients = [genai.Client(api_key=key) for key in api_keys]

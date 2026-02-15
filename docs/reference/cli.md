@@ -677,8 +677,9 @@ uv run python -m src.cli.core_collect clear-keyword-checkpoint
 | `QDRANT_URL` | Qdrant server URL | Yes |
 | `QDRANT_API_KEY` | Qdrant API key (for cloud) | No |
 | `S2_API_KEY` | Semantic Scholar API key | No |
-| `GEMINI_API_KEY` | Gemini API key (for LLM keyword extraction) | No |
-| `GOOGLE_API_KEY` | Alternative to `GEMINI_API_KEY` | No |
+| `GEMINI_API_KEYS` | Gemini API key(s), comma-separated for round-robin (keywords + labeling) | No |
+| `GEMINI_API_KEY` | Fallback for `GEMINI_API_KEYS` (singular) | No |
+| `GOOGLE_API_KEY` | Fallback (legacy) | No |
 | `OLLAMA_BASE_URL` | Ollama server URL (default: `http://localhost:11434`) | No |
 
 ---

@@ -233,8 +233,9 @@ Note: Sentences can appear in multiple roles (multi-label classification). All s
 
 | Variable | Description |
 |----------|-------------|
-| `GEMINI_API_KEY` | Gemini API key(s), comma-separated for round-robin (required for `--llm-backend gemini`) |
-| `GOOGLE_API_KEY` | Alternative to `GEMINI_API_KEY` |
+| `GEMINI_API_KEYS` | Gemini API key(s), comma-separated for round-robin (required for `--llm-backend gemini`) |
+| `GEMINI_API_KEY` | Fallback for `GEMINI_API_KEYS` (singular) |
+| `GOOGLE_API_KEY` | Fallback (legacy) |
 | `OLLAMA_BASE_URL` | Ollama server URL (default: `http://localhost:11434`) |
 
 ---

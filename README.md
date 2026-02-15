@@ -346,7 +346,7 @@ OPENALEX_EMAIL=your-email@example.com  # Fallback polite pool when all keys exha
 CROSSREF_EMAIL=your-email@example.com  # Recommended for CrossRef polite pool
 QDRANT_URL=http://localhost:6333
 QDRANT_COLLECTION=lexicon_arxiv        # Optional, default collection name
-GEMINI_API_KEY=key1,key2,...           # Comma-separated for round-robin (keywords + labeling)
+GEMINI_API_KEYS=key1,key2,...           # Comma-separated for round-robin (keywords + labeling)
 OLLAMA_BASE_URL=http://localhost:11434 # Local LLM (default)
 ```
 

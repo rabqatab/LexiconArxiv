@@ -404,8 +404,9 @@ Output format:
 
 | Variable | Description |
 |----------|-------------|
-| `GEMINI_API_KEY` | Gemini API key(s), comma-separated for round-robin rotation (required for `--llm-backend gemini`) |
-| `GOOGLE_API_KEY` | Alternative to `GEMINI_API_KEY` |
+| `GEMINI_API_KEYS` | Gemini API key(s), comma-separated for round-robin rotation (required for `--llm-backend gemini`) |
+| `GEMINI_API_KEY` | Fallback for `GEMINI_API_KEYS` (singular) |
+| `GOOGLE_API_KEY` | Fallback (legacy) |
 | `OLLAMA_BASE_URL` | Ollama server URL (default: `http://localhost:11434`) |
 
 ### 9.1 Multi-Key Gemini Round-Robin
@@ -413,7 +414,7 @@ Output format:
 To distribute rate limits across multiple API keys, set comma-separated keys:
 
 ```env
-GEMINI_API_KEY=key1,key2,key3,key4,key5
+GEMINI_API_KEYS=key1,key2,key3,key4,key5
 ```
 
 Each API call rotates to the next key using `itertools.cycle`, distributing the load evenly. This applies to both keyword extraction and abstract labeling pipelines.
