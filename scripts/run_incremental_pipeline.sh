@@ -88,12 +88,12 @@ echo "=============================================="
 if [ "$DRY_RUN" = true ]; then
     echo "[DRY RUN] Would execute the following steps:"
     echo "  1. collect-incremental --days $DAYS"
-    echo "  2. enrich-abstracts --parallel $PARALLEL"
-    echo "  3. enrich-s2 --parallel $PARALLEL"
-    echo "  4. enrich-crossref --parallel $PARALLEL"
+    echo "  2. enrich-6-abstracts-by-doi-via-openalex --parallel $PARALLEL"
+    echo "  3. enrich-4-refs-by-doi-via-s2 --parallel $PARALLEL"
+    echo "  4. enrich-2-refs-by-doi-via-crossref --parallel $PARALLEL"
     echo "  5. extract-keywords"
     echo "  6. resolve-refs --create-stubs"
-    echo "  7. enrich-stubs --parallel $PARALLEL"
+    echo "  7. enrich-8-metadata-by-stub-via-openalex --parallel $PARALLEL"
     if [ "$SKIP_GRAPH" = false ]; then
         echo "  8. build-cited-by --incremental"
     fi
@@ -111,17 +111,17 @@ uv run python -m src.cli.core_collect collect-incremental --days "$DAYS"
 # Step 2: Enrich abstracts
 echo ""
 echo "[Step 2/7] Enriching abstracts..."
-uv run python -m src.cli.core_collect enrich-abstracts --parallel "$PARALLEL"
+uv run python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --parallel "$PARALLEL"
 
 # Step 3: Enrich citations via Semantic Scholar
 echo ""
 echo "[Step 3/7] Enriching citations (Semantic Scholar)..."
-uv run python -m src.cli.core_collect enrich-s2 --parallel "$PARALLEL"
+uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --parallel "$PARALLEL"
 
 # Step 4: Enrich citations via CrossRef (for papers S2 missed)
 echo ""
 echo "[Step 4/7] Enriching citations (CrossRef)..."
-uv run python -m src.cli.core_collect enrich-crossref --parallel "$PARALLEL"
+uv run python -m src.cli.core_collect enrich-2-refs-by-doi-via-crossref --parallel "$PARALLEL"
 
 # Step 5: Extract keywords
 echo ""
@@ -136,7 +136,7 @@ uv run python -m src.cli.core_collect resolve-refs --create-stubs
 # Step 7: Enrich stub papers
 echo ""
 echo "[Step 7/7] Enriching stub papers..."
-uv run python -m src.cli.core_collect enrich-stubs --parallel "$PARALLEL"
+uv run python -m src.cli.core_collect enrich-8-metadata-by-stub-via-openalex --parallel "$PARALLEL"
 
 # Step 8: Incrementally update cited_by index (optional)
 if [ "$SKIP_GRAPH" = false ]; then

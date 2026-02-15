@@ -398,7 +398,7 @@ print(f"Estimated memory: {est} MB")
 | CLI commands | ✅ Complete | 6 commands |
 | `cited_by` field | ✅ Complete | `build-cited-by` command |
 | Stub paper creation | ✅ Complete | `resolve-refs` (stubs created by default) |
-| Stub enrichment | ✅ Complete | `enrich-stubs` with deduplication |
+| Stub enrichment | ✅ Complete | `enrich-8-metadata-by-stub-via-openalex` with deduplication |
 | `stub-stats` command | ✅ Complete | Most-cited external papers |
 | Stub deduplication | ✅ Complete | Cross-reference merge during enrichment |
 | GraphRAG integration | 🔲 Planned | Search API enhancement |
@@ -484,7 +484,7 @@ uv run python -m src.cli.core_collect resolve-refs
 uv run python -m src.cli.core_collect stub-stats
 
 # Enrich stubs with metadata from OpenAlex/CrossRef
-uv run python -m src.cli.core_collect enrich-stubs --limit 1000
+uv run python -m src.cli.core_collect enrich-8-metadata-by-stub-via-openalex --limit 1000
 
 # Promote enriched stubs to full papers (with embedding)
 uv run python -m src.cli.core_collect promote-stubs --min-citations 10
@@ -625,7 +625,7 @@ Stubs now include `alternate_identifiers` for cross-reference:
 
 ```bash
 # Enrichment automatically deduplicates
-uv run python -m src.cli.core_collect enrich-stubs --limit 1000
+uv run python -m src.cli.core_collect enrich-8-metadata-by-stub-via-openalex --limit 1000
 
 # Check merge results
 uv run python -m src.cli.core_collect stub-stats
@@ -638,7 +638,7 @@ uv run python -m src.cli.core_collect stub-stats
 1. ~~**Implement `build-cited-by` command**~~ ✅ Complete
 2. ~~**Implement stub paper creation**~~ ✅ Complete
 3. ~~**Add `stub-stats` command**~~ ✅ Complete
-4. ~~**Add `enrich-stubs` command**~~ ✅ Complete
+4. ~~**Add `enrich-8-metadata-by-stub-via-openalex` command**~~ ✅ Complete
 5. ~~**Add stub deduplication**~~ ✅ Complete
 6. **Add GraphRAG search endpoint** - API for citation-aware retrieval
 7. **Add title-based stub deduplication** - Fuzzy match TITLE stubs against enriched stubs

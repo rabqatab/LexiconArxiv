@@ -160,12 +160,12 @@ Use the provided script for complete incremental updates:
 
 **Pipeline Steps:**
 1. `collect-incremental` - Collect new papers from all sources
-2. `enrich-abstracts` - Fill missing abstracts via OpenAlex
-3. `enrich-s2` - Enrich citations via Semantic Scholar
-4. `enrich-crossref` - Enrich citations via CrossRef (fallback)
+2. `enrich-6-abstracts-by-doi-via-openalex` - Fill missing abstracts via OpenAlex
+3. `enrich-4-refs-by-doi-via-s2` - Enrich citations via Semantic Scholar
+4. `enrich-2-refs-by-doi-via-crossref` - Enrich citations via CrossRef (fallback)
 5. `extract-keywords` - Extract keywords for BM25 search
 6. `resolve-refs` - Resolve references and create stubs
-7. `enrich-stubs` - Enrich stub paper metadata
+7. `enrich-8-metadata-by-stub-via-openalex` - Enrich stub paper metadata
 8. `build-citation-graph` - Rebuild the citation graph
 
 All steps are **incremental** - they only process new/unenriched papers.

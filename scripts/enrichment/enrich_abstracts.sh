@@ -50,7 +50,7 @@ done
 
 echo "[Abstracts] Enriching missing abstracts..."
 
-CMD="uv run python -m src.cli.core_collect enrich-abstracts --parallel $PARALLEL --batch-size $BATCH_SIZE"
+CMD="uv run python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --parallel $PARALLEL --batch-size $BATCH_SIZE"
 [ "$RETRY_INCOMPLETE" = true ] && CMD="$CMD --retry-incomplete"
 $CMD
 

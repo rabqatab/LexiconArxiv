@@ -50,7 +50,7 @@ done
 
 echo "[Stubs] Enriching stub papers..."
 
-CMD="uv run python -m src.cli.core_collect enrich-stubs --parallel $PARALLEL"
+CMD="uv run python -m src.cli.core_collect enrich-8-metadata-by-stub-via-openalex --parallel $PARALLEL"
 
 if [ "$LIMIT" -gt 0 ]; then
     CMD="$CMD --limit $LIMIT"

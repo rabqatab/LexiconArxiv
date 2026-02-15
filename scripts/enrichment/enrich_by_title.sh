@@ -47,7 +47,7 @@ done
 
 echo "[Title Lookup] Enriching citations by title..."
 
-CMD="uv run python -m src.cli.core_collect enrich-citations-by-title"
+CMD="uv run python -m src.cli.core_collect enrich-3-refs-and-abstracts-by-title-via-openalex"
 [ -n "$PARALLEL" ] && CMD="$CMD --parallel $PARALLEL"
 [ "$RETRY_INCOMPLETE" = true ] && CMD="$CMD --retry-incomplete"
 $CMD

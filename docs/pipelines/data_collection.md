@@ -1109,13 +1109,13 @@ uv run python -m src.cli.core_collect data-quality --json
 uv run python -m src.cli.core_collect data-quality --by-venue
 
 # Citation enrichment
-uv run python -m src.cli.core_collect enrich-citations --dry-run
-uv run python -m src.cli.core_collect enrich-citations --parallel 10
-uv run python -m src.cli.core_collect clear-enrichment-checkpoint
+uv run python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex --dry-run
+uv run python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex --parallel 10
+uv run python -m src.cli.core_collect clear-enrich-1-checkpoint
 
 # Abstract enrichment
-uv run python -m src.cli.core_collect enrich-abstracts --dry-run
-uv run python -m src.cli.core_collect enrich-abstracts --parallel 10
+uv run python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --dry-run
+uv run python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --parallel 10
 uv run python -m src.cli.core_collect clear-abstract-checkpoint
 ```
 

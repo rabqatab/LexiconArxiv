@@ -105,7 +105,7 @@ OpenAlex free API key credits reset daily. When exhausted, all requests return 4
 6. If persistent, reduce parallelism:
 
 ```bash
-uv run python -m src.cli.core_collect enrich-citations --parallel 5
+uv run python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex --parallel 5
 ```
 
 **Note:** Both the enrichment pipeline and the collection crawler share the same `OpenAlexKeyManager` for multi-key rotation and automatic fallback.
@@ -122,7 +122,7 @@ uv run python -m src.cli.core_collect enrich-citations --parallel 5
 3. Keep parallelism low:
 
 ```bash
-uv run python -m src.cli.core_collect enrich-s2 --parallel 3
+uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --parallel 3
 ```
 
 ---
@@ -198,7 +198,7 @@ uv run python -m src.cli.core_collect collect --venue icml --since-year 2020
 Reduce parallelism:
 
 ```bash
-uv run python -m src.cli.core_collect enrich-citations --parallel 5
+uv run python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex --parallel 5
 ```
 
 ---
@@ -241,16 +241,16 @@ Run the full enrichment pipeline:
 
 ```bash
 # 1. OpenAlex (best for papers with DOIs)
-uv run python -m src.cli.core_collect enrich-citations --parallel 10
+uv run python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex --parallel 10
 
 # 2. By title (for papers without DOIs)
-uv run python -m src.cli.core_collect enrich-citations-by-title --parallel 5
+uv run python -m src.cli.core_collect enrich-3-refs-and-abstracts-by-title-via-openalex --parallel 5
 
 # 3. Semantic Scholar fallback
-uv run python -m src.cli.core_collect enrich-s2 --parallel 3
+uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --parallel 3
 
 # 4. PDF extraction (last resort)
-uv run python -m src.cli.core_collect extract-pdf-refs --parallel 2
+uv run python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid --parallel 2
 ```
 
 ### Missing Abstracts
@@ -260,7 +260,7 @@ uv run python -m src.cli.core_collect extract-pdf-refs --parallel 2
 **Solution:**
 
 ```bash
-uv run python -m src.cli.core_collect enrich-abstracts --parallel 10
+uv run python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --parallel 10
 ```
 
 ### Duplicate Papers
@@ -298,8 +298,8 @@ Clear the relevant checkpoint:
 uv run python -m src.cli.core_collect clear-checkpoint
 
 # Enrichment checkpoints
-uv run python -m src.cli.core_collect clear-enrichment-checkpoint
-uv run python -m src.cli.core_collect clear-enrichment-checkpoint --type abstracts
+uv run python -m src.cli.core_collect clear-enrich-1-checkpoint
+uv run python -m src.cli.core_collect clear-enrich-6-checkpoint
 
 # Resolution checkpoint
 uv run python -m src.cli.core_collect clear-resolve-checkpoint

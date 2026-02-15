@@ -79,7 +79,7 @@ if ! curl -s --connect-timeout 5 "$GROBID_URL/api/isalive" > /dev/null 2>&1; the
     exit 0
 fi
 
-CMD="uv run python -m src.cli.core_collect extract-pdf-refs --parallel $PARALLEL --batch-size $BATCH_SIZE --grobid-url $GROBID_URL"
+CMD="uv run python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid --parallel $PARALLEL --batch-size $BATCH_SIZE --grobid-url $GROBID_URL"
 
 if [ "$DRY_RUN" = true ]; then
     CMD="$CMD --dry-run"

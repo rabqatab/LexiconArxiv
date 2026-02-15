@@ -116,17 +116,17 @@ uv run python -m src.cli.core_collect collect-all-sources --since-year 2018 --in
 uv run python -m src.cli.core_collect deduplicate
 
 # 3. Enrich citations (papers WITH DOIs)
-uv run python -m src.cli.core_collect enrich-citations --parallel 10
+uv run python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex --parallel 10
 
 # 4. Enrich citations by title (papers WITHOUT DOIs - e.g., OpenReview)
-uv run python -m src.cli.core_collect enrich-citations-by-title --parallel 5
+uv run python -m src.cli.core_collect enrich-3-refs-and-abstracts-by-title-via-openalex --parallel 5
 
 # 5. Extract refs from PDFs (papers still missing refs - requires GROBID)
 # Start GROBID first: docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.0
-uv run python -m src.cli.core_collect extract-pdf-refs
+uv run python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid
 
 # 6. Enrich abstracts
-uv run python -m src.cli.core_collect enrich-abstracts --parallel 10
+uv run python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --parallel 10
 
 # 7. Resolve references (build citation graph)
 uv run python -m src.cli.core_collect resolve-refs
@@ -279,17 +279,17 @@ If enrichment was interrupted by rate limits, papers that failed are **not** mar
 ./scripts/enrichment/run_enrichment.sh --retry-incomplete
 
 # Or individually:
-uv run python -m src.cli.core_collect enrich-citations --retry-incomplete
-uv run python -m src.cli.core_collect enrich-citations-by-title --retry-incomplete
-uv run python -m src.cli.core_collect enrich-crossref --retry-incomplete
-uv run python -m src.cli.core_collect enrich-abstracts --retry-incomplete
+uv run python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex --retry-incomplete
+uv run python -m src.cli.core_collect enrich-3-refs-and-abstracts-by-title-via-openalex --retry-incomplete
+uv run python -m src.cli.core_collect enrich-2-refs-by-doi-via-crossref --retry-incomplete
+uv run python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --retry-incomplete
 ```
 
 ### Out of Memory
 
 Reduce parallelism:
 ```bash
-uv run python -m src.cli.core_collect enrich-citations --parallel 5
+uv run python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex --parallel 5
 ```
 
 ### GROBID on ARM64 (Apple Silicon)

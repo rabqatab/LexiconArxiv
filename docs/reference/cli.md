@@ -13,7 +13,7 @@ Complete reference for all CLI commands in LexiconArxiv.
 # Or step by step
 uv run python -m src.cli.core_collect collect-all-sources --since-year 2020
 uv run python -m src.cli.core_collect deduplicate
-uv run python -m src.cli.core_collect enrich-citations --parallel 10
+uv run python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex --parallel 10
 uv run python -m src.cli.core_collect resolve-refs
 uv run python -m src.cli.core_collect extract-keywords
 ```
@@ -192,30 +192,30 @@ uv run python -m src.cli.core_collect deduplicate --collection my_collection
 
 ## Enrichment Commands
 
-### enrich-citations
+### enrich-1-refs-and-abstracts-by-doi-via-openalex
 
 Fetch citation data from OpenAlex for papers with DOIs.
 
 ```bash
 # Preview
-uv run python -m src.cli.core_collect enrich-citations --dry-run
+uv run python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex --dry-run
 
 # Sequential
-uv run python -m src.cli.core_collect enrich-citations
+uv run python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex
 
 # Parallel (recommended)
-uv run python -m src.cli.core_collect enrich-citations --parallel 10
+uv run python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex --parallel 10
 
 # With limit
-uv run python -m src.cli.core_collect enrich-citations --limit 1000
+uv run python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex --limit 1000
 ```
 
-### enrich-citations-by-title
+### enrich-3-refs-and-abstracts-by-title-via-openalex
 
 Enrich papers without DOIs using title search. Matches titles against OpenAlex using normalized `SequenceMatcher` similarity (threshold ≥ 0.90).
 
 ```bash
-uv run python -m src.cli.core_collect enrich-citations-by-title --parallel 5
+uv run python -m src.cli.core_collect enrich-3-refs-and-abstracts-by-title-via-openalex --parallel 5
 ```
 
 ### reset-title-enriched
@@ -230,69 +230,69 @@ uv run python -m src.cli.core_collect reset-title-enriched --dry-run
 uv run python -m src.cli.core_collect reset-title-enriched
 ```
 
-### enrich-abstracts
+### enrich-6-abstracts-by-doi-via-openalex
 
 Fetch missing abstracts from OpenAlex.
 
 ```bash
 # Preview
-uv run python -m src.cli.core_collect enrich-abstracts --dry-run
+uv run python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --dry-run
 
 # Run
-uv run python -m src.cli.core_collect enrich-abstracts --parallel 10
+uv run python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --parallel 10
 ```
 
-### enrich-s2
+### enrich-4-refs-by-doi-via-s2
 
 Enrich using Semantic Scholar (fallback).
 
 ```bash
 # By DOI
-uv run python -m src.cli.core_collect enrich-s2 --parallel 3
+uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --parallel 3
 
 # By title (for papers without DOIs)
-uv run python -m src.cli.core_collect enrich-s2 --by-title
+uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --by-title
 
 # Target specific venues
-uv run python -m src.cli.core_collect enrich-s2 --by-title -v "NeurIPS 2024 poster"
+uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --by-title -v "NeurIPS 2024 poster"
 ```
 
-### enrich-crossref
+### enrich-2-refs-by-doi-via-crossref
 
 Enrich papers with references from CrossRef (excellent for ACM/Springer papers).
 
 ```bash
 # Preview
-uv run python -m src.cli.core_collect enrich-crossref --dry-run
+uv run python -m src.cli.core_collect enrich-2-refs-by-doi-via-crossref --dry-run
 
 # Enrich all papers with DOIs
-uv run python -m src.cli.core_collect enrich-crossref
+uv run python -m src.cli.core_collect enrich-2-refs-by-doi-via-crossref
 
 # Limit papers
-uv run python -m src.cli.core_collect enrich-crossref --limit 500
+uv run python -m src.cli.core_collect enrich-2-refs-by-doi-via-crossref --limit 500
 
 # Adjust concurrency (default: 5)
-uv run python -m src.cli.core_collect enrich-crossref --parallel 20
+uv run python -m src.cli.core_collect enrich-2-refs-by-doi-via-crossref --parallel 20
 ```
 
 **Note:** CrossRef has 97% success rate for ACM papers where Semantic Scholar fails. For polite pool access, set `CROSSREF_EMAIL` env var.
 
-### enrich-stubs
+### enrich-8-metadata-by-stub-via-openalex
 
 Enrich stub papers (external references) with metadata.
 
 ```bash
 # Enrich top 100 most-cited stubs
-uv run python -m src.cli.core_collect enrich-stubs
+uv run python -m src.cli.core_collect enrich-8-metadata-by-stub-via-openalex
 
 # Enrich DOI stubs only
-uv run python -m src.cli.core_collect enrich-stubs --limit 1000 --type doi
+uv run python -m src.cli.core_collect enrich-8-metadata-by-stub-via-openalex --limit 1000 --type doi
 
 # Only highly-cited stubs (5+ citations)
-uv run python -m src.cli.core_collect enrich-stubs --min-citations 5
+uv run python -m src.cli.core_collect enrich-8-metadata-by-stub-via-openalex --min-citations 5
 
 # Preview
-uv run python -m src.cli.core_collect enrich-stubs --dry-run
+uv run python -m src.cli.core_collect enrich-8-metadata-by-stub-via-openalex --dry-run
 ```
 
 **Options:**
@@ -303,7 +303,7 @@ uv run python -m src.cli.core_collect enrich-stubs --dry-run
 | `-n, --limit N` | Max stubs to enrich |
 | `-p, --parallel N` | Concurrent API requests |
 
-### extract-pdf-refs
+### enrich-5-refs-by-pdf-via-grobid
 
 Extract references from PDFs using GROBID.
 
@@ -312,10 +312,10 @@ Extract references from PDFs using GROBID.
 docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.0
 
 # Preview
-uv run python -m src.cli.core_collect extract-pdf-refs --dry-run
+uv run python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid --dry-run
 
 # Run
-uv run python -m src.cli.core_collect extract-pdf-refs --parallel 2
+uv run python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid --parallel 2
 ```
 
 ---
@@ -622,40 +622,64 @@ Clear collection checkpoint.
 uv run python -m src.cli.core_collect clear-checkpoint
 ```
 
-### clear-enrichment-checkpoint
+### clear-enrich-1-checkpoint
 
-Clear enrichment checkpoint.
+Clear checkpoint for enrich-1 (refs-and-abstracts-by-doi-via-openalex).
 
 ```bash
-# Citation enrichment
-uv run python -m src.cli.core_collect clear-enrichment-checkpoint
-
-# Abstract enrichment
-uv run python -m src.cli.core_collect clear-enrichment-checkpoint --type abstracts
+uv run python -m src.cli.core_collect clear-enrich-1-checkpoint
 ```
 
-### clear-s2-checkpoint
+### clear-enrich-2-checkpoint
 
-Clear Semantic Scholar enrichment checkpoint.
+Clear checkpoint for enrich-2 (refs-by-doi-via-crossref).
 
 ```bash
-uv run python -m src.cli.core_collect clear-s2-checkpoint
+uv run python -m src.cli.core_collect clear-enrich-2-checkpoint
 ```
 
-### clear-crossref-checkpoint
+### clear-enrich-3-checkpoint
 
-Clear CrossRef enrichment checkpoint.
+Clear checkpoint for enrich-3 (refs-and-abstracts-by-title-via-openalex).
 
 ```bash
-uv run python -m src.cli.core_collect clear-crossref-checkpoint
+uv run python -m src.cli.core_collect clear-enrich-3-checkpoint
 ```
 
-### clear-pdf-checkpoint
+### clear-enrich-4-checkpoint
 
-Clear PDF extraction checkpoint.
+Clear checkpoint for enrich-4 (refs-by-doi-via-s2).
 
 ```bash
-uv run python -m src.cli.core_collect clear-pdf-checkpoint
+uv run python -m src.cli.core_collect clear-enrich-4-checkpoint
+# Clear only DOI-based checkpoint
+uv run python -m src.cli.core_collect clear-enrich-4-checkpoint --type doi
+# Clear only title-based checkpoint
+uv run python -m src.cli.core_collect clear-enrich-4-checkpoint --type title
+```
+
+### clear-enrich-5-checkpoint
+
+Clear checkpoint for enrich-5 (refs-by-pdf-via-grobid).
+
+```bash
+uv run python -m src.cli.core_collect clear-enrich-5-checkpoint
+```
+
+### clear-enrich-6-checkpoint
+
+Clear checkpoint for enrich-6 (abstracts-by-doi-via-openalex).
+
+```bash
+uv run python -m src.cli.core_collect clear-enrich-6-checkpoint
+```
+
+### clear-enrich-7-checkpoint
+
+Clear checkpoint for enrich-7 (abstracts-by-pdf-via-grobid).
+
+```bash
+uv run python -m src.cli.core_collect clear-enrich-7-checkpoint
 ```
 
 ### clear-resolve-checkpoint

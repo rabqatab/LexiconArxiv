@@ -148,15 +148,15 @@ uv run python -m src.cli.core_collect clear-checkpoint
 uv run python -m src.cli.core_collect reset-title-enriched --dry-run   # Reset title-matched papers
 
 # Enrichment (add citations/abstracts)
-uv run python -m src.cli.core_collect enrich-citations --parallel 10    # OpenAlex
-uv run python -m src.cli.core_collect enrich-crossref --parallel 5      # CrossRef (ACM/Springer)
-uv run python -m src.cli.core_collect enrich-s2                         # Semantic Scholar
-uv run python -m src.cli.core_collect enrich-abstracts --parallel 10    # Abstracts
+uv run python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex --parallel 10    # OpenAlex
+uv run python -m src.cli.core_collect enrich-2-refs-by-doi-via-crossref --parallel 5      # CrossRef (ACM/Springer)
+uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2                         # Semantic Scholar
+uv run python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --parallel 10    # Abstracts
 
 # Retry enrichment for papers still missing data after rate limits
-uv run python -m src.cli.core_collect enrich-citations --retry-incomplete
-uv run python -m src.cli.core_collect enrich-citations-by-title --retry-incomplete
-uv run python -m src.cli.core_collect enrich-crossref --retry-incomplete
+uv run python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex --retry-incomplete
+uv run python -m src.cli.core_collect enrich-3-refs-and-abstracts-by-title-via-openalex --retry-incomplete
+uv run python -m src.cli.core_collect enrich-2-refs-by-doi-via-crossref --retry-incomplete
 
 # Reference Resolution (build citation graph)
 uv run python -m src.cli.core_collect ref-stats
@@ -172,7 +172,7 @@ uv run python -m src.cli.core_collect build-cited-by  # Required for GraphRAG
 
 # Stub Papers (external references)
 uv run python -m src.cli.core_collect stub-stats                        # Most-cited external papers
-uv run python -m src.cli.core_collect enrich-stubs --limit 1000         # Fetch metadata for stubs
+uv run python -m src.cli.core_collect enrich-8-metadata-by-stub-via-openalex --limit 1000         # Fetch metadata for stubs
 
 # Keyword Extraction (for BM25 search)
 uv run python -m src.cli.core_collect extract-keywords --llm --judge  # LLM-first pipeline (recommended)

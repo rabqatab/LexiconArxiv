@@ -50,7 +50,7 @@ done
 
 echo "[OpenAlex] Enriching citations (papers with DOIs)..."
 
-CMD="uv run python -m src.cli.core_collect enrich-citations --parallel $PARALLEL --batch-size $BATCH_SIZE"
+CMD="uv run python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex --parallel $PARALLEL --batch-size $BATCH_SIZE"
 [ "$RETRY_INCOMPLETE" = true ] && CMD="$CMD --retry-incomplete"
 $CMD
 

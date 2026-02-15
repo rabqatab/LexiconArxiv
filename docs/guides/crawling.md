@@ -730,23 +730,23 @@ Only ~19% of papers have citation data after initial collection. Enrichment can 
 
 ```bash
 # Count papers needing enrichment (dry run)
-uv run python -m src.cli.core_collect enrich-citations --dry-run
+uv run python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex --dry-run
 ```
 
 ### Run Enrichment
 
 ```bash
 # Enrich all papers with DOI (sequential)
-uv run python -m src.cli.core_collect enrich-citations
+uv run python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex
 
 # Enrich with parallel requests (faster)
-uv run python -m src.cli.core_collect enrich-citations --parallel 10
+uv run python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex --parallel 10
 
 # Enrich with limit (for testing)
-uv run python -m src.cli.core_collect enrich-citations --limit 1000
+uv run python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex --limit 1000
 
 # Resume from checkpoint (automatic)
-uv run python -m src.cli.core_collect enrich-citations
+uv run python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex
 ```
 
 ### Checkpoint & Resume
@@ -756,7 +756,7 @@ If interrupted, simply run the command again to resume.
 
 ```bash
 # Clear checkpoint to start fresh
-uv run python -m src.cli.core_collect clear-enrichment-checkpoint
+uv run python -m src.cli.core_collect clear-enrich-1-checkpoint
 ```
 
 ### Rate Limits & Parallelism
@@ -797,27 +797,27 @@ Use abstract enrichment to fetch missing abstracts from OpenAlex.
 
 ```bash
 # Count papers needing abstract enrichment
-uv run python -m src.cli.core_collect enrich-abstracts --dry-run
+uv run python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --dry-run
 ```
 
 ### Run Abstract Enrichment
 
 ```bash
 # Enrich all papers missing abstracts
-uv run python -m src.cli.core_collect enrich-abstracts
+uv run python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex
 
 # Enrich with parallel requests
-uv run python -m src.cli.core_collect enrich-abstracts --parallel 10
+uv run python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --parallel 10
 
 # Enrich with limit (for testing)
-uv run python -m src.cli.core_collect enrich-abstracts --limit 100
+uv run python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --limit 100
 ```
 
 ### Checkpoint & Resume
 
 ```bash
 # Clear checkpoint for fresh start
-uv run python -m src.cli.core_collect clear-enrichment-checkpoint --type abstracts
+uv run python -m src.cli.core_collect clear-enrich-6-checkpoint
 ```
 
 ---
@@ -838,13 +838,13 @@ S2_API_KEY=your-api-key
 
 ```bash
 # Enrich papers that have DOIs but OpenAlex failed
-uv run python -m src.cli.core_collect enrich-s2
+uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2
 
 # With parallel requests (S2 has strict limits, keep low)
-uv run python -m src.cli.core_collect enrich-s2 --parallel 3
+uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --parallel 3
 
 # Limit to specific number of papers
-uv run python -m src.cli.core_collect enrich-s2 --limit 500
+uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --limit 500
 ```
 
 ### Enrich by Title (For Papers Without DOIs)
@@ -853,21 +853,21 @@ This is essential for OpenReview papers (NeurIPS, ICML, ICLR) which have no DOIs
 
 ```bash
 # Search S2 by title for papers without DOIs
-uv run python -m src.cli.core_collect enrich-s2 --by-title
+uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --by-title
 
 # Target specific venues
-uv run python -m src.cli.core_collect enrich-s2 --by-title -v "NeurIPS 2024 poster"
-uv run python -m src.cli.core_collect enrich-s2 --by-title -v "ICML 2024 Poster" -v "ICLR 2024 poster"
+uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --by-title -v "NeurIPS 2024 poster"
+uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --by-title -v "ICML 2024 Poster" -v "ICLR 2024 poster"
 
 # Require minimum references for match quality
-uv run python -m src.cli.core_collect enrich-s2 --by-title --min-refs 5
+uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --by-title --min-refs 5
 ```
 
 ### Checkpoint & Resume
 
 ```bash
 # Clear S2 checkpoint
-uv run python -m src.cli.core_collect clear-s2-checkpoint
+uv run python -m src.cli.core_collect clear-enrich-4-checkpoint
 ```
 
 ### Expected Results
@@ -892,23 +892,23 @@ docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.0
 
 ```bash
 # Count papers with PDF URLs
-uv run python -m src.cli.core_collect extract-pdf-refs --dry-run
+uv run python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid --dry-run
 
 # Extract from all PDFs
-uv run python -m src.cli.core_collect extract-pdf-refs --parallel 2
+uv run python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid --parallel 2
 
 # Target specific venues
-uv run python -m src.cli.core_collect extract-pdf-refs -v "NeurIPS 2024 poster"
+uv run python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid -v "NeurIPS 2024 poster"
 
 # Limit for testing
-uv run python -m src.cli.core_collect extract-pdf-refs --limit 100
+uv run python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid --limit 100
 ```
 
 ### Checkpoint & Resume
 
 ```bash
 # Clear PDF extraction checkpoint
-uv run python -m src.cli.core_collect clear-pdf-checkpoint
+uv run python -m src.cli.core_collect clear-enrich-5-checkpoint
 ```
 
 ### Limitations
@@ -925,17 +925,17 @@ Run enrichments in this order for best results:
 
 ```bash
 # 1. OpenAlex (fast, best for older papers)
-uv run python -m src.cli.core_collect enrich-citations --parallel 10
+uv run python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex --parallel 10
 
 # 2. Semantic Scholar DOI (fallback for papers OpenAlex missed)
-uv run python -m src.cli.core_collect enrich-s2 --parallel 3
+uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --parallel 3
 
 # 3. Semantic Scholar Title (for papers without DOIs)
-uv run python -m src.cli.core_collect enrich-s2 --by-title --parallel 3
+uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --by-title --parallel 3
 
 # 4. PDF Extraction (last resort, slowest)
 docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.0 &
-uv run python -m src.cli.core_collect extract-pdf-refs --parallel 2
+uv run python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid --parallel 2
 ```
 
 ---
@@ -1184,8 +1184,8 @@ uv run python -m src.cli.core_collect collect-all-sources --since-year 2020 --in
 uv run python -m src.cli.core_collect deduplicate
 
 # 3. Enrich citations and abstracts
-uv run python -m src.cli.core_collect enrich-citations --parallel 10
-uv run python -m src.cli.core_collect enrich-abstracts --parallel 10
+uv run python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex --parallel 10
+uv run python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --parallel 10
 
 # 4. Resolve references (build citation graph)
 uv run python -m src.cli.core_collect resolve-refs

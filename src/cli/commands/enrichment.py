@@ -13,14 +13,14 @@ logger = logging.getLogger(__name__)
 
 def register_commands(cli: click.Group):
 
-    @cli.command("enrich-citations")
+    @cli.command("enrich-1-refs-and-abstracts-by-doi-via-openalex")
     @click.option("--dry-run", is_flag=True, help="Count papers without enriching")
     @click.option("--limit", "-n", type=int, help="Max papers to process")
     @click.option("--batch-size", type=int, default=100, help="Batch size")
     @click.option("--delay", type=float, default=0.1, help="Delay between API calls")
     @click.option("--parallel", "-p", type=int, default=1, help="Number of concurrent requests")
     @click.option("--retry-incomplete", is_flag=True, help="Re-process papers still missing data (clears checkpoint)")
-    def enrich_citations(
+    def enrich_1_refs_and_abstracts_by_doi_via_openalex(
         dry_run: bool,
         limit: int | None,
         batch_size: int,
@@ -36,16 +36,16 @@ def register_commands(cli: click.Group):
         Examples:
 
           # Count papers needing enrichment
-          python -m src.cli.core_collect enrich-citations --dry-run
+          python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex --dry-run
 
           # Enrich all papers
-          python -m src.cli.core_collect enrich-citations
+          python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex
 
           # Enrich with parallel requests (faster)
-          python -m src.cli.core_collect enrich-citations --parallel 10
+          python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex --parallel 10
 
           # Enrich first 1000 papers
-          python -m src.cli.core_collect enrich-citations --limit 1000
+          python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex --limit 1000
         """
         from src.core.enrichment.openalex import EnrichmentType, PaperEnricher
 
@@ -74,14 +74,14 @@ def register_commands(cli: click.Group):
 
         asyncio.run(run_enrichment())
 
-    @cli.command("enrich-abstracts")
+    @cli.command("enrich-6-abstracts-by-doi-via-openalex")
     @click.option("--dry-run", is_flag=True, help="Count papers without enriching")
     @click.option("--limit", "-n", type=int, help="Max papers to process")
     @click.option("--batch-size", type=int, default=100, help="Batch size")
     @click.option("--delay", type=float, default=0.1, help="Delay between API calls")
     @click.option("--parallel", "-p", type=int, default=1, help="Number of concurrent requests")
     @click.option("--retry-incomplete", is_flag=True, help="Re-process papers still missing data (clears checkpoint)")
-    def enrich_abstracts(
+    def enrich_6_abstracts_by_doi_via_openalex(
         dry_run: bool,
         limit: int | None,
         batch_size: int,
@@ -97,16 +97,16 @@ def register_commands(cli: click.Group):
         Examples:
 
           # Count papers needing abstract enrichment
-          python -m src.cli.core_collect enrich-abstracts --dry-run
+          python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --dry-run
 
           # Enrich all papers
-          python -m src.cli.core_collect enrich-abstracts
+          python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex
 
           # Enrich with parallel requests (faster)
-          python -m src.cli.core_collect enrich-abstracts --parallel 10
+          python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --parallel 10
 
           # Enrich first 100 papers
-          python -m src.cli.core_collect enrich-abstracts --limit 100
+          python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --limit 100
         """
         from src.core.enrichment.openalex import EnrichmentType, PaperEnricher
 
@@ -135,7 +135,7 @@ def register_commands(cli: click.Group):
 
         asyncio.run(run_enrichment())
 
-    @cli.command("enrich-citations-by-title")
+    @cli.command("enrich-3-refs-and-abstracts-by-title-via-openalex")
     @click.option("--dry-run", is_flag=True, help="Count papers without enriching")
     @click.option("--limit", "-n", type=int, help="Max papers to process")
     @click.option("--batch-size", type=int, default=100, help="Batch size")
@@ -144,7 +144,7 @@ def register_commands(cli: click.Group):
     @click.option("--venue", "-v", multiple=True, help="Filter by venue (can repeat)")
     @click.option("--min-refs", type=int, default=1, help="Minimum refs required for match")
     @click.option("--retry-incomplete", is_flag=True, help="Re-process papers still missing data (clears checkpoint)")
-    def enrich_citations_by_title(
+    def enrich_3_refs_and_abstracts_by_title_via_openalex(
         dry_run: bool,
         limit: int | None,
         batch_size: int,
@@ -164,19 +164,19 @@ def register_commands(cli: click.Group):
         Examples:
 
           # Count papers needing title-based enrichment
-          python -m src.cli.core_collect enrich-citations-by-title --dry-run
+          python -m src.cli.core_collect enrich-3-refs-and-abstracts-by-title-via-openalex --dry-run
 
           # Enrich all papers without DOIs
-          python -m src.cli.core_collect enrich-citations-by-title
+          python -m src.cli.core_collect enrich-3-refs-and-abstracts-by-title-via-openalex
 
           # Enrich only NeurIPS papers
-          python -m src.cli.core_collect enrich-citations-by-title -v "NeurIPS 2024 poster"
+          python -m src.cli.core_collect enrich-3-refs-and-abstracts-by-title-via-openalex -v "NeurIPS 2024 poster"
 
           # Enrich with parallel requests
-          python -m src.cli.core_collect enrich-citations-by-title --parallel 5
+          python -m src.cli.core_collect enrich-3-refs-and-abstracts-by-title-via-openalex --parallel 5
 
           # Only accept matches with 5+ references
-          python -m src.cli.core_collect enrich-citations-by-title --min-refs 5
+          python -m src.cli.core_collect enrich-3-refs-and-abstracts-by-title-via-openalex --min-refs 5
         """
         from src.core.enrichment.openalex import EnrichmentType, PaperEnricher
 
@@ -212,43 +212,49 @@ def register_commands(cli: click.Group):
 
         asyncio.run(run_enrichment())
 
-    @cli.command("clear-enrichment-checkpoint")
-    @click.option("--type", "enrichment_type", type=click.Choice(["citations", "abstracts", "title_citations", "all"]),
-                  default="all", help="Type of checkpoint to clear")
-    def clear_enrichment_checkpoint(enrichment_type: str) -> None:
-        """Clear enrichment checkpoint for fresh start.
+    @cli.command("clear-enrich-1-checkpoint")
+    def clear_enrich_1_checkpoint() -> None:
+        """Clear checkpoint for enrich-1 (refs-and-abstracts-by-doi-via-openalex).
 
         Examples:
 
-          # Clear all checkpoints
-          python -m src.cli.core_collect clear-enrichment-checkpoint
-
-          # Clear only citation checkpoint
-          python -m src.cli.core_collect clear-enrichment-checkpoint --type citations
-
-          # Clear only abstract checkpoint
-          python -m src.cli.core_collect clear-enrichment-checkpoint --type abstracts
-
-          # Clear only title-based citation checkpoint
-          python -m src.cli.core_collect clear-enrichment-checkpoint --type title_citations
+          python -m src.cli.core_collect clear-enrich-1-checkpoint
         """
         from src.core.enrichment.openalex import PaperEnricher, EnrichmentType
 
         enricher = PaperEnricher()
+        enricher.clear_checkpoint(EnrichmentType.CITATIONS)
+        click.echo("Enrich-1 (citation/DOI) checkpoint cleared.")
 
-        if enrichment_type in ("citations", "all"):
-            enricher.clear_checkpoint(EnrichmentType.CITATIONS)
-            click.echo("Citation enrichment checkpoint cleared.")
+    @cli.command("clear-enrich-3-checkpoint")
+    def clear_enrich_3_checkpoint() -> None:
+        """Clear checkpoint for enrich-3 (refs-and-abstracts-by-title-via-openalex).
 
-        if enrichment_type in ("abstracts", "all"):
-            enricher.clear_checkpoint(EnrichmentType.ABSTRACTS)
-            click.echo("Abstract enrichment checkpoint cleared.")
+        Examples:
 
-        if enrichment_type in ("title_citations", "all"):
-            enricher.clear_checkpoint(EnrichmentType.TITLE_CITATIONS)
-            click.echo("Title-based citation enrichment checkpoint cleared.")
+          python -m src.cli.core_collect clear-enrich-3-checkpoint
+        """
+        from src.core.enrichment.openalex import PaperEnricher, EnrichmentType
 
-    @cli.command("enrich-s2")
+        enricher = PaperEnricher()
+        enricher.clear_checkpoint(EnrichmentType.TITLE_CITATIONS)
+        click.echo("Enrich-3 (citation/title) checkpoint cleared.")
+
+    @cli.command("clear-enrich-6-checkpoint")
+    def clear_enrich_6_checkpoint() -> None:
+        """Clear checkpoint for enrich-6 (abstracts-by-doi-via-openalex).
+
+        Examples:
+
+          python -m src.cli.core_collect clear-enrich-6-checkpoint
+        """
+        from src.core.enrichment.openalex import PaperEnricher, EnrichmentType
+
+        enricher = PaperEnricher()
+        enricher.clear_checkpoint(EnrichmentType.ABSTRACTS)
+        click.echo("Enrich-6 (abstract/DOI) checkpoint cleared.")
+
+    @cli.command("enrich-4-refs-by-doi-via-s2")
     @click.option("--dry-run", is_flag=True, help="Count papers without enriching")
     @click.option("--limit", "-n", type=int, help="Max papers to process")
     @click.option("--batch-size", type=int, default=50, help="Batch size")
@@ -257,7 +263,7 @@ def register_commands(cli: click.Group):
     @click.option("--by-title", is_flag=True, help="Search by title instead of DOI")
     @click.option("--venue", "-v", multiple=True, help="Filter by venue (for title search)")
     @click.option("--min-refs", type=int, default=1, help="Min refs required (for title search)")
-    def enrich_s2(
+    def enrich_4_refs_by_doi_via_s2(
         dry_run: bool,
         limit: int | None,
         batch_size: int,
@@ -283,16 +289,16 @@ def register_commands(cli: click.Group):
         Examples:
 
           # Enrich papers with DOIs (fallback after OpenAlex)
-          python -m src.cli.core_collect enrich-s2
+          python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2
 
           # With API key for faster processing
-          S2_API_KEY=your_key python -m src.cli.core_collect enrich-s2
+          S2_API_KEY=your_key python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2
 
           # Enrich papers without DOIs by title search
-          python -m src.cli.core_collect enrich-s2 --by-title
+          python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --by-title
 
           # Target specific venues
-          python -m src.cli.core_collect enrich-s2 --by-title -v "NeurIPS 2024 poster"
+          python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --by-title -v "NeurIPS 2024 poster"
         """
         from src.core.enrichment.semantic_scholar import SemanticScholarEnricher
 
@@ -333,22 +339,22 @@ def register_commands(cli: click.Group):
 
         asyncio.run(run_enrichment())
 
-    @cli.command("clear-s2-checkpoint")
+    @cli.command("clear-enrich-4-checkpoint")
     @click.option("--type", "checkpoint_type", type=click.Choice(["doi", "title", "all"]),
                   default="all", help="Type of S2 checkpoint to clear")
-    def clear_s2_checkpoint(checkpoint_type: str) -> None:
+    def clear_enrich_4_checkpoint(checkpoint_type: str) -> None:
         """Clear Semantic Scholar enrichment checkpoint.
 
         Examples:
 
           # Clear all S2 checkpoints
-          python -m src.cli.core_collect clear-s2-checkpoint
+          python -m src.cli.core_collect clear-enrich-4-checkpoint
 
           # Clear only DOI-based checkpoint
-          python -m src.cli.core_collect clear-s2-checkpoint --type doi
+          python -m src.cli.core_collect clear-enrich-4-checkpoint --type doi
 
           # Clear only title-based checkpoint
-          python -m src.cli.core_collect clear-s2-checkpoint --type title
+          python -m src.cli.core_collect clear-enrich-4-checkpoint --type title
         """
         from src.core.enrichment.semantic_scholar import SemanticScholarEnricher
 
@@ -362,14 +368,14 @@ def register_commands(cli: click.Group):
             enricher.clear_checkpoint(by_title=True)
             click.echo("Semantic Scholar title checkpoint cleared.")
 
-    @cli.command("enrich-crossref")
+    @cli.command("enrich-2-refs-by-doi-via-crossref")
     @click.option("--dry-run", is_flag=True, help="Count papers without enriching")
     @click.option("--limit", "-n", type=int, help="Max papers to process")
     @click.option("--batch-size", type=int, default=100, help="Batch size")
     @click.option("--delay", type=float, default=0.1, help="Delay between API calls (default: 0.1s = 10 req/sec)")
     @click.option("--parallel", "-p", type=int, default=5, help="Concurrent requests (default: 5)")
     @click.option("--retry-incomplete", is_flag=True, help="Re-process papers still missing data (clears checkpoint)")
-    def enrich_crossref(
+    def enrich_2_refs_by_doi_via_crossref(
         dry_run: bool,
         limit: int | None,
         batch_size: int,
@@ -389,16 +395,16 @@ def register_commands(cli: click.Group):
         Examples:
 
           # Count papers that can be enriched
-          python -m src.cli.core_collect enrich-crossref --dry-run
+          python -m src.cli.core_collect enrich-2-refs-by-doi-via-crossref --dry-run
 
           # Enrich all papers with DOIs
-          python -m src.cli.core_collect enrich-crossref
+          python -m src.cli.core_collect enrich-2-refs-by-doi-via-crossref
 
           # Limit to 500 papers
-          python -m src.cli.core_collect enrich-crossref --limit 500
+          python -m src.cli.core_collect enrich-2-refs-by-doi-via-crossref --limit 500
 
           # Adjust concurrency
-          python -m src.cli.core_collect enrich-crossref --parallel 20
+          python -m src.cli.core_collect enrich-2-refs-by-doi-via-crossref --parallel 20
         """
         import asyncio
         from src.core.enrichment.crossref import CrossRefEnricher
@@ -431,15 +437,15 @@ def register_commands(cli: click.Group):
             click.echo(f"  No refs:      {progress.no_refs}")
             click.echo(f"  Errors:       {progress.errors}")
 
-    @cli.command("clear-crossref-checkpoint")
-    def clear_crossref_checkpoint() -> None:
+    @cli.command("clear-enrich-2-checkpoint")
+    def clear_enrich_2_checkpoint() -> None:
         """Clear CrossRef enrichment checkpoint.
 
         Use this to restart enrichment from the beginning.
 
         Examples:
 
-          python -m src.cli.core_collect clear-crossref-checkpoint
+          python -m src.cli.core_collect clear-enrich-2-checkpoint
         """
         from src.core.enrichment.crossref import CrossRefEnricher
 
@@ -447,14 +453,14 @@ def register_commands(cli: click.Group):
         enricher.clear_checkpoint()
         click.echo("CrossRef enrichment checkpoint cleared.")
 
-    @cli.command("extract-pdf-refs")
+    @cli.command("enrich-5-refs-by-pdf-via-grobid")
     @click.option("--dry-run", is_flag=True, help="Count papers without extracting")
     @click.option("--limit", "-n", type=int, help="Max papers to process")
     @click.option("--batch-size", type=int, default=50, help="Papers per batch")
     @click.option("--parallel", "-p", type=int, default=20, help="Concurrent extractions")
     @click.option("--venue", "-v", multiple=True, help="Filter by venue")
     @click.option("--grobid-url", type=str, help="GROBID server URL (default: http://localhost:8070)")
-    def extract_pdf_refs(
+    def enrich_5_refs_by_pdf_via_grobid(
         dry_run: bool,
         limit: int | None,
         batch_size: int,
@@ -473,13 +479,13 @@ def register_commands(cli: click.Group):
         Examples:
 
           # Count papers with PDF URLs
-          python -m src.cli.core_collect extract-pdf-refs --dry-run
+          python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid --dry-run
 
           # Extract from all PDFs
-          python -m src.cli.core_collect extract-pdf-refs
+          python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid
 
           # Target specific venues
-          python -m src.cli.core_collect extract-pdf-refs -v "NeurIPS 2024 poster"
+          python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid -v "NeurIPS 2024 poster"
         """
         from src.core.enrichment.pdf import PDFReferenceExtractor
 
@@ -513,14 +519,14 @@ def register_commands(cli: click.Group):
 
         asyncio.run(run_extraction())
 
-    @cli.command("extract-pdf-abstracts")
+    @cli.command("enrich-7-abstracts-by-pdf-via-grobid")
     @click.option("--dry-run", is_flag=True, help="Count papers without extracting")
     @click.option("--limit", "-n", type=int, help="Max papers to process")
     @click.option("--batch-size", type=int, default=50, help="Papers per batch")
     @click.option("--parallel", "-p", type=int, default=20, help="Concurrent extractions")
     @click.option("--venue", "-v", multiple=True, help="Filter by venue")
     @click.option("--grobid-url", type=str, help="GROBID server URL (default: http://localhost:8070)")
-    def extract_pdf_abstracts(
+    def enrich_7_abstracts_by_pdf_via_grobid(
         dry_run: bool,
         limit: int | None,
         batch_size: int,
@@ -540,13 +546,13 @@ def register_commands(cli: click.Group):
         Examples:
 
           # Count papers needing PDF abstract extraction
-          python -m src.cli.core_collect extract-pdf-abstracts --dry-run
+          python -m src.cli.core_collect enrich-7-abstracts-by-pdf-via-grobid --dry-run
 
           # Extract abstracts from PDFs
-          python -m src.cli.core_collect extract-pdf-abstracts
+          python -m src.cli.core_collect enrich-7-abstracts-by-pdf-via-grobid
 
           # Target specific venues
-          python -m src.cli.core_collect extract-pdf-abstracts -v "PACLIC"
+          python -m src.cli.core_collect enrich-7-abstracts-by-pdf-via-grobid -v "PACLIC"
         """
         from src.core.enrichment.pdf import PDFReferenceExtractor
 
@@ -580,32 +586,32 @@ def register_commands(cli: click.Group):
 
         asyncio.run(run_extraction())
 
-    @cli.command("clear-pdf-checkpoint")
-    def clear_pdf_checkpoint() -> None:
-        """Clear PDF extraction checkpoint."""
+    @cli.command("clear-enrich-5-checkpoint")
+    def clear_enrich_5_checkpoint() -> None:
+        """Clear checkpoint for enrich-5 (refs-by-pdf-via-grobid)."""
         from src.core.enrichment.pdf import PDFReferenceExtractor
 
         extractor = PDFReferenceExtractor()
         extractor.clear_checkpoint()
-        click.echo("PDF extraction checkpoint cleared.")
+        click.echo("Enrich-5 (PDF refs) checkpoint cleared.")
 
-    @cli.command("clear-pdf-abstract-checkpoint")
-    def clear_pdf_abstract_checkpoint() -> None:
-        """Clear PDF abstract extraction checkpoint."""
+    @cli.command("clear-enrich-7-checkpoint")
+    def clear_enrich_7_checkpoint() -> None:
+        """Clear checkpoint for enrich-7 (abstracts-by-pdf-via-grobid)."""
         from src.core.enrichment.pdf import PDFReferenceExtractor
 
         extractor = PDFReferenceExtractor()
         extractor.clear_abstract_checkpoint()
-        click.echo("PDF abstract extraction checkpoint cleared.")
+        click.echo("Enrich-7 (PDF abstracts) checkpoint cleared.")
 
-    @cli.command("enrich-stubs")
+    @cli.command("enrich-8-metadata-by-stub-via-openalex")
     @click.option("--limit", "-n", type=int, default=100, help="Max stubs to enrich")
     @click.option("--type", "identifier_type", type=click.Choice(["doi", "arxiv", "openalex"]),
                   help="Only enrich stubs of this type")
     @click.option("--min-citations", type=int, default=1, help="Only enrich stubs with >= N citations")
     @click.option("--dry-run", is_flag=True, help="Count stubs without enriching")
     @click.option("--parallel", "-p", type=int, default=5, help="Concurrent API requests")
-    def enrich_stubs(
+    def enrich_8_metadata_by_stub_via_openalex(
         limit: int,
         identifier_type: str | None,
         min_citations: int,
@@ -620,16 +626,16 @@ def register_commands(cli: click.Group):
         Examples:
 
           # Enrich top 100 most-cited stubs
-          python -m src.cli.core_collect enrich-stubs
+          python -m src.cli.core_collect enrich-8-metadata-by-stub-via-openalex
 
           # Enrich top 1000 DOI stubs
-          python -m src.cli.core_collect enrich-stubs --limit 1000 --type doi
+          python -m src.cli.core_collect enrich-8-metadata-by-stub-via-openalex --limit 1000 --type doi
 
           # Only enrich stubs cited 5+ times
-          python -m src.cli.core_collect enrich-stubs --min-citations 5
+          python -m src.cli.core_collect enrich-8-metadata-by-stub-via-openalex --min-citations 5
 
           # Dry run to see what would be enriched
-          python -m src.cli.core_collect enrich-stubs --dry-run
+          python -m src.cli.core_collect enrich-8-metadata-by-stub-via-openalex --dry-run
         """
         from src.core.enrichment import StubEnricher
 

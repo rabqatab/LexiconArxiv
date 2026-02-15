@@ -50,7 +50,7 @@ done
 
 echo "[CrossRef] Enriching citations..."
 
-CMD="uv run python -m src.cli.core_collect enrich-crossref --parallel $PARALLEL --batch-size $BATCH_SIZE"
+CMD="uv run python -m src.cli.core_collect enrich-2-refs-by-doi-via-crossref --parallel $PARALLEL --batch-size $BATCH_SIZE"
 [ "$RETRY_INCOMPLETE" = true ] && CMD="$CMD --retry-incomplete"
 $CMD
 
