@@ -21,6 +21,7 @@ from src.core.constants import (
     get_openalex_email,
 )
 from src.core.deduplication import Deduplicator
+from src.core.openalex_keys import OpenAlexKeyManager
 from src.core.storage import QdrantStorage
 from src.models.paper import Author, PaperType, RawPaper, SourceType
 
@@ -47,6 +48,7 @@ class CoreCorpusCollector:
         deduplicator: Deduplicator | None = None,
         email: str | None = None,
         api_key: str | None = None,
+        key_manager: OpenAlexKeyManager | None = None,
         timeout: float = 30.0,
     ):
         """Initialize the collector.
@@ -58,13 +60,22 @@ class CoreCorpusCollector:
                 Pass a shared instance for cross-source deduplication.
             email: Contact email for OpenAlex polite pool (not needed if api_key provided).
             api_key: OpenAlex API key for higher rate limits.
+            key_manager: Shared OpenAlexKeyManager instance. If provided, api_key/email are ignored.
             timeout: HTTP request timeout in seconds.
         """
         self.storage = storage
         self.checkpoint_manager = checkpoint_manager or CheckpointManager()
-        self.api_key = api_key or get_openalex_api_key()
-        # Email only needed for polite pool if no API key
-        self.email = email or get_openalex_email() if not self.api_key else None
+
+        # Initialize key manager
+        if key_manager:
+            self._key_manager = key_manager
+        elif api_key:
+            self._key_manager = OpenAlexKeyManager(
+                [api_key], email or get_openalex_email()
+            )
+        else:
+            self._key_manager = OpenAlexKeyManager.from_env()
+
         self.timeout = timeout
         self.deduplicator = deduplicator or Deduplicator()
         self._client: httpx.AsyncClient | None = None
@@ -84,13 +95,11 @@ class CoreCorpusCollector:
             self._client = None
 
     def _get_headers(self) -> dict[str, str]:
-        """Get default headers for requests."""
+        """Get headers for API requests."""
         headers = {
-            "User-Agent": "LexiconArxiv/0.1.0 (Core Corpus Collection)",
+            "Accept": "application/json",
+            "User-Agent": f"LexiconArxiv/1.0 (mailto:{self._key_manager._email or 'unknown'})",
         }
-        # Only add email to User-Agent for polite pool (when no API key)
-        if self.email and not self.api_key:
-            headers["User-Agent"] += f" mailto:{self.email}"
         return headers
 
     @property
@@ -105,11 +114,7 @@ class CoreCorpusCollector:
 
     def _build_url(self, endpoint: str, params: dict[str, Any]) -> str:
         """Build API URL with parameters."""
-        # Use API key if available (higher rate limits), otherwise fall back to polite pool
-        if self.api_key:
-            params["api_key"] = self.api_key
-        elif self.email:
-            params["mailto"] = self.email
+        params.update(self._key_manager.get_next_params())
         query_string = urlencode(params, doseq=True)
         return f"{OPENALEX_BASE_URL}/{endpoint}?{query_string}"
 

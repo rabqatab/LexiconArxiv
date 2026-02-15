@@ -257,3 +257,42 @@ class TestPaperEnricherKeyManager:
         mgr = OpenAlexKeyManager(["k1", "k2"])
         enricher = PaperEnricher(storage=None, key_manager=mgr)
         assert enricher._key_manager is mgr
+
+
+from src.core.crawler.openalex import CoreCorpusCollector
+
+
+class TestCoreCorpusCollectorKeyManager:
+    """Tests for CoreCorpusCollector using key manager."""
+
+    def test_accepts_key_manager_param(self):
+        mgr = OpenAlexKeyManager(["k1", "k2"], email="e@x.com")
+        collector = CoreCorpusCollector(storage=None, key_manager=mgr)
+        assert collector._key_manager is mgr
+
+    def test_backward_compat_api_key_param(self):
+        collector = CoreCorpusCollector(storage=None, api_key="direct_key")
+        assert collector._key_manager.total_key_count == 1
+        params = collector._key_manager.get_next_params()
+        assert params == {"api_key": "direct_key"}
+
+    def test_build_url_uses_key_manager(self):
+        mgr = OpenAlexKeyManager(["k1"])
+        collector = CoreCorpusCollector(storage=None, key_manager=mgr)
+        url = collector._build_url("works", {"filter": "test"})
+        assert "api_key=k1" in url
+
+    def test_build_url_round_robins(self):
+        mgr = OpenAlexKeyManager(["k1", "k2"])
+        collector = CoreCorpusCollector(storage=None, key_manager=mgr)
+        url1 = collector._build_url("works", {})
+        url2 = collector._build_url("works", {})
+        assert "api_key=k1" in url1
+        assert "api_key=k2" in url2
+
+    def test_from_env(self, monkeypatch):
+        monkeypatch.setenv("OPENALEX_API_KEYS", "k1,k2,k3")
+        monkeypatch.delenv("OPENALEX_API_KEY", raising=False)
+        monkeypatch.setenv("OPENALEX_EMAIL", "e@x.com")
+        collector = CoreCorpusCollector(storage=None)
+        assert collector._key_manager.total_key_count == 3
