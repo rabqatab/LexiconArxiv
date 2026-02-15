@@ -64,8 +64,8 @@ class PDFReferenceExtractor:
         storage: QdrantStorage | None = None,
         grobid_url: str | None = None,
         checkpoint_dir: Path | str | None = None,
-        batch_size: int = 10,  # Smaller batches for PDF processing
-        max_concurrent: int = 2,  # GROBID can be slow
+        batch_size: int = 50,
+        max_concurrent: int = 20,
         download_timeout: float = 60.0,
         grobid_timeout: float = 120.0,
     ):
@@ -75,8 +75,8 @@ class PDFReferenceExtractor:
             storage: QdrantStorage instance.
             grobid_url: GROBID server URL.
             checkpoint_dir: Directory for checkpoint files.
-            batch_size: Papers per batch (keep small for PDFs).
-            max_concurrent: Max concurrent extractions.
+            batch_size: Papers per batch.
+            max_concurrent: Max concurrent PDF download + GROBID extractions.
             download_timeout: Timeout for PDF download.
             grobid_timeout: Timeout for GROBID processing.
         """
@@ -461,7 +461,7 @@ class PDFReferenceExtractor:
         papers: list[tuple[str, dict]],
         progress: PDFExtractionProgress,
     ) -> int:
-        """Process a batch of papers."""
+        """Process a batch of papers concurrently."""
         to_process = [
             (pid, payload)
             for pid, payload in papers
@@ -471,15 +471,28 @@ class PDFReferenceExtractor:
         if not to_process:
             return 0
 
+        async def _process_one(point_id: str, payload: dict) -> tuple[str, dict, bool, list[str]]:
+            pdf_url = payload.get("pdf_url")
+            success, refs = await self.extract_and_enrich(point_id, pdf_url)
+            return point_id, payload, success, refs
+
+        # Run all papers in batch concurrently (semaphore in extract_and_enrich limits actual concurrency)
+        tasks = [_process_one(pid, payload) for pid, payload in to_process]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
         extracted = 0
         updates = []
 
-        for point_id, payload in to_process:
+        for result in results:
             progress.processed += 1
-            progress.processed_point_ids.add(point_id)
 
-            pdf_url = payload.get("pdf_url")
-            success, refs = await self.extract_and_enrich(point_id, pdf_url)
+            if isinstance(result, Exception):
+                logger.warning(f"Unexpected error in PDF extraction: {result}")
+                progress.download_failed += 1
+                continue
+
+            point_id, payload, success, refs = result
+            progress.processed_point_ids.add(point_id)
 
             if not success:
                 if refs == []:

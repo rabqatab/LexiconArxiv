@@ -450,8 +450,8 @@ def register_commands(cli: click.Group):
     @cli.command("extract-pdf-refs")
     @click.option("--dry-run", is_flag=True, help="Count papers without extracting")
     @click.option("--limit", "-n", type=int, help="Max papers to process")
-    @click.option("--batch-size", type=int, default=10, help="Batch size (keep small for PDFs)")
-    @click.option("--parallel", "-p", type=int, default=2, help="Concurrent extractions")
+    @click.option("--batch-size", type=int, default=50, help="Papers per batch")
+    @click.option("--parallel", "-p", type=int, default=20, help="Concurrent extractions")
     @click.option("--venue", "-v", multiple=True, help="Filter by venue")
     @click.option("--grobid-url", type=str, help="GROBID server URL (default: http://localhost:8070)")
     def extract_pdf_refs(
