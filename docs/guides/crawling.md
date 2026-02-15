@@ -23,9 +23,31 @@ Ensure your `.env` file is configured:
 
 ```env
 OPENALEX_EMAIL=your-email@example.com  # Required for polite pool (10 req/sec)
+OPENALEX_API_KEYS=key1,key2,key3       # Optional, comma-separated API keys
 QDRANT_URL=http://localhost:6333
 QDRANT_API_KEY=                         # Optional, for cloud Qdrant
 ```
+
+### Multiple OpenAlex API Keys
+
+To distribute load across multiple OpenAlex API keys, use comma-separated values:
+
+```env
+OPENALEX_API_KEYS=key1,key2,key3
+OPENALEX_EMAIL=your-email@example.com
+```
+
+Keys are rotated round-robin across requests. When a key is exhausted (HTTP 429),
+it enters a 5-minute cooldown while remaining keys continue serving requests.
+When ALL keys are exhausted, the system falls back to the email-based polite pool.
+
+| Configuration | Effective Daily Budget | Recommended `--parallel` |
+|---|---|---|
+| 1 API key | 100K credits | `--parallel 10` |
+| 3 API keys | 300K credits | `--parallel 10` |
+| Email only | ~10K/day | `--parallel 5` |
+
+The legacy `OPENALEX_API_KEY` (single key) still works and is treated as a one-key pool.
 
 ### 2. Start Qdrant
 
