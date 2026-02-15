@@ -17,6 +17,7 @@ import httpx
 
 from src.core.enrichment.base import OPENALEX_BASE_URL, BaseEnricher, OpenAlexMixin
 from src.core.exceptions import APIRateLimitError
+from src.core.openalex_keys import OpenAlexKeyManager
 
 if TYPE_CHECKING:
     from src.core.storage import QdrantStorage
@@ -61,6 +62,7 @@ class PaperEnricher(BaseEnricher, OpenAlexMixin):
         storage: "QdrantStorage | None" = None,
         email: str | None = None,
         api_key: str | None = None,
+        key_manager: OpenAlexKeyManager | None = None,
         checkpoint_dir: Path | str | None = None,
         batch_size: int = 100,
         delay: float = 0.1,
@@ -72,19 +74,20 @@ class PaperEnricher(BaseEnricher, OpenAlexMixin):
             storage: QdrantStorage instance. Created if not provided.
             email: OpenAlex email for polite pool. Uses OPENALEX_EMAIL env if not set.
             api_key: OpenAlex API key. Uses OPENALEX_API_KEY env if not set.
+            key_manager: Pre-configured OpenAlexKeyManager instance.
             checkpoint_dir: Directory for checkpoint files.
             batch_size: Number of papers to process per batch.
             delay: Delay between API calls in seconds.
-            max_concurrent: Maximum concurrent API requests. If None, uses 5 for API key, 1 for email.
+            max_concurrent: Maximum concurrent API requests. If None, uses 3 for API key, 1 for email.
         """
-        # Initialize OpenAlex first to determine if API key is available
-        self._init_openalex(email=email, api_key=api_key)
+        # Initialize OpenAlex first to determine if API keys are available
+        self._init_openalex(email=email, api_key=api_key, key_manager=key_manager)
 
         # Set default concurrency based on auth method
         if max_concurrent is None:
             max_concurrent = (
                 self.DEFAULT_CONCURRENT_API_KEY
-                if self.api_key
+                if self._key_manager.has_available_keys
                 else self.DEFAULT_CONCURRENT_EMAIL
             )
 
@@ -164,16 +167,22 @@ class PaperEnricher(BaseEnricher, OpenAlexMixin):
         # Build search URL
         url = f"{OPENALEX_BASE_URL}/works"
         params = {"search": title, "per_page": 5}
-        # Use shared method that respects _api_key_exhausted flag
-        params.update(self._get_openalex_params())
+        openalex_params = self._get_openalex_params()
+        used_key = openalex_params.get("api_key")
+        params.update(openalex_params)
 
         try:
             async with self._semaphore:
                 response = await self._client.get(url, params=params)
                 await asyncio.sleep(self.delay)
             if response.status_code == 429:
-                # Check if API key credits exhausted - if so, switch to email and retry
-                if self._handle_api_key_exhaustion(response):
+                # Check if API key credits exhausted - if so, rotate key and retry
+                if self._handle_api_key_exhaustion(response, used_key):
+                    if self._key_manager.has_available_keys:
+                        if hasattr(self, "_semaphore") and self._semaphore is not None:
+                            self._semaphore = asyncio.Semaphore(
+                                self._original_max_concurrent
+                            )
                     return await self.search_by_title(title, min_refs, _retry_count=0)
                 # Regular rate limiting - wait and retry (with max retries)
                 if _retry_count >= max_retries:
