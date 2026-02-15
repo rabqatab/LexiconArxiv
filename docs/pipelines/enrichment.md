@@ -737,9 +737,9 @@ BaseEnricher (ABC)
     └── __aenter__, __aexit__
 
 OpenAlexMixin
-    ├── _init_openalex(email, api_key)
-    ├── _get_openalex_params()          # Respects _api_key_exhausted flag
-    ├── _handle_api_key_exhaustion()    # Detects credit exhaustion, falls back to email
+    ├── _init_openalex(key_manager)     # Accepts OpenAlexKeyManager (or creates from env)
+    ├── _get_openalex_params()          # Round-robin key rotation via key manager
+    ├── _handle_api_key_exhaustion()    # Marks specific key exhausted, falls back when all exhausted
     ├── fetch_openalex_work(identifier, identifier_type)  # Max 3 retries on rate limit
     ├── parse_openalex_work(data)
     └── reconstruct_abstract(inverted_index)  [static]

@@ -287,7 +287,8 @@ Options:
 Set these in `.env` or export before running:
 
 ```bash
-export OPENALEX_EMAIL=your-email@example.com  # Required for polite pool
+export OPENALEX_API_KEYS=key1,key2,key3        # Comma-separated for round-robin rotation
+export OPENALEX_EMAIL=your-email@example.com   # Fallback polite pool when all keys exhausted
 export QDRANT_URL=http://localhost:6333
 export QDRANT_COLLECTION=lexicon_arxiv
 ```

@@ -672,7 +672,8 @@ uv run python -m src.cli.core_collect clear-keyword-checkpoint
 
 | Variable | Description | Required |
 |----------|-------------|----------|
-| `OPENALEX_EMAIL` | Email for OpenAlex polite pool (10 req/sec) | Yes |
+| `OPENALEX_API_KEYS` | Comma-separated OpenAlex API keys for round-robin rotation | No |
+| `OPENALEX_EMAIL` | Email for OpenAlex polite pool fallback (10 req/sec) | Yes |
 | `QDRANT_URL` | Qdrant server URL | Yes |
 | `QDRANT_API_KEY` | Qdrant API key (for cloud) | No |
 | `S2_API_KEY` | Semantic Scholar API key | No |

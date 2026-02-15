@@ -221,7 +221,7 @@ class CoreCorpusCollector:
             "per-page": 200,
             "cursor": "*",
             "select": "id,doi,title,abstract_inverted_index,authorships,publication_year,primary_location,referenced_works,cited_by_count,type",
-            "api_key": os.getenv("OPENALEX_API_KEY"),
+            **self._key_manager.get_next_params(),
         }
 
         total_collected = 0
@@ -828,7 +828,7 @@ core_coverage = Gauge('core_coverage', 'Core coverage by venue', ['venue'])
 
 **Constants Module**: Centralized API URLs and environment variable helpers:
 - `OPENALEX_BASE_URL`, `CROSSREF_BASE_URL`, `S2_BASE_URL`
-- `get_openalex_email()`, `get_openalex_api_key()`, `get_crossref_email()`, `get_s2_api_key()`
+- `get_openalex_email()`, `get_openalex_api_key()`, `get_openalex_api_keys()`, `get_crossref_email()`, `get_s2_api_key()`
 - `get_qdrant_url()`, `get_qdrant_collection()`
 
 ### 11.2 Crawler Modules
@@ -954,7 +954,8 @@ The Data Pipeline Layer is complete. Remaining work is in the Application Layer:
 
 ```env
 # .env file
-OPENALEX_EMAIL=your-email@example.com
+OPENALEX_API_KEYS=key1,key2,key3      # Comma-separated for round-robin rotation
+OPENALEX_EMAIL=your-email@example.com  # Fallback polite pool when all keys exhausted
 QDRANT_URL=http://localhost:6333
 QDRANT_API_KEY=                       # optional, for Qdrant Cloud
 ```

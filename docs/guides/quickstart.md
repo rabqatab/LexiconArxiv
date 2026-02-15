@@ -35,7 +35,8 @@ cp .env.example .env
 
 Edit `.env` with your settings:
 ```env
-OPENALEX_EMAIL=your-email@example.com   # Required for polite pool (10 req/sec)
+OPENALEX_API_KEYS=key1,key2,key3        # Comma-separated for round-robin (recommended)
+OPENALEX_EMAIL=your-email@example.com   # Fallback polite pool (10 req/sec)
 QDRANT_URL=http://localhost:6333
 QDRANT_COLLECTION=lexicon_arxiv
 ```
@@ -267,7 +268,7 @@ docker restart qdrant
 
 Make sure `OPENALEX_EMAIL` is set in `.env` for polite pool access (10 req/sec vs 1 req/sec).
 
-If you have an OpenAlex API key, set `OPENALEX_API_KEY` in `.env` for higher limits. If the key's daily credits are exhausted, the system automatically falls back to email and retries the key after 5 minutes.
+For higher limits, set `OPENALEX_API_KEYS=key1,key2,key3` (comma-separated) in `.env`. Keys rotate round-robin across requests. When a key's daily credits are exhausted, it enters a 5-minute cooldown and the next key takes over. Only when all keys are exhausted does the system fall back to email polite pool. The legacy `OPENALEX_API_KEY` (single key) is also supported.
 
 ### Recovering Rate-Limited Papers
 

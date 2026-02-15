@@ -97,16 +97,18 @@ OpenAlex free API key credits reset daily. When exhausted, all requests return 4
 
 **Solutions:**
 
-1. Set `OPENALEX_EMAIL` in `.env` for polite pool access (10 req/sec vs 1 req/sec)
-2. The system automatically falls back from API key to email-based polite pool when credits are exhausted
-3. Rate-limited retries are capped at 3 attempts before skipping and moving on
-4. If persistent, reduce parallelism:
+1. Use multiple API keys: set `OPENALEX_API_KEYS=key1,key2,key3` in `.env` for round-robin rotation across keys
+2. Set `OPENALEX_EMAIL` in `.env` as fallback polite pool (10 req/sec vs 1 req/sec)
+3. The system automatically rotates to the next key when one is exhausted, and falls back to email when all keys are exhausted
+4. Exhausted keys re-enter rotation after a 5-minute cooldown
+5. Rate-limited retries are capped at 3 attempts before skipping and moving on
+6. If persistent, reduce parallelism:
 
 ```bash
 uv run python -m src.cli.core_collect enrich-citations --parallel 5
 ```
 
-**Note:** Both the enrichment pipeline and the reference resolver share the same `OpenAlexMixin` for API key exhaustion handling and automatic email fallback.
+**Note:** Both the enrichment pipeline and the collection crawler share the same `OpenAlexKeyManager` for multi-key rotation and automatic fallback.
 
 ### Semantic Scholar Rate Limits
 

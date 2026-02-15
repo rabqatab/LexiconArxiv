@@ -341,7 +341,8 @@ See [Data Model](docs/architecture/data_model.md#5-qdrant-collection-schema) for
 ## Environment Variables
 
 ```env
-OPENALEX_EMAIL=your-email@example.com  # Required for polite pool
+OPENALEX_API_KEYS=key1,key2,key3      # Comma-separated for round-robin rotation
+OPENALEX_EMAIL=your-email@example.com  # Fallback polite pool when all keys exhausted
 CROSSREF_EMAIL=your-email@example.com  # Recommended for CrossRef polite pool
 QDRANT_URL=http://localhost:6333
 QDRANT_COLLECTION=lexicon_arxiv        # Optional, default collection name
