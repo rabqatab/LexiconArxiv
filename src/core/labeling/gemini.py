@@ -9,10 +9,11 @@ from google.genai import types
 
 from src.core.constants import get_gemini_api_keys
 from src.core.labeling.llm_base import (
-    AbstractStructure,
     BaseAbstractLabeler,
+    SentenceLabels,
     LABELING_SYSTEM_PROMPT,
     LABELING_USER_PROMPT,
+    format_numbered_sentences,
 )
 
 logger = logging.getLogger(__name__)
@@ -50,10 +51,12 @@ class GeminiAbstractLabeler(BaseAbstractLabeler):
     def _next_client(self) -> genai.Client:
         return next(self._client_cycle)
 
-    async def label_abstract(
-        self, title: str, abstract: str
-    ) -> AbstractStructure | None:
-        user_prompt = LABELING_USER_PROMPT.format(title=title, abstract=abstract)
+    async def label_sentences(
+        self, title: str, abstract: str, numbered_sentences: str, num_sentences: int
+    ) -> SentenceLabels | None:
+        user_prompt = LABELING_USER_PROMPT.format(
+            title=title, abstract=abstract, sentences=numbered_sentences
+        )
 
         for attempt in range(self._max_retries):
             async with self._semaphore:
@@ -65,7 +68,7 @@ class GeminiAbstractLabeler(BaseAbstractLabeler):
                         config=types.GenerateContentConfig(
                             system_instruction=LABELING_SYSTEM_PROMPT,
                             response_mime_type="application/json",
-                            response_schema=AbstractStructure,
+                            response_schema=SentenceLabels,
                             temperature=0.1,
                         ),
                     )
@@ -73,7 +76,7 @@ class GeminiAbstractLabeler(BaseAbstractLabeler):
                     if self._delay > 0:
                         await asyncio.sleep(self._delay)
 
-                    return AbstractStructure.model_validate_json(response.text)
+                    return SentenceLabels.model_validate_json(response.text)
 
                 except Exception as e:
                     if attempt < self._max_retries - 1:

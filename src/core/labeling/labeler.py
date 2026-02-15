@@ -1,24 +1,34 @@
 """Main abstract labeling class using LLM backends.
 
-LLM-only pipeline: classify abstract sentences into rhetorical roles
-via Gemini or Ollama.
+LLM-only pipeline: split abstract with pysbd, classify sentences by index
+via Gemini or Ollama, map labels back to verbatim sentences.
 """
 
 import logging
+import re
 from typing import TYPE_CHECKING
+
+import pysbd
 
 if TYPE_CHECKING:
     from src.core.labeling.llm_base import BaseAbstractLabeler
 
+from src.core.labeling.llm_base import (
+    build_abstract_structure,
+    format_numbered_sentences,
+)
+
 logger = logging.getLogger(__name__)
+
+_segmenter = pysbd.Segmenter(language="en", clean=False)
 
 
 class AbstractLabeler:
     """LLM-based abstract sentence labeler for academic papers.
 
-    Classifies each sentence in an abstract into rhetorical roles
-    (task, domain, background, approach, method, result, contribution)
-    using Gemini or Ollama.
+    Splits abstracts into sentences deterministically using pysbd,
+    then sends numbered sentences to the LLM which returns only
+    index-based label assignments. Sentences are guaranteed verbatim.
 
     Example:
         >>> labeler = AbstractLabeler(llm_backend="gemini")
@@ -74,6 +84,11 @@ class AbstractLabeler:
     ) -> tuple[dict | None, str]:
         """Label an abstract's sentences into rhetorical roles.
 
+        1. Split abstract into sentences with pysbd
+        2. Send numbered sentences to LLM
+        3. LLM returns index → labels mapping
+        4. Map indices back to verbatim sentences
+
         Args:
             title: Paper title.
             abstract: Paper abstract.
@@ -86,11 +101,24 @@ class AbstractLabeler:
         if labeler is None:
             return None, "none"
 
-        result = await labeler.label_abstract(title, abstract)
-        if result:
-            return result.to_dict(), self.llm_backend
+        # Step 1: Normalize and split into sentences
+        clean = abstract.replace("\\n", " ")
+        clean = re.sub(r"\s+", " ", clean).strip()
+        sentences = [s.strip() for s in _segmenter.segment(clean) if s.strip()]
+        if not sentences:
+            return None, "none"
 
-        return None, "none"
+        # Step 2: Format numbered sentences for LLM
+        numbered = format_numbered_sentences(sentences)
+
+        # Step 3: LLM classifies by index (full abstract passed for context)
+        labels = await labeler.label_sentences(title, clean, numbered, len(sentences))
+        if labels is None:
+            return None, "none"
+
+        # Step 4: Map indices back to verbatim sentences
+        structure = build_abstract_structure(sentences, labels)
+        return structure.to_dict(), self.llm_backend
 
     async def close(self) -> None:
         """Clean up LLM resources."""

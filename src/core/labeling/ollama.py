@@ -7,8 +7,8 @@ import httpx
 
 from src.core.constants import get_ollama_base_url
 from src.core.labeling.llm_base import (
-    AbstractStructure,
     BaseAbstractLabeler,
+    SentenceLabels,
     LABELING_SYSTEM_PROMPT,
     LABELING_USER_PROMPT,
 )
@@ -33,10 +33,12 @@ class OllamaAbstractLabeler(BaseAbstractLabeler):
         self._client = httpx.AsyncClient(timeout=timeout)
         self._max_retries = max_retries
 
-    async def label_abstract(
-        self, title: str, abstract: str
-    ) -> AbstractStructure | None:
-        user_prompt = LABELING_USER_PROMPT.format(title=title, abstract=abstract)
+    async def label_sentences(
+        self, title: str, abstract: str, numbered_sentences: str, num_sentences: int
+    ) -> SentenceLabels | None:
+        user_prompt = LABELING_USER_PROMPT.format(
+            title=title, abstract=abstract, sentences=numbered_sentences
+        )
 
         for attempt in range(self._max_retries):
             async with self._semaphore:
@@ -49,7 +51,7 @@ class OllamaAbstractLabeler(BaseAbstractLabeler):
                                 {"role": "system", "content": LABELING_SYSTEM_PROMPT},
                                 {"role": "user", "content": user_prompt},
                             ],
-                            "format": AbstractStructure.model_json_schema(),
+                            "format": SentenceLabels.model_json_schema(),
                             "stream": False,
                             "options": {"temperature": 0.1},
                         },
@@ -57,7 +59,7 @@ class OllamaAbstractLabeler(BaseAbstractLabeler):
                     response.raise_for_status()
 
                     content = response.json()["message"]["content"]
-                    return AbstractStructure.model_validate_json(content)
+                    return SentenceLabels.model_validate_json(content)
 
                 except Exception as e:
                     if attempt < self._max_retries - 1:
