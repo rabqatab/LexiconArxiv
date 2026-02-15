@@ -56,6 +56,25 @@ class PDFExtractionProgress:
     last_updated: str | None = None
 
 
+@dataclass
+class PDFAbstractProgress:
+    """Track PDF abstract extraction progress."""
+
+    total_to_process: int = 0
+    processed: int = 0
+    extracted: int = 0
+    download_failed: int = 0
+    parse_failed: int = 0
+    no_abstract: int = 0
+    errors: int = 0
+    last_offset: str | None = None
+    processed_point_ids: set[str] = field(default_factory=set)
+    started_at: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+    last_updated: str | None = None
+
+
 class PDFReferenceExtractor:
     """Extract references from PDFs using GROBID."""
 
@@ -407,6 +426,306 @@ class PDFReferenceExtractor:
             f"{progress.no_refs} no refs"
         )
         return progress
+
+    async def extract_abstract_from_pdf(
+        self, pdf_content: bytes
+    ) -> str | None:
+        """Extract abstract from PDF using GROBID processHeaderDocument.
+
+        Args:
+            pdf_content: PDF file content as bytes.
+
+        Returns:
+            Abstract text or None if extraction failed.
+        """
+        if not self._client:
+            raise RuntimeError("Client not initialized.")
+
+        try:
+            files = {"input": ("paper.pdf", pdf_content, "application/pdf")}
+            response = await self._client.post(
+                f"{self.grobid_url}/api/processHeaderDocument",
+                files=files,
+                headers={"Accept": "application/xml"},
+                timeout=self.grobid_timeout,
+            )
+
+            if response.status_code != 200:
+                logger.warning(f"GROBID header returned {response.status_code}")
+                return None
+
+            return self._parse_tei_abstract(response.text)
+
+        except httpx.TimeoutException:
+            logger.warning("GROBID header processing timeout")
+            return None
+        except Exception as e:
+            logger.warning(f"GROBID header error: {e}")
+            return None
+
+    def _parse_tei_abstract(self, tei_xml: str) -> str | None:
+        """Parse abstract from GROBID TEI XML response.
+
+        Args:
+            tei_xml: TEI XML string from GROBID processHeaderDocument.
+
+        Returns:
+            Abstract text or None.
+        """
+        try:
+            root = ET.fromstring(tei_xml)
+        except ET.ParseError as e:
+            logger.warning(f"TEI XML parse error: {e}")
+            return None
+
+        abstract_elem = root.find(".//tei:profileDesc/tei:abstract", TEI_NS)
+        if abstract_elem is None:
+            return None
+
+        abstract = " ".join(abstract_elem.itertext()).strip()
+        abstract = re.sub(r"\s+", " ", abstract).strip()
+
+        if not abstract or len(abstract) < 50:
+            return None
+
+        return abstract
+
+    async def _extract_abstract_one(
+        self, point_id: str, pdf_url: str
+    ) -> tuple[bool, str | None]:
+        """Download PDF and extract abstract.
+
+        Returns:
+            Tuple of (success, abstract_text or None).
+        """
+        async with self._semaphore:
+            pdf_content = await self.download_pdf(pdf_url)
+            if not pdf_content:
+                return False, None
+
+            abstract = await self.extract_abstract_from_pdf(pdf_content)
+            if abstract is None:
+                return False, "parse_failed"
+
+            return True, abstract
+
+    async def enrich_abstracts_from_pdfs(
+        self,
+        dry_run: bool = False,
+        limit: int | None = None,
+        venues: list[str] | None = None,
+    ) -> PDFAbstractProgress:
+        """Extract abstracts from PDFs for papers missing abstract data.
+
+        Args:
+            dry_run: Only count papers without processing.
+            limit: Maximum papers to process.
+            venues: Filter by venue names.
+
+        Returns:
+            PDFAbstractProgress with statistics.
+        """
+        progress = self._load_abstract_checkpoint()
+        offset = progress.last_offset
+
+        logger.info("Starting PDF abstract extraction...")
+
+        while True:
+            papers, next_offset = self._get_papers_needing_abstracts(
+                limit=self.batch_size,
+                offset=offset,
+                venues=venues,
+            )
+
+            if not papers:
+                break
+
+            if dry_run:
+                progress.total_to_process += len(papers)
+                logger.info(f"Found {len(papers)} papers needing abstracts (dry run)")
+            else:
+                extracted = await self._process_abstract_batch(papers, progress)
+                logger.info(
+                    f"Batch: {extracted}/{len(papers)} extracted | "
+                    f"Total: {progress.extracted} extracted, "
+                    f"{progress.download_failed} download failed, "
+                    f"{progress.no_abstract} no abstract"
+                )
+
+            progress.last_offset = next_offset
+            progress.last_updated = datetime.now(timezone.utc).isoformat()
+            self._save_abstract_checkpoint(progress)
+
+            offset = next_offset
+            if offset is None:
+                break
+
+            if limit and progress.processed >= limit:
+                break
+
+        logger.info(
+            f"PDF abstract extraction complete: {progress.extracted} extracted, "
+            f"{progress.download_failed} download failed, "
+            f"{progress.parse_failed} parse failed, "
+            f"{progress.no_abstract} no abstract"
+        )
+        return progress
+
+    def _get_papers_needing_abstracts(
+        self,
+        limit: int,
+        offset: str | None,
+        venues: list[str] | None = None,
+    ) -> tuple[list[tuple[str, dict]], str | None]:
+        """Get papers with PDF URLs that are missing abstracts."""
+        from qdrant_client.http import models
+
+        filter_conditions = [
+            models.FieldCondition(
+                key="abstract",
+                match=models.MatchValue(value=""),
+            ),
+        ]
+
+        must_not_conditions = [
+            models.IsNullCondition(
+                is_null=models.PayloadField(key="pdf_url"),
+            ),
+        ]
+
+        if venues:
+            filter_conditions.append(
+                models.FieldCondition(
+                    key="venue",
+                    match=models.MatchAny(any=venues),
+                )
+            )
+
+        scroll_filter = models.Filter(
+            must=filter_conditions,
+            must_not=must_not_conditions,
+        )
+
+        results, next_offset = self.storage.client.scroll(
+            collection_name=self.storage.collection_name,
+            scroll_filter=scroll_filter,
+            limit=limit,
+            offset=offset,
+            with_payload=True,
+        )
+
+        return [(str(p.id), p.payload) for p in results], next_offset
+
+    async def _process_abstract_batch(
+        self,
+        papers: list[tuple[str, dict]],
+        progress: PDFAbstractProgress,
+    ) -> int:
+        """Process a batch of papers for abstract extraction concurrently."""
+        to_process = [
+            (pid, payload)
+            for pid, payload in papers
+            if payload.get("pdf_url")
+            and payload.get("pdf_url", "").endswith(".pdf")
+            and pid not in progress.processed_point_ids
+        ]
+
+        if not to_process:
+            return 0
+
+        async def _process_one(point_id: str, payload: dict) -> tuple[str, dict, bool, str | None]:
+            pdf_url = payload.get("pdf_url")
+            success, result = await self._extract_abstract_one(point_id, pdf_url)
+            return point_id, payload, success, result
+
+        tasks = [_process_one(pid, payload) for pid, payload in to_process]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        extracted = 0
+        updates = []
+
+        for result in results:
+            progress.processed += 1
+
+            if isinstance(result, Exception):
+                logger.warning(f"Unexpected error in PDF abstract extraction: {result}")
+                progress.download_failed += 1
+                continue
+
+            point_id, payload, success, abstract = result
+            progress.processed_point_ids.add(point_id)
+
+            if not success:
+                progress.download_failed += 1
+                continue
+
+            if abstract == "parse_failed":
+                progress.parse_failed += 1
+                continue
+
+            if abstract:
+                updates.append((point_id, abstract))
+                progress.extracted += 1
+                extracted += 1
+                logger.debug(
+                    f"Extracted abstract ({len(abstract)} chars) from {payload.get('title', '')[:40]}"
+                )
+            else:
+                progress.no_abstract += 1
+
+        if updates:
+            self.storage.batch_update_abstracts(updates)
+
+        return extracted
+
+    def _load_abstract_checkpoint(self) -> PDFAbstractProgress:
+        """Load abstract extraction checkpoint."""
+        ckpt_file = self.checkpoint_dir / "pdf_abstract_extraction.json"
+        if ckpt_file.exists():
+            with open(ckpt_file) as f:
+                data = json.load(f)
+            progress = PDFAbstractProgress(
+                total_to_process=data.get("total_to_process", 0),
+                processed=data.get("processed", 0),
+                extracted=data.get("extracted", 0),
+                download_failed=data.get("download_failed", 0),
+                parse_failed=data.get("parse_failed", 0),
+                no_abstract=data.get("no_abstract", 0),
+                errors=data.get("errors", 0),
+                last_offset=data.get("last_offset"),
+                started_at=data.get("started_at", datetime.now(timezone.utc).isoformat()),
+                last_updated=data.get("last_updated"),
+            )
+            progress.processed_point_ids = set(data.get("processed_point_ids", []))
+            return progress
+        return PDFAbstractProgress()
+
+    def _save_abstract_checkpoint(self, progress: PDFAbstractProgress) -> None:
+        """Save abstract extraction checkpoint."""
+        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        ckpt_file = self.checkpoint_dir / "pdf_abstract_extraction.json"
+        data = {
+            "total_to_process": progress.total_to_process,
+            "processed": progress.processed,
+            "extracted": progress.extracted,
+            "download_failed": progress.download_failed,
+            "parse_failed": progress.parse_failed,
+            "no_abstract": progress.no_abstract,
+            "errors": progress.errors,
+            "last_offset": progress.last_offset,
+            "processed_point_ids": list(progress.processed_point_ids),
+            "started_at": progress.started_at,
+            "last_updated": progress.last_updated,
+        }
+        with open(ckpt_file, "w") as f:
+            json.dump(data, f, indent=2)
+
+    def clear_abstract_checkpoint(self) -> None:
+        """Clear abstract extraction checkpoint."""
+        ckpt_file = self.checkpoint_dir / "pdf_abstract_extraction.json"
+        if ckpt_file.exists():
+            ckpt_file.unlink()
+            logger.info("PDF abstract extraction checkpoint cleared")
 
     def _get_papers_with_pdf_urls(
         self,

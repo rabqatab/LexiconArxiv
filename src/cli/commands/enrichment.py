@@ -513,6 +513,73 @@ def register_commands(cli: click.Group):
 
         asyncio.run(run_extraction())
 
+    @cli.command("extract-pdf-abstracts")
+    @click.option("--dry-run", is_flag=True, help="Count papers without extracting")
+    @click.option("--limit", "-n", type=int, help="Max papers to process")
+    @click.option("--batch-size", type=int, default=50, help="Papers per batch")
+    @click.option("--parallel", "-p", type=int, default=20, help="Concurrent extractions")
+    @click.option("--venue", "-v", multiple=True, help="Filter by venue")
+    @click.option("--grobid-url", type=str, help="GROBID server URL (default: http://localhost:8070)")
+    def extract_pdf_abstracts(
+        dry_run: bool,
+        limit: int | None,
+        batch_size: int,
+        parallel: int,
+        venue: tuple[str, ...],
+        grobid_url: str | None,
+    ) -> None:
+        """Extract abstracts from PDFs using GROBID.
+
+        Fallback for papers still missing abstracts after OpenAlex enrichment.
+        Downloads PDFs and extracts abstracts via GROBID processHeaderDocument.
+        Only processes papers with direct PDF URLs (ending in .pdf).
+
+        GROBID must be running:
+          docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.0
+
+        Examples:
+
+          # Count papers needing PDF abstract extraction
+          python -m src.cli.core_collect extract-pdf-abstracts --dry-run
+
+          # Extract abstracts from PDFs
+          python -m src.cli.core_collect extract-pdf-abstracts
+
+          # Target specific venues
+          python -m src.cli.core_collect extract-pdf-abstracts -v "PACLIC"
+        """
+        from src.core.enrichment.pdf import PDFReferenceExtractor
+
+        venues_list = list(venue) if venue else None
+
+        async def run_extraction():
+            storage = QdrantStorage()
+            async with PDFReferenceExtractor(
+                storage=storage,
+                grobid_url=grobid_url,
+                batch_size=batch_size,
+                max_concurrent=parallel,
+            ) as extractor:
+                progress = await extractor.enrich_abstracts_from_pdfs(
+                    dry_run=dry_run,
+                    limit=limit,
+                    venues=venues_list,
+                )
+
+                click.echo(f"\nPDF Abstract Extraction Results:")
+                click.echo(f"  Processed:       {progress.processed}")
+                click.echo(f"  Extracted:       {progress.extracted}")
+                click.echo(f"  Download failed: {progress.download_failed}")
+                click.echo(f"  Parse failed:    {progress.parse_failed}")
+                click.echo(f"  No abstract:     {progress.no_abstract}")
+                click.echo(f"  Errors:          {progress.errors}")
+
+                if dry_run:
+                    click.echo(f"\n  Total papers to process: {progress.total_to_process}")
+                    click.echo("  (Dry run - no changes made)")
+
+        asyncio.run(run_extraction())
+
     @cli.command("clear-pdf-checkpoint")
     def clear_pdf_checkpoint() -> None:
         """Clear PDF extraction checkpoint."""
@@ -521,6 +588,15 @@ def register_commands(cli: click.Group):
         extractor = PDFReferenceExtractor()
         extractor.clear_checkpoint()
         click.echo("PDF extraction checkpoint cleared.")
+
+    @cli.command("clear-pdf-abstract-checkpoint")
+    def clear_pdf_abstract_checkpoint() -> None:
+        """Clear PDF abstract extraction checkpoint."""
+        from src.core.enrichment.pdf import PDFReferenceExtractor
+
+        extractor = PDFReferenceExtractor()
+        extractor.clear_abstract_checkpoint()
+        click.echo("PDF abstract extraction checkpoint cleared.")
 
     @cli.command("enrich-stubs")
     @click.option("--limit", "-n", type=int, default=100, help="Max stubs to enrich")
