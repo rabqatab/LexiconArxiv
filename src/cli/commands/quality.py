@@ -248,3 +248,140 @@ def register_commands(cli: click.Group):
                 refs_pct = venue_stats["has_refs"] / count * 100 if count else 0
                 venue_display = venue[:28] + ".." if len(venue) > 30 else venue
                 click.echo(f"{venue_display:<30} {count:>8,} {doi_pct:>9.1f}% {abs_pct:>9.1f}% {refs_pct:>9.1f}%")
+
+    @cli.command("reset-title-enriched")
+    @click.option("--dry-run", is_flag=True, default=False,
+                  help="Show what would be reset without making changes")
+    @click.option("--checkpoint", type=str,
+                  default="data/core/checkpoints/title_citations_enrichment.json",
+                  help="Path to title enrichment checkpoint")
+    def audit_title_matches(dry_run: bool, checkpoint: str) -> None:
+        """Reset all title-enriched papers so they can be re-matched with stricter logic.
+
+        Finds all papers that received DOIs from title-based enrichment
+        (Stage 3.3), clears their DOI, referenced_works, and abstract,
+        and removes them from the title and abstracts checkpoints.
+        The not_found papers stay in the checkpoint so 3.3 only
+        re-processes the enriched ones (~42K credits instead of ~500K).
+
+        After running this, re-run the pipeline from Stage 3.3 onward.
+
+        Examples:
+
+          # Preview what will be reset
+          uv run python -m src.cli.core_collect reset-title-enriched --dry-run
+
+          # Reset and prepare for re-run
+          uv run python -m src.cli.core_collect reset-title-enriched
+        """
+        from pathlib import Path
+
+        checkpoint_path = Path(checkpoint)
+        if not checkpoint_path.exists():
+            click.echo(f"Checkpoint not found: {checkpoint_path}")
+            sys.exit(1)
+
+        with open(checkpoint_path) as f:
+            ckpt = json.load(f)
+
+        all_ids = list(ckpt.get("processed_point_ids", []))
+        enriched_count = ckpt.get("enriched", 0)
+        not_found_count = ckpt.get("not_found", 0)
+        click.echo(f"Title checkpoint: {ckpt.get('processed', 0)} processed, "
+                    f"{enriched_count} enriched, {not_found_count} not_found")
+
+        # Fetch papers that have DOIs (these got DOIs from title enrichment)
+        try:
+            storage = QdrantStorage()
+        except Exception as e:
+            click.echo(f"Error connecting to Qdrant: {e}")
+            sys.exit(1)
+
+        click.echo("Finding title-enriched papers with DOIs...")
+        enriched_ids = []
+        for i in range(0, len(all_ids), 100):
+            batch = all_ids[i:i + 100]
+            try:
+                points = storage.client.retrieve(
+                    collection_name=storage.collection_name,
+                    ids=batch,
+                    with_payload=["doi"],
+                )
+                for p in points:
+                    if p.payload.get("doi"):
+                        enriched_ids.append(p.id)
+            except Exception as e:
+                click.echo(f"  Warning: batch fetch error: {e}")
+
+        click.echo(f"Papers to reset: {len(enriched_ids)}")
+        click.echo(f"Papers to keep in checkpoint (not_found): {len(all_ids) - len(enriched_ids)}")
+        click.echo(f"Estimated re-run cost: {len(enriched_ids) * 10:,} credits (~{len(enriched_ids) * 10 / 100_000:.1f} keys)")
+
+        if dry_run:
+            click.echo("\nDry run — no changes made.")
+            return
+
+        if not enriched_ids:
+            click.echo("\nNo enriched papers found. Nothing to reset.")
+            return
+
+        enriched_set = set(enriched_ids)
+
+        # 1. Clear DOI, referenced_works, abstract in Qdrant
+        click.echo(f"\nClearing DOI, refs, and abstract for {len(enriched_ids)} papers...")
+        cleared = 0
+        for i in range(0, len(enriched_ids), 100):
+            batch = enriched_ids[i:i + 100]
+            try:
+                storage.client.set_payload(
+                    collection_name=storage.collection_name,
+                    payload={"doi": None, "referenced_works": [], "abstract": None},
+                    points=batch,
+                )
+                cleared += len(batch)
+            except Exception as e:
+                click.echo(f"  Error clearing batch: {e}")
+        click.echo(f"  Cleared {cleared} papers")
+
+        # 2. Remove enriched IDs from title checkpoint (keep not_found)
+        click.echo("Updating title checkpoint (removing enriched, keeping not_found)...")
+        remaining_ids = [pid for pid in all_ids if pid not in enriched_set]
+        ckpt["processed_point_ids"] = remaining_ids
+        ckpt["processed"] = len(remaining_ids)
+        ckpt["enriched"] = 0
+        with open(checkpoint_path, "w") as f:
+            json.dump(ckpt, f, indent=2)
+        click.echo(f"  Title checkpoint: {len(remaining_ids)} IDs kept (was {len(all_ids)})")
+
+        # 3. Remove enriched IDs from abstracts checkpoint
+        abstracts_ckpt_path = Path("data/core/checkpoints/abstracts_enrichment.json")
+        if abstracts_ckpt_path.exists():
+            try:
+                with open(abstracts_ckpt_path) as f:
+                    abs_ckpt = json.load(f)
+                old_abs_ids = set(abs_ckpt.get("processed_point_ids", []))
+                removed = old_abs_ids & enriched_set
+                if removed:
+                    abs_ckpt["processed_point_ids"] = list(old_abs_ids - enriched_set)
+                    abs_ckpt["processed"] = len(abs_ckpt["processed_point_ids"])
+                    with open(abstracts_ckpt_path, "w") as f:
+                        json.dump(abs_ckpt, f, indent=2)
+                    click.echo(f"  Abstracts checkpoint: removed {len(removed)} IDs")
+                else:
+                    click.echo("  Abstracts checkpoint: no overlap found")
+            except Exception as e:
+                click.echo(f"  Warning: could not update abstracts checkpoint: {e}")
+        else:
+            click.echo("  Abstracts checkpoint: not found (OK)")
+
+        click.echo(f"\n{'=' * 50}")
+        click.echo("DONE")
+        click.echo(f"{'=' * 50}")
+        click.echo(f"  Reset: {cleared} papers (DOI, refs, abstract cleared)")
+        click.echo(f"  Title checkpoint: {len(remaining_ids)} not_found kept")
+        click.echo(f"\nNext: re-run pipeline from 3.3 onward:")
+        click.echo(f"  scripts/run_full_pipeline.sh \\")
+        click.echo(f"    --since-year 2017 \\")
+        click.echo(f"    --skip-collection --skip-dedup \\")
+        click.echo(f"    --skip-openalex --skip-crossref \\")
+        click.echo(f"    --log logs/pipeline_resume.log")

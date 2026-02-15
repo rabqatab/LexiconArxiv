@@ -213,9 +213,16 @@ class PaperEnricher(BaseEnricher, OpenAlexMixin):
                 refs = result.get("referenced_works", [])
 
                 # Check title similarity (exact or very close match)
+                len_ratio = (
+                    min(len(result_title), len(title_lower))
+                    / max(len(result_title), len(title_lower))
+                    if result_title and title_lower
+                    else 0.0
+                )
                 if result_title == title_lower or (
                     len(result_title) > 20
                     and (result_title in title_lower or title_lower in result_title)
+                    and len_ratio > 0.85
                 ):
                     if len(refs) >= min_refs:
                         refs_clean = [
