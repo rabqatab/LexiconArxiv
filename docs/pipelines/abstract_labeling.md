@@ -53,32 +53,50 @@ uv run python -m src.cli.core_collect label-abstracts --gemini-model gemini-2.5-
 ## 3. Pipeline Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                   Abstract Labeling Pipeline                        │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌──────────┐   ┌──────────────────┐                                │
-│  │  Qdrant  │──▶│  LLM Labeling    │──── success ──┐               │
-│  │ (papers) │   │ (Gemini/Ollama)  │                │               │
-│  └──────────┘   └───────┬──────────┘                │               │
-│                         │ failure                    │               │
-│                         ▼                            ▼               │
-│                    return None              ┌──────────────────┐    │
-│                  (paper skipped)            │  Update Qdrant   │    │
-│                                             │ abstract_structure│    │
-│                                             └──────────────────┘    │
-└─────────────────────────────────────────────────────────────────────┘
-
-LLM Labeling: always async, structured JSON output via Gemini or Ollama
-No fallback:  LLM is the only extraction method (unlike keyword pipeline)
-Skip logic:   papers without abstracts are skipped
+┌──────────────────────────────────────────────────────────────────────────┐
+│                     Abstract Labeling Pipeline                           │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  ┌──────────┐   ┌──────────────┐   ┌─────────────┐   ┌──────────────┐  │
+│  │  Qdrant  │──▶│ Preprocess & │──▶│ LLM Labels  │──▶│ Map indices  │  │
+│  │ (papers) │   │ pysbd split  │   │ by index    │   │ → sentences  │  │
+│  └──────────┘   └──────────────┘   └──────┬──────┘   └──────┬───────┘  │
+│                                            │ failure          │ success  │
+│                                            ▼                  ▼          │
+│                                       return None    ┌──────────────┐   │
+│                                     (paper skipped)  │ Update Qdrant│   │
+│                                                      │ abstract_    │   │
+│                                                      │  structure   │   │
+│                                                      └──────────────┘   │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
-Unlike the keyword extraction pipeline, this is an **LLM-only pipeline** — there is no regex or KeyBERT fallback. Papers without abstracts are skipped entirely.
+### 3.1 Index-Based Approach
 
-### 3.1 Gemini Backend
+The pipeline uses **deterministic sentence splitting** with pysbd, then sends numbered sentences to the LLM which returns only index-based label assignments. This guarantees verbatim sentence fidelity.
 
-- Uses `google-genai` SDK with `response_schema=AbstractStructure`
+```
+Step 1: Preprocess     → Replace literal \n, collapse whitespace
+Step 2: pysbd split    → Deterministic sentence boundaries
+Step 3: Number         → [0] First sentence. [1] Second sentence. ...
+Step 4: LLM classify   → Title + full abstract (context) + numbered sentences
+Step 5: Map back       → Index → verbatim sentence → role assignments
+```
+
+The LLM receives both the **full abstract** (for context) and the **numbered sentences** (for classification). This ensures the LLM understands sentence relationships (e.g., enumerated contributions like "a)... b)... c)...") while only returning lightweight index→label mappings.
+
+### 3.2 Preprocessing
+
+Abstracts from arXiv often contain literal `\n` (backslash-n as two characters) from line wrapping. The pipeline normalizes these before splitting:
+
+```python
+clean = abstract.replace("\\n", " ")        # Literal \n from arXiv
+clean = re.sub(r"\s+", " ", clean).strip()   # Collapse all whitespace
+```
+
+### 3.3 Gemini Backend
+
+- Uses `google-genai` SDK with `response_schema=SentenceLabels`
 - Structured JSON output via `response_mime_type="application/json"`
 - Default model: `gemini-2.0-flash`
 - Supports multiple API keys (comma-separated) for round-robin rotation
@@ -86,10 +104,10 @@ Unlike the keyword extraction pipeline, this is an **LLM-only pipeline** — the
 - Retry with exponential backoff (max 5 attempts)
 - Temperature: 0.1
 
-### 3.2 Ollama Backend
+### 3.4 Ollama Backend
 
 - Uses `httpx.AsyncClient` POST to `/api/chat`
-- Passes `format=AbstractStructure.model_json_schema()`
+- Passes `format=SentenceLabels.model_json_schema()`
 - Default model: `llama3.1:8b`
 - Concurrency: 1 (local model)
 - Timeout: 180s (configurable via `--ollama-timeout`)
@@ -99,7 +117,20 @@ Unlike the keyword extraction pipeline, this is an **LLM-only pipeline** — the
 
 ## 4. Structured Output
 
-### 4.1 Pydantic Model
+### 4.1 Pydantic Models
+
+**LLM response** — index-based label assignments:
+
+```python
+class SentenceLabel(BaseModel):
+    index: int           # Sentence index (0-based)
+    labels: list[str]    # Rhetorical roles for this sentence
+
+class SentenceLabels(BaseModel):
+    labels: list[SentenceLabel]
+```
+
+**Stored output** — verbatim sentences mapped to roles:
 
 ```python
 class AbstractStructure(BaseModel):
@@ -115,7 +146,26 @@ class AbstractStructure(BaseModel):
         return self.model_dump()
 ```
 
-### 4.2 Example Output
+### 4.2 LLM Prompt
+
+The user prompt sends title, full abstract (for context), and numbered sentences:
+
+```
+Classify each sentence by index into rhetorical roles.
+
+Title: Attention Is All You Need
+
+Full abstract (for context):
+The dominant sequence transduction models are based on complex ...
+
+Sentences to classify:
+[0] The dominant sequence transduction models are based on complex ...
+[1] We propose a new simple network architecture, the Transformer, ...
+
+Return JSON with a "labels" array where each item has "index" (int) and "labels" (list of role strings).
+```
+
+### 4.3 Example Output
 
 For a paper titled "Attention Is All You Need":
 
@@ -131,7 +181,7 @@ For a paper titled "Attention Is All You Need":
 }
 ```
 
-Note: Sentences can appear in multiple roles (multi-label classification).
+Note: Sentences can appear in multiple roles (multi-label classification). All sentences are verbatim from pysbd splitting — the LLM never generates sentence text.
 
 ---
 
@@ -194,10 +244,12 @@ Note: Sentences can appear in multiple roles (multi-label classification).
 ```
 src/core/labeling/
 ├── __init__.py          # Module exports (AbstractLabeler, AbstractStructure)
-├── llm_base.py          # AbstractStructure model, prompts, BaseAbstractLabeler ABC
+├── llm_base.py          # SentenceLabel/SentenceLabels/AbstractStructure models,
+│                        #   prompts, format_numbered_sentences(),
+│                        #   build_abstract_structure(), BaseAbstractLabeler ABC
 ├── gemini.py            # GeminiAbstractLabeler (google-genai SDK, round-robin)
 ├── ollama.py            # OllamaAbstractLabeler (httpx REST API)
-└── labeler.py           # AbstractLabeler orchestrator (lazy init)
+└── labeler.py           # AbstractLabeler orchestrator (pysbd split + LLM + mapping)
 ```
 
 ---

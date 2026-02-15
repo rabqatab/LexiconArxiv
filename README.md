@@ -248,8 +248,8 @@ lexiconarxiv/
 │   │   │   ├── ollama.py        # Ollama REST API extraction + judge
 │   │   │   └── judge.py         # KeywordJudge wrapper
 │   │   └── labeling/            # Abstract sentence labeling
-│   │       ├── labeler.py       # AbstractLabeler orchestrator
-│   │       ├── llm_base.py      # AbstractStructure model, prompts, ABC
+│   │       ├── labeler.py       # AbstractLabeler orchestrator (pysbd + LLM)
+│   │       ├── llm_base.py      # Models, prompts, helpers, ABC
 │   │       ├── gemini.py        # Gemini API labeling (round-robin)
 │   │       └── ollama.py        # Ollama REST API labeling
 │   └── models/
