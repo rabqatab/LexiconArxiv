@@ -7,8 +7,10 @@ papers in OpenAlex via DOI. Supports parallel processing for faster enrichment.
 import asyncio
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from difflib import SequenceMatcher
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -23,6 +25,34 @@ if TYPE_CHECKING:
     from src.core.storage import QdrantStorage
 
 logger = logging.getLogger(__name__)
+
+
+
+# --- Title matching helpers ---
+
+_TITLE_MATCH_THRESHOLD = 0.90
+
+
+def _normalize_title(title: str) -> str:
+    """Normalize a title for comparison: lowercase, strip punctuation, collapse whitespace."""
+    t = title.lower().strip()
+    t = re.sub(r"[^a-z0-9\s]", " ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
+
+def _titles_match(norm_a: str, norm_b: str) -> bool:
+    """Check if two normalized titles refer to the same paper.
+
+    Uses SequenceMatcher ratio with a threshold of 0.90. This catches
+    minor variations (acronym prefixes, punctuation, word differences)
+    while rejecting clearly different papers.
+    """
+    if not norm_a or not norm_b:
+        return False
+    if norm_a == norm_b:
+        return True
+    return SequenceMatcher(None, norm_a, norm_b).ratio() >= _TITLE_MATCH_THRESHOLD
 
 
 class EnrichmentType(Enum):
@@ -207,23 +237,13 @@ class PaperEnricher(BaseEnricher, OpenAlexMixin):
                 return None
 
             # Find best match with sufficient references
-            title_lower = title.lower().strip()
+            title_norm = _normalize_title(title)
             for result in results:
-                result_title = (result.get("title") or "").lower().strip()
+                result_title = result.get("title") or ""
                 refs = result.get("referenced_works", [])
 
-                # Check title similarity (exact or very close match)
-                len_ratio = (
-                    min(len(result_title), len(title_lower))
-                    / max(len(result_title), len(title_lower))
-                    if result_title and title_lower
-                    else 0.0
-                )
-                if result_title == title_lower or (
-                    len(result_title) > 20
-                    and (result_title in title_lower or title_lower in result_title)
-                    and len_ratio > 0.85
-                ):
+                # Check title similarity via normalized SequenceMatcher
+                if _titles_match(title_norm, _normalize_title(result_title)):
                     if len(refs) >= min_refs:
                         refs_clean = [
                             ref.replace("https://openalex.org/", "") for ref in refs
