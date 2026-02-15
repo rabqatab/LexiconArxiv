@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
 from abc import ABC
 from typing import TYPE_CHECKING, Any
 
@@ -18,9 +17,9 @@ from src.core.constants import (
     CROSSREF_BASE_URL,
     OPENALEX_BASE_URL,
     get_crossref_email,
-    get_openalex_api_key,
     get_openalex_email,
 )
+from src.core.openalex_keys import OpenAlexKeyManager
 
 if TYPE_CHECKING:
     from src.core.storage import QdrantStorage
@@ -115,11 +114,7 @@ class OpenAlexMixin:
     """
 
     # These will be set by __init__ in subclasses
-    email: str | None = None
-    api_key: str | None = None
-    _api_key_exhausted: bool = False  # Track if API key credits are exhausted
-    _api_key_exhausted_at: float = 0  # When exhaustion was detected
-    _api_key_cooldown: float = 300  # Retry API key after 5 minutes
+    _key_manager: OpenAlexKeyManager | None = None
     _original_max_concurrent: int = 1  # Remember pre-exhaustion concurrency
     _client: httpx.AsyncClient | None = None
     _semaphore: asyncio.Semaphore | None = None
@@ -129,86 +124,65 @@ class OpenAlexMixin:
         self,
         email: str | None = None,
         api_key: str | None = None,
+        key_manager: OpenAlexKeyManager | None = None,
     ) -> None:
         """Initialize OpenAlex credentials.
 
         Args:
             email: Email for polite pool. Uses OPENALEX_EMAIL env if not set.
             api_key: OpenAlex API key. Uses OPENALEX_API_KEY env if not set.
+            key_manager: Pre-configured OpenAlexKeyManager instance.
         """
-        self.email = email or get_openalex_email()
-        self.api_key = api_key or get_openalex_api_key()
-        self._api_key_exhausted = False
+        if key_manager:
+            self._key_manager = key_manager
+        elif api_key:
+            self._key_manager = OpenAlexKeyManager(
+                [api_key], email or get_openalex_email()
+            )
+        else:
+            self._key_manager = OpenAlexKeyManager.from_env()
+            if email:
+                self._key_manager._email = email
 
     def _get_openalex_params(self) -> dict[str, str]:
-        """Get query parameters for OpenAlex API calls.
+        """Get query parameters for OpenAlex API calls."""
+        return self._key_manager.get_next_params()
 
-        Falls back to email-based polite pool if API key credits are exhausted.
-        Automatically retries API key after cooldown period.
-        """
-        # Check if cooldown has elapsed — try API key again
-        if self._api_key_exhausted and self.api_key:
-            elapsed = time.monotonic() - self._api_key_exhausted_at
-            if elapsed > self._api_key_cooldown:
-                self._api_key_exhausted = False
-                if hasattr(self, "_semaphore") and self._semaphore is not None:
-                    self._semaphore = asyncio.Semaphore(self._original_max_concurrent)
-                logger.info(
-                    f"API key cooldown ({self._api_key_cooldown}s) elapsed, "
-                    f"retrying API key (concurrency: {self._original_max_concurrent})"
-                )
-
-        params = {}
-        if self.api_key and not self._api_key_exhausted:
-            params["api_key"] = self.api_key
-        elif self.email:
-            params["mailto"] = self.email
-        return params
-
-    def _handle_api_key_exhaustion(self, response: "httpx.Response") -> bool:
+    def _handle_api_key_exhaustion(
+        self, response: "httpx.Response", used_key: str | None = None
+    ) -> bool:
         """Check if response indicates API key credit exhaustion.
-
-        If exhausted, switches to email-based polite pool and reduces
-        concurrency to avoid overwhelming the free tier.
 
         Args:
             response: HTTP response to check.
+            used_key: The API key that was used for the request.
 
         Returns:
-            True if credits exhausted and switched to email, False otherwise.
+            True if credits exhausted and key was marked, False otherwise.
         """
-        if response.status_code == 429 and self.api_key and not self._api_key_exhausted:
-            try:
-                data = response.json()
-                if "Insufficient credits" in data.get("message", ""):
-                    self._api_key_exhausted = True
-                    self._api_key_exhausted_at = time.monotonic()
-                    # Reduce concurrency for email-based polite pool
-                    if hasattr(self, "_semaphore") and self._semaphore is not None:
-                        self._original_max_concurrent = max(
-                            self._original_max_concurrent, self._semaphore._value
-                        )
-                        self._semaphore = asyncio.Semaphore(1)
-                        logger.warning(
-                            "OpenAlex API key credits exhausted. "
-                            "Falling back to email-based polite pool "
-                            f"(concurrency: {self._original_max_concurrent} -> 1). "
-                            f"Will retry API key in {self._api_key_cooldown}s."
-                        )
-                    else:
-                        logger.warning(
-                            "OpenAlex API key credits exhausted. "
-                            "Falling back to email-based polite pool. "
-                            f"Will retry API key in {self._api_key_cooldown}s."
-                        )
-                    return True
-            except Exception:
-                pass
-        return False
+        if response.status_code != 429 or not used_key:
+            return False
+        try:
+            data = response.json()
+            if "Insufficient credits" not in data.get("message", ""):
+                return False
+        except Exception:
+            return False
+
+        self._key_manager.mark_exhausted(used_key)
+
+        # Reduce concurrency only when ALL keys are exhausted
+        if not self._key_manager.has_available_keys:
+            if hasattr(self, "_semaphore") and self._semaphore is not None:
+                self._original_max_concurrent = max(
+                    self._original_max_concurrent, self._semaphore._value
+                )
+                self._semaphore = asyncio.Semaphore(1)
+        return True
 
     def has_valid_api_key(self) -> bool:
         """Check if a valid (non-exhausted) API key is available."""
-        return bool(self.api_key and not self._api_key_exhausted)
+        return self._key_manager.has_available_keys
 
     async def fetch_openalex_work(
         self,
@@ -243,6 +217,7 @@ class OpenAlexMixin:
             raise ValueError(f"Unknown identifier type: {identifier_type}")
 
         params = self._get_openalex_params()
+        used_key = params.get("api_key")
 
         try:
             async with self._semaphore:
@@ -253,12 +228,15 @@ class OpenAlexMixin:
                 return None
 
             if response.status_code == 429:
-                # Check if API key credits exhausted - if so, switch to email and retry
-                if self._handle_api_key_exhaustion(response):
+                if self._handle_api_key_exhaustion(response, used_key):
+                    if self._key_manager.has_available_keys:
+                        if hasattr(self, "_semaphore") and self._semaphore is not None:
+                            self._semaphore = asyncio.Semaphore(
+                                self._original_max_concurrent
+                            )
                     return await self.fetch_openalex_work(
                         identifier, identifier_type, _retry_count=0
                     )
-                # Regular rate limiting - wait and retry (with max retries)
                 if _retry_count >= max_retries:
                     logger.warning(
                         f"OpenAlex rate limit: max retries ({max_retries}) reached "

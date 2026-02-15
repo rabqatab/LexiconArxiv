@@ -750,13 +750,20 @@ class ReferenceResolver(OpenAlexMixin):
 
             url = f"{OPENALEX_BASE_URL}/works"
             params = {"search": title, "per_page": 5}
-            params.update(self._get_openalex_params())
+            openalex_params = self._get_openalex_params()
+            used_key = openalex_params.get("api_key")
+            params.update(openalex_params)
 
             try:
                 response = await self._client.get(url, params=params)
 
                 if response.status_code == 429:
-                    if self._handle_api_key_exhaustion(response):
+                    if self._handle_api_key_exhaustion(response, used_key):
+                        if self._key_manager.has_available_keys:
+                            if hasattr(self, "_semaphore") and self._semaphore is not None:
+                                self._semaphore = asyncio.Semaphore(
+                                    self._original_max_concurrent
+                                )
                         return await self._search_openalex_by_title(title)
                     if _retry_count >= max_retries:
                         logger.warning(

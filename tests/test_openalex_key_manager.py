@@ -143,3 +143,117 @@ class TestOpenAlexKeyManager:
         mgr = OpenAlexKeyManager(["k1", "k2"])
         params = mgr.get_next_params()
         assert "api_key" in params
+
+
+import asyncio
+import httpx
+import respx
+from httpx import Response
+
+from src.core.enrichment.base import OpenAlexMixin, BaseEnricher
+from src.core.enrichment.openalex import PaperEnricher
+
+
+class ConcreteEnricher(BaseEnricher, OpenAlexMixin):
+    """Minimal concrete class for testing the mixin."""
+
+    def __init__(self, key_manager=None, **kwargs):
+        self._init_openalex(key_manager=key_manager)
+        super().__init__(**kwargs)
+        self._original_max_concurrent = self.max_concurrent
+
+    async def __aenter__(self):
+        self._client = httpx.AsyncClient(timeout=10)
+        self._semaphore = asyncio.Semaphore(self.max_concurrent)
+        return self
+
+    async def __aexit__(self, *args):
+        if self._client:
+            await self._client.aclose()
+
+
+class TestOpenAlexMixinKeyManager:
+    """Tests for OpenAlexMixin with key manager integration."""
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_uses_key_manager_for_params(self):
+        mgr = OpenAlexKeyManager(["k1", "k2"])
+        enricher = ConcreteEnricher(key_manager=mgr, max_concurrent=1)
+        async with enricher:
+            route = respx.get("https://api.openalex.org/works/https://doi.org/10.1234/test").mock(
+                return_value=Response(200, json={"id": "W1", "title": "Test"})
+            )
+            await enricher.fetch_openalex_work("10.1234/test", "doi")
+            request = route.calls[0].request
+            assert "api_key" in str(request.url)
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_exhaustion_rotates_to_next_key(self):
+        mgr = OpenAlexKeyManager(["k1", "k2"], email="e@x.com")
+        enricher = ConcreteEnricher(key_manager=mgr, max_concurrent=2)
+        async with enricher:
+            respx.get("https://api.openalex.org/works/https://doi.org/10.1234/a").mock(
+                side_effect=[
+                    Response(429, json={"message": "Insufficient credits"}),
+                    Response(200, json={"id": "W1", "title": "Test"}),
+                ]
+            )
+            result = await enricher.fetch_openalex_work("10.1234/a", "doi")
+            assert result is not None
+            assert mgr.active_key_count == 1
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_all_keys_exhausted_falls_back_to_email(self):
+        mgr = OpenAlexKeyManager(["k1"], email="e@x.com")
+        enricher = ConcreteEnricher(key_manager=mgr, max_concurrent=2)
+        async with enricher:
+            respx.get("https://api.openalex.org/works/https://doi.org/10.1234/a").mock(
+                side_effect=[
+                    Response(429, json={"message": "Insufficient credits"}),
+                    Response(200, json={"id": "W1", "title": "Test"}),
+                ]
+            )
+            result = await enricher.fetch_openalex_work("10.1234/a", "doi")
+            assert result is not None
+            assert enricher._semaphore._value == 1
+
+    def test_has_valid_api_key_delegates_to_manager(self):
+        mgr = OpenAlexKeyManager(["k1"])
+        enricher = ConcreteEnricher(key_manager=mgr)
+        assert enricher.has_valid_api_key() is True
+        mgr.mark_exhausted("k1")
+        assert enricher.has_valid_api_key() is False
+
+    def test_backward_compat_api_key_param(self):
+        enricher = ConcreteEnricher()
+        enricher._init_openalex(api_key="direct_key", email="e@x.com")
+        assert enricher._key_manager.total_key_count == 1
+        params = enricher._key_manager.get_next_params()
+        assert params == {"api_key": "direct_key"}
+
+
+class TestPaperEnricherKeyManager:
+    """Tests for PaperEnricher using key manager."""
+
+    def test_default_concurrency_with_keys(self, monkeypatch):
+        monkeypatch.setenv("OPENALEX_API_KEYS", "k1,k2")
+        monkeypatch.delenv("OPENALEX_API_KEY", raising=False)
+        monkeypatch.setenv("OPENALEX_EMAIL", "e@x.com")
+        enricher = PaperEnricher(storage=None)
+        assert enricher.max_concurrent == PaperEnricher.DEFAULT_CONCURRENT_API_KEY
+        assert enricher._key_manager.total_key_count == 2
+
+    def test_default_concurrency_email_only(self, monkeypatch):
+        monkeypatch.delenv("OPENALEX_API_KEYS", raising=False)
+        monkeypatch.delenv("OPENALEX_API_KEY", raising=False)
+        monkeypatch.setenv("OPENALEX_EMAIL", "e@x.com")
+        enricher = PaperEnricher(storage=None)
+        assert enricher.max_concurrent == PaperEnricher.DEFAULT_CONCURRENT_EMAIL
+
+    def test_accepts_key_manager_param(self):
+        mgr = OpenAlexKeyManager(["k1", "k2"])
+        enricher = PaperEnricher(storage=None, key_manager=mgr)
+        assert enricher._key_manager is mgr
