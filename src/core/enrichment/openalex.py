@@ -44,14 +44,19 @@ def _normalize_title(title: str) -> str:
 def _titles_match(norm_a: str, norm_b: str) -> bool:
     """Check if two normalized titles refer to the same paper.
 
-    Uses SequenceMatcher ratio with a threshold of 0.90. This catches
-    minor variations (acronym prefixes, punctuation, word differences)
-    while rejecting clearly different papers.
+    Uses a length ratio pre-filter followed by SequenceMatcher ratio
+    with a threshold of 0.90. This catches minor variations (acronym
+    prefixes, punctuation, word differences) while rejecting clearly
+    different papers.
     """
     if not norm_a or not norm_b:
         return False
     if norm_a == norm_b:
         return True
+    # Fast rejection: if lengths differ by more than 30%, skip expensive ratio
+    len_ratio = min(len(norm_a), len(norm_b)) / max(len(norm_a), len(norm_b))
+    if len_ratio < 0.70:
+        return False
     return SequenceMatcher(None, norm_a, norm_b).ratio() >= _TITLE_MATCH_THRESHOLD
 
 
