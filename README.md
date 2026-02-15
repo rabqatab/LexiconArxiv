@@ -145,6 +145,7 @@ uv run python -m src.cli.core_collect collect-aaai [options]
 uv run python -m src.cli.core_collect status
 uv run python -m src.cli.core_collect deduplicate --dry-run
 uv run python -m src.cli.core_collect clear-checkpoint
+uv run python -m src.cli.core_collect reset-title-enriched --dry-run   # Reset title-matched papers
 
 # Enrichment (add citations/abstracts)
 uv run python -m src.cli.core_collect enrich-citations --parallel 10    # OpenAlex

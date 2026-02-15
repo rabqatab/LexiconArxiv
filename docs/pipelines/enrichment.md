@@ -403,7 +403,7 @@ All enrichment pipeline enhancements have been implemented:
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| Title-based OpenAlex lookup | ✅ Complete | For papers without DOI |
+| Title-based OpenAlex lookup | ✅ Complete | For papers without DOI (SequenceMatcher ≥ 0.90) |
 | PDF extraction via GROBID | ✅ Complete | Extracts refs from PDF for papers with no DOI match |
 | GROBID ARM64 support | ✅ Complete | Native build for Apple Silicon |
 | CrossRef enrichment | ✅ Complete | 97% success rate for ACM papers (vs 0% for S2) |
@@ -428,6 +428,10 @@ uv run python -m src.cli.core_collect enrich-crossref --dry-run            # Pre
 
 # Data quality
 uv run python -m src.cli.core_collect data-quality
+
+# Reset title-enriched papers (if false positives detected)
+uv run python -m src.cli.core_collect reset-title-enriched --dry-run
+uv run python -m src.cli.core_collect reset-title-enriched
 ```
 
 ---
@@ -751,7 +755,8 @@ CrossRefMixin
     └── parse_crossref_work(message)
 
 PaperEnricher(BaseEnricher, OpenAlexMixin)
-    └── Enriches corpus papers with citations/abstracts
+    ├── Enriches corpus papers with citations/abstracts
+    └── Title matching: _normalize_title() + _titles_match() (SequenceMatcher ≥ 0.90)
 
 StubEnricher(BaseEnricher, OpenAlexMixin, CrossRefMixin)
     └── Enriches stub papers, handles cross-reference deduplication

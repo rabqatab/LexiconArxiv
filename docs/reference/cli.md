@@ -212,10 +212,22 @@ uv run python -m src.cli.core_collect enrich-citations --limit 1000
 
 ### enrich-citations-by-title
 
-Enrich papers without DOIs using title search.
+Enrich papers without DOIs using title search. Matches titles against OpenAlex using normalized `SequenceMatcher` similarity (threshold ≥ 0.90).
 
 ```bash
 uv run python -m src.cli.core_collect enrich-citations-by-title --parallel 5
+```
+
+### reset-title-enriched
+
+Reset all title-enriched papers so they can be re-matched with the current matching logic. Clears DOI, referenced_works, and abstract for previously enriched papers and removes them from title and abstracts checkpoints.
+
+```bash
+# Preview
+uv run python -m src.cli.core_collect reset-title-enriched --dry-run
+
+# Reset
+uv run python -m src.cli.core_collect reset-title-enriched
 ```
 
 ### enrich-abstracts
