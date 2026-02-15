@@ -30,6 +30,7 @@
 | [Incremental Crawling](./pipelines/incremental_crawling.md) | Incremental update strategy and troubleshooting |
 | [Enrichment](./pipelines/enrichment.md) | Citation and abstract enrichment |
 | [Keyword Extraction](./pipelines/keyword_extraction.md) | Keyword/acronym extraction for BM25 |
+| [Abstract Labeling](./pipelines/abstract_labeling.md) | Abstract sentence rhetorical classification |
 | [Citation Graph](./pipelines/citation_graph.md) | Citation graph and GraphRAG design |
 | [Search](./pipelines/search.md) | Hybrid search pipeline |
 
@@ -132,7 +133,8 @@ lexiconarxiv/
 │   │   ├── enrichment/          # Citation/abstract enrichment
 │   │   ├── resolution/          # Reference resolution
 │   │   ├── citation_graph/      # Graph building and analysis
-│   │   └── keyword/             # Keyword extraction
+│   │   ├── keyword/             # Keyword extraction
+│   │   └── labeling/            # Abstract sentence labeling
 │   ├── models/                  # Data models
 │   ├── cli/                     # CLI tools
 │   └── utils/                   # Utilities
@@ -159,6 +161,7 @@ Infra:       Docker / Kubernetes
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.10.0 | Feb 2026 | Abstract sentence labeling (7 rhetorical roles), multi-key Gemini round-robin |
 | 0.9.0 | Feb 2026 | LLM-enhanced keyword extraction (Gemini/Ollama), LLM judge validation, configurable embeddings |
 | 0.8.0 | Feb 2026 | Graph Visualization API with D3.js UI for citation graph exploration |
 | 0.7.2 | Feb 2026 | DBLP/ACM consolidation, build_cited_by retry fix, incremental pipeline script |

@@ -11,6 +11,7 @@ AI Research Insights Engine - Core Corpus collection and semantic search for top
 - **Checkpoint Resume**: Resumable collection with progress tracking
 - **Qdrant Integration**: Payload-only storage with optional named vectors
 - **Keyword Extraction**: LLM-first (Gemini/Ollama) with regex + KeyBERT fallback + LLM judge for BM25 search
+- **Abstract Labeling**: LLM-based sentence classification into 7 rhetorical roles (task, domain, background, approach, method, result, contribution)
 - **Citation Graph**: Reference resolution and GraphRAG support
 - **Graph Visualization API**: REST API + D3.js UI for interactive citation graph exploration
 - **Stub Papers**: Store external references with automatic deduplication for complete citation graph
@@ -178,12 +179,20 @@ uv run python -m src.cli.core_collect extract-keywords              # Fallback o
 uv run python -m src.cli.core_collect extract-keywords --no-keybert # Regex only (faster)
 uv run python -m src.cli.core_collect extract-keywords --dry-run    # Preview mode
 uv run python -m src.cli.core_collect keyword-stats                 # Show statistics
+
+# Abstract Labeling (sentence-level rhetorical classification)
+uv run python -m src.cli.core_collect label-abstracts --dry-run --limit 5  # Preview
+uv run python -m src.cli.core_collect label-abstracts --limit 100          # Label papers
+uv run python -m src.cli.core_collect label-abstracts --llm-backend ollama # Use Ollama
+uv run python -m src.cli.core_collect label-abstracts --force --limit 50   # Re-label
 ```
 
 ## Documentation
 
 - [Crawling Guide](docs/guides/crawling.md) - Detailed collection guide
 - [Data Collection Design](docs/pipelines/data_collection.md) - Architecture and strategy
+- [Keyword Extraction](docs/pipelines/keyword_extraction.md) - LLM-first keyword pipeline
+- [Abstract Labeling](docs/pipelines/abstract_labeling.md) - Sentence-level rhetorical classification
 - [Graph API Specification](docs/architecture/api.md#8-graph-visualization-api) - Graph Visualization API
 - [Full Documentation](docs/README.md) - Complete documentation index
 
@@ -230,14 +239,19 @@ lexiconarxiv/
 │   │   ├── resolution/          # Reference resolution
 │   │   │   ├── normalizer.py    # ID normalization (DOI, arXiv, OpenAlex)
 │   │   │   └── resolver.py      # Citation graph builder
-│   │   └── keyword/             # Keyword extraction
-│   │       ├── extractor.py     # KeywordExtractor (sync + async pipeline)
-│   │       ├── patterns.py      # Regex patterns for acronyms
-│   │       ├── stopwords.py     # Stopword filtering
-│   │       ├── llm_base.py      # Pydantic models, prompts, ABC base classes
-│   │       ├── gemini.py        # Gemini API extraction + judge
-│   │       ├── ollama.py        # Ollama REST API extraction + judge
-│   │       └── judge.py         # KeywordJudge wrapper
+│   │   ├── keyword/             # Keyword extraction
+│   │   │   ├── extractor.py     # KeywordExtractor (sync + async pipeline)
+│   │   │   ├── patterns.py      # Regex patterns for acronyms
+│   │   │   ├── stopwords.py     # Stopword filtering
+│   │   │   ├── llm_base.py      # Pydantic models, prompts, ABC base classes
+│   │   │   ├── gemini.py        # Gemini API extraction + judge
+│   │   │   ├── ollama.py        # Ollama REST API extraction + judge
+│   │   │   └── judge.py         # KeywordJudge wrapper
+│   │   └── labeling/            # Abstract sentence labeling
+│   │       ├── labeler.py       # AbstractLabeler orchestrator
+│   │       ├── llm_base.py      # AbstractStructure model, prompts, ABC
+│   │       ├── gemini.py        # Gemini API labeling (round-robin)
+│   │       └── ollama.py        # Ollama REST API labeling
 │   └── models/
 │       └── paper.py             # Paper data model
 ├── docs/                        # Documentation
@@ -247,6 +261,8 @@ lexiconarxiv/
 
 ## Recent Updates (Feb 2026)
 
+- **Abstract Labeling**: Sentence-level rhetorical classification (7 roles) using Gemini/Ollama with structured JSON output
+- **Multi-Key Gemini**: Round-robin rotation across multiple comma-separated Gemini API keys for rate limit distribution
 - **LLM-First Keywords**: Gemini/Ollama as primary keyword extraction with regex + KeyBERT fallback, LLM judge validation, retry with exponential backoff
 - **Graph Visualization API**: FastAPI REST API with D3.js UI for interactive citation graph exploration
 - **Payload-Only Architecture**: Decouple enrichment from embeddings (see below)
@@ -329,6 +345,8 @@ OPENALEX_EMAIL=your-email@example.com  # Required for polite pool
 CROSSREF_EMAIL=your-email@example.com  # Recommended for CrossRef polite pool
 QDRANT_URL=http://localhost:6333
 QDRANT_COLLECTION=lexicon_arxiv        # Optional, default collection name
+GEMINI_API_KEY=key1,key2,...           # Comma-separated for round-robin (keywords + labeling)
+OLLAMA_BASE_URL=http://localhost:11434 # Local LLM (default)
 ```
 
 ## License

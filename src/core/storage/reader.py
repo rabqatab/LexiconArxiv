@@ -286,6 +286,60 @@ class PaperReader:
 
         return [(str(p.id), p.payload) for p in results], next_offset
 
+    def get_papers_for_abstract_labeling(
+        self,
+        limit: int = 100,
+        offset: str | None = None,
+        skip_existing: bool = True,
+    ) -> tuple[list[tuple[str, dict]], str | None]:
+        """Get papers for abstract sentence labeling.
+
+        Only returns papers that have a non-null, non-empty abstract.
+
+        Args:
+            limit: Maximum number of papers to return.
+            offset: Scroll offset for pagination.
+            skip_existing: If True, only return papers without abstract_structure.
+
+        Returns:
+            Tuple of (list of (point_id, payload), next_offset).
+        """
+        must_not_conditions = [
+            # Exclude papers with null abstract
+            models.IsNullCondition(
+                is_null=models.PayloadField(key="abstract"),
+            ),
+            # Exclude papers with empty string abstract
+            models.FieldCondition(
+                key="abstract",
+                match=models.MatchValue(value=""),
+            ),
+        ]
+
+        must_conditions = []
+        if skip_existing:
+            # Only papers where abstract_structure is missing or empty (not yet labeled)
+            must_conditions.append(
+                models.IsEmptyCondition(
+                    is_empty=models.PayloadField(key="abstract_structure"),
+                )
+            )
+
+        scroll_filter = models.Filter(
+            must=must_conditions if must_conditions else None,
+            must_not=must_not_conditions,
+        )
+
+        results, next_offset = self.client.scroll(
+            collection_name=self.collection_name,
+            scroll_filter=scroll_filter,
+            limit=limit,
+            offset=offset,
+            with_payload=["title", "abstract", "abstract_structure"],
+        )
+
+        return [(str(p.id), p.payload) for p in results], next_offset
+
     def get_all_papers_for_index(
         self,
         fields: list[str],

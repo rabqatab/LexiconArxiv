@@ -224,9 +224,13 @@ Uses Gemini API or local Ollama to extract structured keywords from title and/or
 
 ```python
 class ExtractedKeywords(BaseModel):
-    acronyms: list[str]    # Model names, method abbreviations (BERT, RAG, LoRA)
-    methods: list[str]     # Specific techniques or algorithms
-    concepts: list[str]    # Key technical concepts
+    task: list[str]              # Specific problem or objective (e.g. 'text classification')
+    method: list[str]            # Techniques, algorithms (e.g. 'contrastive learning')
+    model: list[str]             # Named models — proper nouns (e.g. 'BERT', 'GPT-4')
+    domain: list[str]            # Application area (e.g. 'NLP', 'computer vision')
+    dataset: list[str]           # Benchmarks, datasets (e.g. 'GLUE', 'SQuAD')
+    contribution_type: list[str] # Kind of contribution (e.g. 'model', 'survey', 'benchmark')
+    modality: list[str]          # Data types (e.g. 'text', 'image', 'code', 'multimodal')
 ```
 
 #### Gemini Backend
@@ -400,9 +404,19 @@ Output format:
 
 | Variable | Description |
 |----------|-------------|
-| `GEMINI_API_KEY` | Gemini API key (required for `--llm-backend gemini`) |
+| `GEMINI_API_KEY` | Gemini API key(s), comma-separated for round-robin rotation (required for `--llm-backend gemini`) |
 | `GOOGLE_API_KEY` | Alternative to `GEMINI_API_KEY` |
 | `OLLAMA_BASE_URL` | Ollama server URL (default: `http://localhost:11434`) |
+
+### 9.1 Multi-Key Gemini Round-Robin
+
+To distribute rate limits across multiple API keys, set comma-separated keys:
+
+```env
+GEMINI_API_KEY=key1,key2,key3,key4,key5
+```
+
+Each API call rotates to the next key using `itertools.cycle`, distributing the load evenly. This applies to both keyword extraction and abstract labeling pipelines.
 
 ---
 

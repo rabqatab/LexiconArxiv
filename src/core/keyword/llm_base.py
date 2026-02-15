@@ -22,6 +22,8 @@ class ExtractedKeywords(BaseModel):
     model: list[str]
     domain: list[str]
     dataset: list[str]
+    contribution_type: list[str]
+    modality: list[str]
 
     def to_dict(self) -> dict[str, list[str]]:
         return self.model_dump()
@@ -41,7 +43,7 @@ class JudgeResult(BaseModel):
 EXTRACTION_SYSTEM_PROMPT = (
     "You are an expert academic keyword extractor. "
     "Given a research paper's title and abstract, extract the most important "
-    "technical keywords into 5 categories:\n\n"
+    "technical keywords into 7 categories:\n\n"
     "- task: the specific problem or objective the paper addresses "
     "(e.g. 'text classification', 'machine translation', 'question answering')\n"
     "- method: techniques, algorithms, or approaches used "
@@ -51,7 +53,13 @@ EXTRACTION_SYSTEM_PROMPT = (
     "- domain: application area or research field "
     "(e.g. 'NLP', 'computer vision', 'legal AI', 'biomedical')\n"
     "- dataset: benchmarks, datasets, or evaluation resources "
-    "(e.g. 'GLUE', 'SQuAD', 'ImageNet', 'MS MARCO')\n\n"
+    "(e.g. 'GLUE', 'SQuAD', 'ImageNet', 'MS MARCO')\n"
+    "- contribution_type: the kind of contribution this paper makes "
+    "(e.g. 'model', 'survey', 'benchmark', 'dataset', 'system', 'method', "
+    "'analysis', 'application', 'toolkit', 'position paper')\n"
+    "- modality: data types or modalities the paper works with "
+    "(e.g. 'text', 'image', 'audio', 'video', 'code', 'tabular', 'graph', "
+    "'multimodal', 'time series', 'point cloud')\n\n"
     "Disambiguation examples:\n"
     "- 'transformer' -> model if referring to the original paper's model, "
     "method if referring to the architecture in general\n"
@@ -66,14 +74,14 @@ EXTRACTION_USER_PROMPT = (
     "Title: {title}\n\n"
     "Abstract: {abstract}\n\n"
     "Return the keywords as structured JSON with fields: "
-    "task, method, model, domain, dataset."
+    "task, method, model, domain, dataset, contribution_type, modality."
 )
 
 EXTRACTION_USER_PROMPT_TITLE_ONLY = (
     "Extract keywords from this research paper based on its title:\n\n"
     "Title: {title}\n\n"
     "Return the keywords as structured JSON with fields: "
-    "task, method, model, domain, dataset."
+    "task, method, model, domain, dataset, contribution_type, modality."
 )
 
 JUDGE_SYSTEM_PROMPT = (
@@ -130,7 +138,8 @@ class BaseLLMExtractor(ABC):
     def _flatten_extraction(result: ExtractedKeywords) -> list[str]:
         """Flatten an ExtractedKeywords model into a single keyword list."""
         keywords: list[str] = []
-        for field in ("task", "method", "model", "domain", "dataset"):
+        for field in ("task", "method", "model", "domain", "dataset",
+                      "contribution_type", "modality"):
             keywords.extend(getattr(result, field))
         return keywords
 

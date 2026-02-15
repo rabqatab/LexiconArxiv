@@ -502,7 +502,8 @@ def _display_results(
             click.echo(f"Source:   {source}")
             click.echo(f"Keywords: {keywords}")
             if structured:
-                for category in ("task", "method", "model", "domain", "dataset"):
+                for category in ("task", "method", "model", "domain", "dataset",
+                                "contribution_type", "modality"):
                     values = structured.get(category, [])
                     click.echo(f"  {category:>8}: {values}")
             click.echo()

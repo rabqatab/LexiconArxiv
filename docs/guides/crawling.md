@@ -1086,7 +1086,7 @@ Without keywords, these queries rely solely on title/abstract text matching.
 
 1. **LLM Extraction** (primary): Structured keyword extraction via Gemini or Ollama
    - Works with or without abstract (title-only supported)
-   - Returns categorized keywords: task, method, model, domain, dataset
+   - Returns categorized keywords: task, method, model, domain, dataset, contribution_type, modality
 
 2. **Fallback**: Regex + KeyBERT (only when LLM is unavailable or fails)
    - `"BERT: Pre-training..."` → `["BERT"]`

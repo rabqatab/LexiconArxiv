@@ -270,6 +270,14 @@ class QdrantStorage:
     ) -> tuple[list[tuple[str, dict]], str | None]:
         return self.readers.get_papers_for_keyword_extraction(limit, offset, skip_existing)
 
+    def get_papers_for_abstract_labeling(
+        self,
+        limit: int = 100,
+        offset: str | None = None,
+        skip_existing: bool = True,
+    ) -> tuple[list[tuple[str, dict]], str | None]:
+        return self.readers.get_papers_for_abstract_labeling(limit, offset, skip_existing)
+
     def get_all_papers_for_index(
         self,
         fields: list[str],
@@ -350,6 +358,12 @@ class QdrantStorage:
         updates: list[tuple[str, list[str], str]],
     ) -> int:
         return self.writers.batch_update_keywords_with_source(updates)
+
+    def batch_update_abstract_structure(
+        self,
+        updates: list[tuple[str, dict, str]],
+    ) -> int:
+        return self.writers.batch_update_abstract_structure(updates)
 
     def clear_all_keywords(self) -> int:
         return self.writers.clear_all_keywords()

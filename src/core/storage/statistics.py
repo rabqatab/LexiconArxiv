@@ -342,12 +342,7 @@ class StorageStatistics:
             "papers_with_keywords": 0,
             "papers_without_keywords": 0,
             "total_keywords": 0,
-            "by_source": {
-                "regex": 0,
-                "keybert": 0,
-                "both": 0,
-                "none": 0,
-            },
+            "by_source": {},
         }
 
         offset = None
@@ -370,10 +365,9 @@ class StorageStatistics:
                 else:
                     stats["papers_without_keywords"] += 1
 
-                # Count by source
-                source = payload.get("keywords_source", "none")
-                if source in stats["by_source"]:
-                    stats["by_source"][source] += 1
+                # Count by source (dynamic — supports any pipe-delimited value)
+                source = payload.get("keywords_source", "none") or "none"
+                stats["by_source"][source] = stats["by_source"].get(source, 0) + 1
 
             if offset is None:
                 break

@@ -1,12 +1,13 @@
 """Gemini-based keyword extraction and judging via google-genai SDK."""
 
 import asyncio
+import itertools
 import logging
 
 from google import genai
 from google.genai import types
 
-from src.core.constants import get_gemini_api_key
+from src.core.constants import get_gemini_api_keys
 from src.core.keyword.llm_base import (
     BaseLLMExtractor,
     BaseLLMJudge,
@@ -22,8 +23,16 @@ from src.core.keyword.llm_base import (
 logger = logging.getLogger(__name__)
 
 
+def _make_gemini_clients(api_keys: list[str]) -> list[genai.Client]:
+    """Create a genai.Client for each API key."""
+    return [genai.Client(api_key=key) for key in api_keys]
+
+
 class GeminiKeywordExtractor(BaseLLMExtractor):
-    """Keyword extractor using Gemini API with structured output."""
+    """Keyword extractor using Gemini API with structured output.
+
+    Supports multiple API keys for round-robin rotation across rate limits.
+    """
 
     def __init__(
         self,
@@ -32,17 +41,24 @@ class GeminiKeywordExtractor(BaseLLMExtractor):
         delay: float = 0.1,
         max_retries: int = 5,
     ):
-        api_key = get_gemini_api_key()
-        if not api_key:
+        api_keys = get_gemini_api_keys()
+        if not api_keys:
             raise ValueError(
                 "Gemini API key not found. Set GEMINI_API_KEY or GOOGLE_API_KEY."
             )
 
-        self._client = genai.Client(api_key=api_key)
+        self._clients = _make_gemini_clients(api_keys)
+        self._client_cycle = itertools.cycle(self._clients)
         self._model = model
         self._semaphore = asyncio.Semaphore(max_concurrent)
         self._delay = delay
         self._max_retries = max_retries
+
+        if len(api_keys) > 1:
+            logger.info(f"Gemini keyword extractor using {len(api_keys)} API keys (round-robin)")
+
+    def _next_client(self) -> genai.Client:
+        return next(self._client_cycle)
 
     async def extract_keywords(
         self, title: str, abstract: str | None = None
@@ -55,7 +71,8 @@ class GeminiKeywordExtractor(BaseLLMExtractor):
         for attempt in range(self._max_retries):
             async with self._semaphore:
                 try:
-                    response = await self._client.aio.models.generate_content(
+                    client = self._next_client()
+                    response = await client.aio.models.generate_content(
                         model=self._model,
                         contents=user_prompt,
                         config=types.GenerateContentConfig(
@@ -90,7 +107,10 @@ class GeminiKeywordExtractor(BaseLLMExtractor):
 
 
 class GeminiJudge(BaseLLMJudge):
-    """Keyword judge using Gemini API with structured output."""
+    """Keyword judge using Gemini API with structured output.
+
+    Supports multiple API keys for round-robin rotation across rate limits.
+    """
 
     def __init__(
         self,
@@ -98,23 +118,31 @@ class GeminiJudge(BaseLLMJudge):
         max_concurrent: int = 5,
         delay: float = 0.1,
     ):
-        api_key = get_gemini_api_key()
-        if not api_key:
+        api_keys = get_gemini_api_keys()
+        if not api_keys:
             raise ValueError(
                 "Gemini API key not found. Set GEMINI_API_KEY or GOOGLE_API_KEY."
             )
 
-        self._client = genai.Client(api_key=api_key)
+        self._clients = _make_gemini_clients(api_keys)
+        self._client_cycle = itertools.cycle(self._clients)
         self._model = model
         self._semaphore = asyncio.Semaphore(max_concurrent)
         self._delay = delay
+
+        if len(api_keys) > 1:
+            logger.info(f"Gemini judge using {len(api_keys)} API keys (round-robin)")
+
+    def _next_client(self) -> genai.Client:
+        return next(self._client_cycle)
 
     async def judge_keywords(
         self, title: str, abstract: str, keywords: list[str]
     ) -> list[str]:
         async with self._semaphore:
             try:
-                response = await self._client.aio.models.generate_content(
+                client = self._next_client()
+                response = await client.aio.models.generate_content(
                     model=self._model,
                     contents=JUDGE_USER_PROMPT.format(
                         title=title,

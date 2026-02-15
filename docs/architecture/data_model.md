@@ -442,8 +442,11 @@ client.update_collection(
     "referenced_works": "keyword[]",
     "cited_by": "keyword[]",   // Internal paper IDs that cite this paper
     "cited_by_count_internal": "integer",
-    "keywords": "keyword[]",   // Extracted keywords/acronyms (LLM-first, regex + KeyBERT fallback)
-    "keywords_source": "keyword"  // pipe-delimited: "gemini|judge", "ollama", "regex|keybert", etc.
+    "keywords": "keyword[]",   // Extracted keywords (LLM-first, regex + KeyBERT fallback)
+    "keywords_source": "keyword",  // pipe-delimited: "gemini|judge", "ollama", "regex|keybert", etc.
+    "keywords_structured": "object",  // Categorized: {task, method, model, domain, dataset, contribution_type, modality}
+    "abstract_structure": "object",   // Sentence-level: {task, domain, background, approach, method, result, contribution}
+    "abstract_structure_source": "keyword"  // "gemini", "ollama", or "none"
   }
 }
 ```

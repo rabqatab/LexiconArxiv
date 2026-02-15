@@ -33,6 +33,7 @@ ACM_DL_BASE_URL = "https://dl.acm.org"
 # OpenAlex
 OPENALEX_EMAIL_ENV = "OPENALEX_EMAIL"
 OPENALEX_API_KEY_ENV = "OPENALEX_API_KEY"
+OPENALEX_API_KEYS_ENV = "OPENALEX_API_KEYS"
 
 # CrossRef
 CROSSREF_EMAIL_ENV = "CROSSREF_EMAIL"
@@ -69,6 +70,26 @@ def get_openalex_api_key() -> str | None:
     return os.getenv(OPENALEX_API_KEY_ENV)
 
 
+def get_openalex_api_keys() -> list[str]:
+    """Get OpenAlex API keys from environment.
+
+    Reads OPENALEX_API_KEYS (comma-separated) first, falls back to
+    OPENALEX_API_KEY (single key wrapped in list).
+
+    Returns:
+        List of API key strings (may be empty).
+    """
+    multi = os.getenv(OPENALEX_API_KEYS_ENV)
+    if multi:
+        keys = [k.strip() for k in multi.split(",") if k.strip()]
+        if keys:
+            return keys
+    single = os.getenv(OPENALEX_API_KEY_ENV)
+    if single and single.strip():
+        return [single.strip()]
+    return []
+
+
 def get_crossref_email() -> str | None:
     """Get CrossRef email from environment."""
     return os.getenv(CROSSREF_EMAIL_ENV)
@@ -93,11 +114,26 @@ def get_qdrant_collection() -> str:
 
 
 def get_gemini_api_key() -> str | None:
-    """Get Gemini API key from environment.
+    """Get first Gemini API key from environment.
 
     Checks both GEMINI_API_KEY and GOOGLE_API_KEY.
+    For multiple keys, use get_gemini_api_keys().
     """
-    return os.getenv(GEMINI_API_KEY_ENV) or os.getenv(GOOGLE_API_KEY_ENV)
+    keys = get_gemini_api_keys()
+    return keys[0] if keys else None
+
+
+def get_gemini_api_keys() -> list[str]:
+    """Get all Gemini API keys from environment.
+
+    Supports comma-separated keys in GEMINI_API_KEY or GOOGLE_API_KEY
+    for round-robin rotation across rate limits.
+
+    Returns:
+        List of API key strings (may be empty).
+    """
+    raw = os.getenv(GEMINI_API_KEY_ENV) or os.getenv(GOOGLE_API_KEY_ENV) or ""
+    return [k.strip() for k in raw.split(",") if k.strip()]
 
 
 def get_ollama_base_url() -> str:

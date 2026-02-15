@@ -279,6 +279,29 @@ class BatchWriter:
             )
         return len(updates)
 
+    def batch_update_abstract_structure(
+        self,
+        updates: list[tuple[str, dict, str]],  # [(point_id, structure_dict, source), ...]
+    ) -> int:
+        """Batch update abstract structure and source for multiple papers.
+
+        Args:
+            updates: List of (point_id, structure_dict, source) tuples.
+
+        Returns:
+            Number of papers updated.
+        """
+        for point_id, structure, source in updates:
+            self.client.set_payload(
+                collection_name=self.collection_name,
+                payload={
+                    "abstract_structure": structure,
+                    "abstract_structure_source": source,
+                },
+                points=[point_id],
+            )
+        return len(updates)
+
     def clear_all_keywords(self) -> int:
         """Clear keywords from all papers.
 
