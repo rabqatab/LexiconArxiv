@@ -4,10 +4,12 @@ Provides methods for collecting various statistics about the paper collection.
 """
 
 import logging
+import time
 from typing import Any
 
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
+from qdrant_client.http.exceptions import ResponseHandlingException
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +20,35 @@ class StorageStatistics:
     def __init__(self, client: QdrantClient, collection_name: str):
         self.client = client
         self.collection_name = collection_name
+
+    def _scroll_with_retry(
+        self,
+        offset: str | None = None,
+        with_payload: bool | list[str] = True,
+        limit: int = 1000,
+        scroll_filter: models.Filter | None = None,
+        max_retries: int = 5,
+        base_delay: float = 3.0,
+    ):
+        """Scroll with retry on connection errors."""
+        for attempt in range(max_retries + 1):
+            try:
+                return self.client.scroll(
+                    collection_name=self.collection_name,
+                    limit=limit,
+                    offset=offset,
+                    with_payload=with_payload,
+                    scroll_filter=scroll_filter,
+                )
+            except (ResponseHandlingException, ConnectionError, OSError) as e:
+                if attempt == max_retries:
+                    raise
+                delay = base_delay * (2 ** attempt)
+                logger.warning(
+                    f"Scroll failed (attempt {attempt + 1}/{max_retries}), "
+                    f"retrying in {delay:.0f}s: {e}"
+                )
+                time.sleep(delay)
 
     def count_papers(self, venue: str | None = None, tier: int | None = None) -> int:
         """Count papers in the collection.
@@ -411,9 +442,7 @@ class StorageStatistics:
 
         offset = None
         while True:
-            results, offset = self.client.scroll(
-                collection_name=self.collection_name,
-                limit=1000,
+            results, next_off = self._scroll_with_retry(
                 offset=offset,
                 with_payload=["resolved_references"],
             )
@@ -431,6 +460,7 @@ class StorageStatistics:
             if total_papers % 10000 == 0:
                 logger.info(f"  Scanned {total_papers} papers, {total_edges} edges...")
 
+            offset = next_off
             if offset is None:
                 break
 
@@ -447,13 +477,12 @@ class StorageStatistics:
         offset = None
         all_ids: list[str] = []
         while True:
-            results, offset = self.client.scroll(
-                collection_name=self.collection_name,
-                limit=1000,
+            results, next_off = self._scroll_with_retry(
                 offset=offset,
                 with_payload=False,
             )
             all_ids.extend(str(point.id) for point in results)
+            offset = next_off
             if offset is None:
                 break
 
@@ -550,26 +579,26 @@ class StorageStatistics:
         # Phase 1: Find papers with resolved_references that haven't been indexed
         unindexed_papers: list[tuple[str, list[str]]] = []
 
+        unindexed_filter = models.Filter(
+            must=[
+                models.FieldCondition(
+                    key="resolved_references",
+                    match=models.MatchExcept(**{"except": []}),
+                ),
+            ],
+            must_not=[
+                models.FieldCondition(
+                    key="graph_indexed",
+                    match=models.MatchValue(value=True),
+                ),
+            ],
+        )
+
         offset = None
         while True:
-            results, offset = self.client.scroll(
-                collection_name=self.collection_name,
-                limit=1000,
+            results, next_off = self._scroll_with_retry(
                 offset=offset,
-                scroll_filter=models.Filter(
-                    must=[
-                        models.FieldCondition(
-                            key="resolved_references",
-                            match=models.MatchExcept(**{"except": []}),
-                        ),
-                    ],
-                    must_not=[
-                        models.FieldCondition(
-                            key="graph_indexed",
-                            match=models.MatchValue(value=True),
-                        ),
-                    ],
-                ),
+                scroll_filter=unindexed_filter,
                 with_payload=["resolved_references"],
             )
 
@@ -579,6 +608,7 @@ class StorageStatistics:
                 if resolved_refs:
                     unindexed_papers.append((paper_id, resolved_refs))
 
+            offset = next_off
             if offset is None:
                 break
 

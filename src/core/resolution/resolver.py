@@ -12,12 +12,14 @@ Pipeline Steps:
 import asyncio
 import json
 import logging
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import httpx
+from qdrant_client.http.exceptions import ResponseHandlingException
 
 from src.core.constants import OPENALEX_BASE_URL
 from src.core.deduplication import Deduplicator
@@ -26,6 +28,25 @@ from src.core.resolution.normalizer import IdentifierNormalizer, IdentifierType
 from src.core.storage import QdrantStorage
 
 logger = logging.getLogger(__name__)
+
+MAX_RETRIES = 5
+BASE_DELAY = 3.0
+
+
+def _retry_qdrant(fn, description: str = "Qdrant operation"):
+    """Retry a Qdrant operation with exponential backoff on connection errors."""
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            return fn()
+        except (ResponseHandlingException, ConnectionError, OSError) as e:
+            if attempt == MAX_RETRIES:
+                raise
+            delay = BASE_DELAY * (2 ** attempt)
+            logger.warning(
+                f"{description} failed (attempt {attempt + 1}/{MAX_RETRIES}), "
+                f"retrying in {delay:.0f}s: {e}"
+            )
+            time.sleep(delay)
 
 
 @dataclass
@@ -295,9 +316,12 @@ class ReferenceResolver(OpenAlexMixin):
         logger.info("Step 1: Normalizing reference identifiers...")
 
         while True:
-            papers, next_offset = self.storage.get_papers_with_references(
-                limit=self.batch_size,
-                offset=offset,
+            papers, next_offset = _retry_qdrant(
+                lambda: self.storage.get_papers_with_references(
+                    limit=self.batch_size,
+                    offset=offset,
+                ),
+                description="scroll(normalize)",
             )
 
             if not papers:
@@ -335,13 +359,18 @@ class ReferenceResolver(OpenAlexMixin):
 
             # Batch update
             if updates:
-                self.storage.batch_update_referenced_works_normalized(updates)
+                _retry_qdrant(
+                    lambda: self.storage.batch_update_referenced_works_normalized(updates),
+                    description="batch_update(normalize)",
+                )
                 logger.debug(f"Updated {len(updates)} papers with normalized refs")
 
             # Save checkpoint
             progress.last_offset = next_offset
             progress.last_updated = datetime.now(timezone.utc).isoformat()
             self._save_checkpoint(progress, "normalize")
+
+            time.sleep(0.1)
 
             offset = next_offset
             if offset is None:
@@ -397,9 +426,12 @@ class ReferenceResolver(OpenAlexMixin):
         arxiv_to_doi_cache: dict[str, str | None] = {}
 
         while True:
-            papers, next_offset = self.storage.get_papers_with_references(
-                limit=self.batch_size,
-                offset=offset,
+            papers, next_offset = _retry_qdrant(
+                lambda: self.storage.get_papers_with_references(
+                    limit=self.batch_size,
+                    offset=offset,
+                ),
+                description="scroll(arxiv)",
             )
 
             if not papers:
@@ -459,13 +491,18 @@ class ReferenceResolver(OpenAlexMixin):
 
             # Batch update
             if updates:
-                self.storage.batch_update_referenced_works_normalized(updates)
+                _retry_qdrant(
+                    lambda: self.storage.batch_update_referenced_works_normalized(updates),
+                    description="batch_update(arxiv)",
+                )
                 logger.debug(f"Updated {len(updates)} papers with DOI refs")
 
             # Save checkpoint
             progress.last_offset = next_offset
             progress.last_updated = datetime.now(timezone.utc).isoformat()
             self._save_checkpoint(progress, "arxiv")
+
+            time.sleep(0.1)
 
             offset = next_offset
             if offset is None:
@@ -544,9 +581,12 @@ class ReferenceResolver(OpenAlexMixin):
         logger.info("Step 3: Resolving references to internal IDs...")
 
         while True:
-            papers, next_offset = self.storage.get_papers_with_references(
-                limit=self.batch_size,
-                offset=offset,
+            papers, next_offset = _retry_qdrant(
+                lambda: self.storage.get_papers_with_references(
+                    limit=self.batch_size,
+                    offset=offset,
+                ),
+                description="scroll(get_papers_with_references)",
             )
 
             if not papers:
@@ -620,12 +660,18 @@ class ReferenceResolver(OpenAlexMixin):
 
             # Batch update resolved_references
             if updates:
-                self.storage.batch_update_resolved_references(updates)
+                _retry_qdrant(
+                    lambda: self.storage.batch_update_resolved_references(updates),
+                    description="batch_update_resolved_references",
+                )
                 logger.debug(f"Updated {len(updates)} papers with resolved refs")
 
             # Batch create stub papers
             if stubs_to_create and create_stubs:
-                created_stubs = self.storage.batch_create_stub_papers(stubs_to_create)
+                created_stubs = _retry_qdrant(
+                    lambda: self.storage.batch_create_stub_papers(stubs_to_create),
+                    description="batch_create_stub_papers",
+                )
                 # Count new vs updated stubs
                 for identifier, stub_id in created_stubs.items():
                     # Check if this was a new stub or update
@@ -637,6 +683,9 @@ class ReferenceResolver(OpenAlexMixin):
             progress.last_offset = next_offset
             progress.last_updated = datetime.now(timezone.utc).isoformat()
             self._save_checkpoint(progress, "internal")
+
+            # Throttle: let Qdrant breathe between batches
+            time.sleep(0.1)
 
             offset = next_offset
             if offset is None:
