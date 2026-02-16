@@ -286,7 +286,7 @@ lexiconarxiv/
 LexiconArxiv uses **payload-only storage** in Qdrant, decoupling metadata collection from embeddings:
 
 ```
-Collection → Enrichment → Resolution → Graph   (payload-only, no vectors)
+Collection → Enrichment → Resolution → Graph → Keywords → Labeling   (payload-only, no vectors)
                                         ↓
                               Add Embeddings   (named vectors, any dimension)
 ```

@@ -1,11 +1,11 @@
 # LexiconArxiv Scripts
 
-Shell scripts for running the 5-stage data pipeline.
+Shell scripts for running the 7-stage data pipeline.
 
 ## Quick Start
 
 ```bash
-# Run full pipeline (collection → dedup → enrichment → resolution → graph)
+# Run full pipeline (collection → dedup → enrichment → resolution → graph → keywords → labeling)
 ./scripts/run_full_pipeline.sh --since-year 2020
 
 # Or run individual stages
@@ -14,6 +14,8 @@ Shell scripts for running the 5-stage data pipeline.
 ./scripts/enrichment/run_enrichment.sh
 ./scripts/resolution/run_resolution.sh
 ./scripts/graph/build_cited_by.sh
+./scripts/keywords/run_keywords.sh
+./scripts/labeling/run_labeling.sh
 ```
 
 ---
@@ -22,7 +24,7 @@ Shell scripts for running the 5-stage data pipeline.
 
 ```
 scripts/
-├── run_full_pipeline.sh              # Orchestrator: 5-stage pipeline
+├── run_full_pipeline.sh              # Orchestrator: 7-stage pipeline
 │
 ├── crawler/                          # Stage 1: Collection
 │   ├── run_full_collection.sh        # Orchestrator: all sources
@@ -56,18 +58,24 @@ scripts/
 │   ├── resolve_arxiv.sh              # Step 4.2: arXiv to DOI
 │   └── resolve_internal.sh           # Step 4.3: Internal ID resolution
 │
-└── graph/                            # Stage 5: Graph
-    ├── run_graph_pipeline.sh         # Orchestrator: full graph pipeline
-    ├── build_cited_by.sh             # Step 5.1: Build cited_by links
-    ├── analyze_graph.sh              # Step 5.2: PageRank, communities
-    └── export_graph.sh               # Step 5.3: Export to files
+├── graph/                            # Stage 5: Graph
+│   ├── run_graph_pipeline.sh         # Orchestrator: full graph pipeline
+│   ├── build_cited_by.sh             # Step 5.1: Build cited_by links
+│   ├── analyze_graph.sh              # Step 5.2: PageRank, communities
+│   └── export_graph.sh               # Step 5.3: Export to files
+│
+├── keywords/                         # Stage 6: Keywords
+│   └── run_keywords.sh               # Extract keywords and acronyms
+│
+└── labeling/                         # Stage 7: Labeling
+    └── run_labeling.sh               # Label abstract sentences
 ```
 
 ---
 
 ## Full Pipeline
 
-Runs all 5 stages in sequence (payload-only, no vectors required):
+Runs all 7 stages in sequence (payload-only, no vectors required):
 
 | Stage | Name | Description |
 |-------|------|-------------|
@@ -76,6 +84,8 @@ Runs all 5 stages in sequence (payload-only, no vectors required):
 | 3 | Enrichment | Enrich citations and abstracts |
 | 4 | Resolution | Resolve references to internal IDs |
 | 5 | Graph | Build citation graph (cited_by) |
+| 6 | Keywords | Extract keywords and acronyms for BM25 search |
+| 7 | Labeling | Label abstract sentences with rhetorical roles |
 
 > **Note**: These stages use **payload-only storage** (points upserted with `vector={}`). Vectors can be added later using Qdrant's named vectors feature. See [Data Model](../docs/architecture/data_model.md#5-qdrant-collection-schema) for details.
 
@@ -90,6 +100,8 @@ Options:
   --skip-enrichment     Skip Stage 3
   --skip-resolution     Skip Stage 4
   --skip-graph          Skip Stage 5
+  --skip-keywords       Skip Stage 6
+  --skip-labeling       Skip Stage 7
   --parallel N          Concurrent requests (default: 10)
   --log FILE            Save output to log file (also prints to terminal)
 ```
@@ -281,6 +293,45 @@ Options:
 Options:
   --format FORMAT  Output format: csv, json, graphml
   --output DIR     Output directory
+```
+
+---
+
+## Stage 6: Keywords
+
+Extract keywords and acronyms for BM25 search.
+
+```bash
+./scripts/keywords/run_keywords.sh [OPTIONS]
+
+Options:
+  --batch-size N       Batch size (default: 100)
+  --no-llm             Disable LLM extraction (regex + KeyBERT only)
+  --no-judge           Disable judge verification
+  --llm-backend NAME   LLM backend: gemini (default) or ollama
+  --force              Re-extract all papers (replace existing)
+  --no-keybert         Skip KeyBERT (regex-only fallback)
+  --limit N            Max papers to process (0 = unlimited)
+  --dry-run            Preview without saving
+```
+
+By default, uses LLM-first extraction with judge verification (requires `GEMINI_API_KEYS` in `.env`).
+
+---
+
+## Stage 7: Labeling
+
+Label abstract sentences with rhetorical roles (task, domain, background, approach, method, result, contribution).
+
+```bash
+./scripts/labeling/run_labeling.sh [OPTIONS]
+
+Options:
+  --batch-size N       Batch size (default: 100)
+  --llm-backend NAME   LLM backend: gemini (default) or ollama
+  --force              Re-label all papers (replace existing)
+  --limit N            Max papers to process (0 = unlimited)
+  --dry-run            Preview without saving
 ```
 
 ---

@@ -6,9 +6,10 @@
 # 1. Collect new papers from all sources
 # 2. Enrich with abstracts and citations
 # 3. Extract keywords for BM25 search
-# 4. Resolve references and create stubs
-# 5. Enrich stub papers
-# 6. Rebuild citation graph
+# 4. Label abstracts with rhetorical roles
+# 5. Resolve references and create stubs
+# 6. Enrich stub papers
+# 7. Rebuild citation graph
 #
 # Usage:
 #   ./scripts/run_incremental_pipeline.sh              # Daily (1 day)
@@ -29,6 +30,7 @@ set -e  # Exit on error
 # Parse arguments
 DAYS=1
 SKIP_GRAPH=false
+SKIP_LABELING=false
 DRY_RUN=false
 PARALLEL=5
 
@@ -40,6 +42,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-graph)
             SKIP_GRAPH=true
+            shift
+            ;;
+        --skip-labeling)
+            SKIP_LABELING=true
             shift
             ;;
         --dry-run)
@@ -57,6 +63,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --days, -d N      Days to look back (default: 1)"
             echo "  --parallel, -p N  Concurrent API requests (default: 5)"
             echo "  --skip-graph      Skip citation graph rebuild"
+            echo "  --skip-labeling   Skip abstract labeling"
             echo "  --dry-run         Show what would be done without executing"
             echo "  --help, -h        Show this help message"
             exit 0
@@ -83,6 +90,7 @@ echo "Incremental Pipeline Started: $TIMESTAMP"
 echo "Days back: $DAYS"
 echo "Parallel requests: $PARALLEL"
 echo "Skip graph: $SKIP_GRAPH"
+echo "Skip labeling: $SKIP_LABELING"
 echo "=============================================="
 
 if [ "$DRY_RUN" = true ]; then
@@ -92,10 +100,11 @@ if [ "$DRY_RUN" = true ]; then
     echo "  3. enrich-4-refs-by-doi-via-s2 --parallel $PARALLEL"
     echo "  4. enrich-2-refs-by-doi-via-crossref --parallel $PARALLEL"
     echo "  5. extract-keywords"
-    echo "  6. resolve-refs --create-stubs"
-    echo "  7. enrich-8-metadata-by-stub-via-openalex --parallel $PARALLEL"
+    echo "  6. label-abstracts"
+    echo "  7. resolve-refs --create-stubs"
+    echo "  8. enrich-8-metadata-by-stub-via-openalex --parallel $PARALLEL"
     if [ "$SKIP_GRAPH" = false ]; then
-        echo "  8. build-cited-by --incremental"
+        echo "  9. build-cited-by --incremental"
     fi
     exit 0
 fi
@@ -105,43 +114,50 @@ START_TIME=$(date +%s)
 
 # Step 1: Collect new papers
 echo ""
-echo "[Step 1/7] Collecting new papers (last $DAYS days)..."
+echo "[Step 1/8] Collecting new papers (last $DAYS days)..."
 uv run python -m src.cli.core_collect collect-incremental --days "$DAYS"
 
 # Step 2: Enrich abstracts
 echo ""
-echo "[Step 2/7] Enriching abstracts..."
+echo "[Step 2/8] Enriching abstracts..."
 uv run python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --parallel "$PARALLEL"
 
 # Step 3: Enrich citations via Semantic Scholar
 echo ""
-echo "[Step 3/7] Enriching citations (Semantic Scholar)..."
+echo "[Step 3/8] Enriching citations (Semantic Scholar)..."
 uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --parallel "$PARALLEL"
 
 # Step 4: Enrich citations via CrossRef (for papers S2 missed)
 echo ""
-echo "[Step 4/7] Enriching citations (CrossRef)..."
+echo "[Step 4/8] Enriching citations (CrossRef)..."
 uv run python -m src.cli.core_collect enrich-2-refs-by-doi-via-crossref --parallel "$PARALLEL"
 
 # Step 5: Extract keywords
 echo ""
-echo "[Step 5/7] Extracting keywords..."
+echo "[Step 5/8] Extracting keywords..."
 uv run python -m src.cli.core_collect extract-keywords
 
-# Step 6: Resolve references and create stubs
+# Step 6: Label abstracts
+if [ "$SKIP_LABELING" = false ]; then
+    echo ""
+    echo "[Step 6/8] Labeling abstracts..."
+    uv run python -m src.cli.core_collect label-abstracts
+fi
+
+# Step 7: Resolve references and create stubs
 echo ""
-echo "[Step 6/7] Resolving references..."
+echo "[Step 7/8] Resolving references..."
 uv run python -m src.cli.core_collect resolve-refs --create-stubs
 
-# Step 7: Enrich stub papers
+# Step 8: Enrich stub papers
 echo ""
-echo "[Step 7/7] Enriching stub papers..."
+echo "[Step 8/8] Enriching stub papers..."
 uv run python -m src.cli.core_collect enrich-8-metadata-by-stub-via-openalex --parallel "$PARALLEL"
 
-# Step 8: Incrementally update cited_by index (optional)
+# Step 9: Incrementally update cited_by index (optional)
 if [ "$SKIP_GRAPH" = false ]; then
     echo ""
-    echo "[Step 8/8] Updating cited_by index (incremental)..."
+    echo "[Step 9/9] Updating cited_by index (incremental)..."
     uv run python -m src.cli.core_collect build-cited-by --incremental
 fi
 

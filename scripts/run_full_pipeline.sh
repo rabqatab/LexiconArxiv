@@ -1,11 +1,13 @@
 #!/bin/bash
 # Full pipeline script (Orchestrator)
-# Runs all 5 stages in sequence:
+# Runs all 7 stages in sequence:
 #   Stage 1: Collection    - Collect papers from all sources
 #   Stage 2: Deduplication - Remove duplicate papers
 #   Stage 3: Enrichment    - Enrich with citations and abstracts
 #   Stage 4: Resolution    - Resolve references to internal IDs
 #   Stage 5: Graph         - Build citation graph (cited_by)
+#   Stage 6: Keywords      - Extract keywords and acronyms for BM25 search
+#   Stage 7: Labeling      - Label abstract sentences with rhetorical roles
 
 set -e
 
@@ -22,6 +24,8 @@ SKIP_DEDUP=${SKIP_DEDUP:-false}
 SKIP_ENRICHMENT=${SKIP_ENRICHMENT:-false}
 SKIP_RESOLUTION=${SKIP_RESOLUTION:-false}
 SKIP_GRAPH=${SKIP_GRAPH:-false}
+SKIP_KEYWORDS=${SKIP_KEYWORDS:-false}
+SKIP_LABELING=${SKIP_LABELING:-false}
 SKIP_SNAPSHOT=${SKIP_SNAPSHOT:-false}
 PARALLEL=${PARALLEL:-10}
 LOG_FILE=${LOG_FILE:-""}
@@ -57,6 +61,14 @@ while [[ $# -gt 0 ]]; do
             SKIP_GRAPH=true
             shift
             ;;
+        --skip-keywords)
+            SKIP_KEYWORDS=true
+            shift
+            ;;
+        --skip-labeling)
+            SKIP_LABELING=true
+            shift
+            ;;
         --skip-snapshot)
             SKIP_SNAPSHOT=true
             shift
@@ -72,7 +84,7 @@ while [[ $# -gt 0 ]]; do
         --help)
             echo "Usage: $0 [OPTIONS]"
             echo ""
-            echo "Run the full 5-stage pipeline"
+            echo "Run the full 7-stage pipeline"
             echo ""
             echo "Stages:"
             echo "  1. Collection    - Collect papers from all sources"
@@ -80,6 +92,8 @@ while [[ $# -gt 0 ]]; do
             echo "  3. Enrichment    - Enrich with citations and abstracts"
             echo "  4. Resolution    - Resolve references to internal IDs"
             echo "  5. Graph         - Build citation graph (cited_by)"
+            echo "  6. Keywords      - Extract keywords and acronyms for BM25 search"
+            echo "  7. Labeling      - Label abstract sentences with rhetorical roles"
             echo ""
             echo "Options:"
             echo "  --since-year YEAR     Start year (default: 2020)"
@@ -89,6 +103,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --skip-enrichment     Skip Stage 3: Enrichment"
             echo "  --skip-resolution     Skip Stage 4: Resolution"
             echo "  --skip-graph          Skip Stage 5: Graph"
+            echo "  --skip-keywords       Skip Stage 6: Keywords"
+            echo "  --skip-labeling       Skip Stage 7: Labeling"
             echo "  --skip-snapshot       Skip pre-pipeline snapshot"
             echo "  --parallel N          Concurrent requests (default: 10)"
             echo "  --log FILE            Save output to log file (also prints to terminal)"
@@ -105,7 +121,7 @@ while [[ $# -gt 0 ]]; do
             echo "  $0 --skip-collection"
             echo ""
             echo "  # Only enrichment and resolution"
-            echo "  $0 --skip-collection --skip-dedup --skip-graph"
+            echo "  $0 --skip-collection --skip-dedup --skip-graph --skip-keywords --skip-labeling"
             exit 0
             ;;
         *)
@@ -138,6 +154,8 @@ echo "Skip Dedup: $SKIP_DEDUP"
 echo "Skip Enrichment: $SKIP_ENRICHMENT"
 echo "Skip Resolution: $SKIP_RESOLUTION"
 echo "Skip Graph: $SKIP_GRAPH"
+echo "Skip Keywords: $SKIP_KEYWORDS"
+echo "Skip Labeling: $SKIP_LABELING"
 echo "Skip Snapshot: $SKIP_SNAPSHOT"
 echo "Parallel: $PARALLEL"
 echo "Log File: ${LOG_FILE:-"(none)"}"
@@ -164,7 +182,7 @@ fi
 
 # Stage 1: Collection
 if [ "$SKIP_COLLECTION" = false ]; then
-    echo "============ [1/5] COLLECTION ============"
+    echo "============ [1/7] COLLECTION ============"
     CMD="$SCRIPT_DIR/crawler/run_full_collection.sh --since-year $SINCE_YEAR"
     if [ "$INCLUDE_WORKSHOPS" = true ]; then
         CMD="$CMD --include-workshops"
@@ -172,47 +190,67 @@ if [ "$SKIP_COLLECTION" = false ]; then
     $CMD
     echo ""
 else
-    echo "============ [1/5] COLLECTION (SKIPPED) ============"
+    echo "============ [1/7] COLLECTION (SKIPPED) ============"
     echo ""
 fi
 
 # Stage 2: Deduplication
 if [ "$SKIP_DEDUP" = false ]; then
-    echo "============ [2/5] DEDUPLICATION ============"
+    echo "============ [2/7] DEDUPLICATION ============"
     "$SCRIPT_DIR/maintenance/run_deduplication.sh" --apply
     echo ""
 else
-    echo "============ [2/5] DEDUPLICATION (SKIPPED) ============"
+    echo "============ [2/7] DEDUPLICATION (SKIPPED) ============"
     echo ""
 fi
 
 # Stage 3: Enrichment
 if [ "$SKIP_ENRICHMENT" = false ]; then
-    echo "============ [3/5] ENRICHMENT ============"
+    echo "============ [3/7] ENRICHMENT ============"
     "$SCRIPT_DIR/enrichment/run_enrichment.sh" --parallel "$PARALLEL"
     echo ""
 else
-    echo "============ [3/5] ENRICHMENT (SKIPPED) ============"
+    echo "============ [3/7] ENRICHMENT (SKIPPED) ============"
     echo ""
 fi
 
 # Stage 4: Resolution
 if [ "$SKIP_RESOLUTION" = false ]; then
-    echo "============ [4/5] RESOLUTION ============"
+    echo "============ [4/7] RESOLUTION ============"
     "$SCRIPT_DIR/resolution/run_resolution.sh"
     echo ""
 else
-    echo "============ [4/5] RESOLUTION (SKIPPED) ============"
+    echo "============ [4/7] RESOLUTION (SKIPPED) ============"
     echo ""
 fi
 
 # Stage 5: Graph
 if [ "$SKIP_GRAPH" = false ]; then
-    echo "============ [5/5] GRAPH ============"
+    echo "============ [5/7] GRAPH ============"
     "$SCRIPT_DIR/graph/build_cited_by.sh"
     echo ""
 else
-    echo "============ [5/5] GRAPH (SKIPPED) ============"
+    echo "============ [5/7] GRAPH (SKIPPED) ============"
+    echo ""
+fi
+
+# Stage 6: Keywords
+if [ "$SKIP_KEYWORDS" = false ]; then
+    echo "============ [6/7] KEYWORDS ============"
+    "$SCRIPT_DIR/keywords/run_keywords.sh"
+    echo ""
+else
+    echo "============ [6/7] KEYWORDS (SKIPPED) ============"
+    echo ""
+fi
+
+# Stage 7: Labeling
+if [ "$SKIP_LABELING" = false ]; then
+    echo "============ [7/7] LABELING ============"
+    "$SCRIPT_DIR/labeling/run_labeling.sh"
+    echo ""
+else
+    echo "============ [7/7] LABELING (SKIPPED) ============"
     echo ""
 fi
 
@@ -226,3 +264,5 @@ echo "Final Status:"
 uv run python -m src.cli.core_collect status
 echo ""
 uv run python -m src.cli.core_collect ref-stats
+echo ""
+uv run python -m src.cli.core_collect keyword-stats

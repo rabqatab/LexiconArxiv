@@ -99,12 +99,14 @@ uv run python -m src.cli.core_collect init-storage
 ./scripts/run_full_pipeline.sh --since-year 2018 --include-workshops
 ```
 
-This runs all 5 stages:
+This runs all 7 stages:
 1. **Collection** - Crawl papers from all sources
 2. **Deduplication** - Remove cross-source duplicates
 3. **Enrichment** - Add citations and abstracts via OpenAlex
-4. **Resolution** - Build citation graph (resolve references to internal IDs)
-5. **Keyword Extraction** - Extract acronyms and semantic keywords for BM25 search
+4. **Resolution** - Resolve references to internal IDs
+5. **Graph** - Build citation graph (cited_by)
+6. **Keyword Extraction** - Extract acronyms and semantic keywords for BM25 search
+7. **Abstract Labeling** - Classify abstract sentences into rhetorical roles
 
 ### Option B: Step by Step
 
@@ -134,7 +136,10 @@ uv run python -m src.cli.core_collect resolve-refs
 # 8. Extract keywords (for BM25 search)
 uv run python -m src.cli.core_collect extract-keywords --llm --judge
 
-# 9. Check final status
+# 9. Label abstracts (rhetorical role classification)
+uv run python -m src.cli.core_collect label-abstracts
+
+# 10. Check final status
 uv run python -m src.cli.core_collect status
 uv run python -m src.cli.core_collect ref-stats
 uv run python -m src.cli.core_collect keyword-stats
