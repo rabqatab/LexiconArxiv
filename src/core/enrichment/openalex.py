@@ -66,6 +66,7 @@ class EnrichmentType(Enum):
     CITATIONS = "citations"
     ABSTRACTS = "abstracts"
     TITLE_CITATIONS = "title_citations"  # Title-based lookup for papers without DOIs
+    RESOLVE_TITLE_REFS = "resolve_title_refs"  # Resolve TITLE:xxx refs to DOI/OpenAlex IDs
 
 
 @dataclass
@@ -281,6 +282,87 @@ class PaperEnricher(BaseEnricher, OpenAlexMixin):
     ) -> dict[str, Any] | None:
         """Search by title with concurrency control (managed inside search_by_title)."""
         return await self.search_by_title(title, min_refs)
+
+    async def search_title_for_identifier(
+        self, title: str, _retry_count: int = 0,
+    ) -> str | None:
+        """Search OpenAlex by title and return just an identifier string.
+
+        Lighter variant of search_by_title — only returns an identifier,
+        not full paper data. Used for resolving TITLE:xxx references.
+
+        Args:
+            title: The paper title to search for.
+            _retry_count: Internal retry counter (do not set manually).
+
+        Returns:
+            "DOI:xxx" if DOI available, "Wxxx" (OpenAlex work ID) if not, or None.
+        """
+        max_retries = 3
+
+        if not self._client:
+            raise RuntimeError("Client not initialized. Use async context manager.")
+
+        url = f"{OPENALEX_BASE_URL}/works"
+        params = {"search": title, "per_page": 5}
+        openalex_params = self._get_openalex_params()
+        used_key = openalex_params.get("api_key")
+        params.update(openalex_params)
+
+        try:
+            async with self._semaphore:
+                response = await self._client.get(url, params=params)
+                await asyncio.sleep(self.delay)
+            if response.status_code == 429:
+                if self._handle_api_key_exhaustion(response, used_key):
+                    if self._key_manager.has_available_keys:
+                        if hasattr(self, "_semaphore") and self._semaphore is not None:
+                            self._semaphore = asyncio.Semaphore(
+                                self._original_max_concurrent
+                            )
+                    return await self.search_title_for_identifier(title, _retry_count=0)
+                if _retry_count >= max_retries:
+                    logger.warning(
+                        f"OpenAlex rate limit: max retries ({max_retries}) reached "
+                        f"for title identifier search '{title[:50]}', skipping."
+                    )
+                    raise APIRateLimitError(
+                        f"Max retries ({max_retries}) for title: {title[:50]}"
+                    )
+                logger.warning(
+                    f"Rate limited, waiting 60s... "
+                    f"(retry {_retry_count + 1}/{max_retries})"
+                )
+                await asyncio.sleep(60)
+                return await self.search_title_for_identifier(title, _retry_count=_retry_count + 1)
+            response.raise_for_status()
+            data = response.json()
+
+            results = data.get("results", [])
+            if not results:
+                return None
+
+            title_norm = _normalize_title(title)
+            for result in results:
+                result_title = result.get("title") or ""
+                if _titles_match(title_norm, _normalize_title(result_title)):
+                    # Prefer DOI, fall back to OpenAlex work ID
+                    doi = result.get("doi")
+                    if doi:
+                        return f"DOI:{doi.replace('https://doi.org/', '')}"
+                    openalex_id = result.get("id", "")
+                    if openalex_id:
+                        return openalex_id.replace("https://openalex.org/", "")
+                    return None
+
+            return None
+
+        except httpx.HTTPStatusError as e:
+            logger.warning(f"HTTP error searching title identifier '{title[:50]}': {e}")
+            return None
+        except Exception as e:
+            logger.warning(f"Error searching title identifier '{title[:50]}': {e}")
+            return None
 
     async def enrich_batch_parallel(
         self,
@@ -620,6 +702,201 @@ class PaperEnricher(BaseEnricher, OpenAlexMixin):
             f"{progress.errors} errors"
         )
         return progress
+
+    async def resolve_title_references(
+        self,
+        dry_run: bool = False,
+        limit: int | None = None,
+    ) -> EnrichmentProgress:
+        """Resolve TITLE:xxx entries in referenced_works to DOI/OpenAlex identifiers.
+
+        Searches OpenAlex by title for each unique TITLE:xxx reference and
+        replaces matched entries with proper identifiers.
+
+        Args:
+            dry_run: If True, only count papers without updating.
+            limit: Maximum papers to process (None for all).
+
+        Returns:
+            EnrichmentProgress with final statistics.
+        """
+        enrichment_type = EnrichmentType.RESOLVE_TITLE_REFS
+        progress = self._load_checkpoint(enrichment_type)
+        title_cache = self._load_title_cache(enrichment_type)
+        offset = progress.last_offset
+
+        logger.info("Starting TITLE:xxx reference resolution...")
+
+        while True:
+            papers, next_offset = self.storage.get_papers_with_title_refs(
+                limit=self.batch_size,
+                offset=offset,
+            )
+
+            # Filter to papers not yet processed
+            batch = [
+                (pid, payload) for pid, payload in papers
+                if pid not in progress.processed_point_ids
+            ]
+
+            if batch:
+                if dry_run:
+                    progress.total_to_process += len(batch)
+                    logger.info(f"Found {len(batch)} papers with TITLE: refs (dry run)")
+                else:
+                    enriched = await self._resolve_title_batch(batch, progress, title_cache)
+                    logger.info(
+                        f"Batch: {enriched}/{len(batch)} resolved | "
+                        f"Total: {progress.enriched} resolved, "
+                        f"{progress.not_found} unresolvable"
+                    )
+
+            # Update checkpoint
+            progress.last_offset = next_offset
+            progress.last_updated = datetime.now(timezone.utc).isoformat()
+            self._save_resolve_checkpoint(progress, enrichment_type, title_cache)
+
+            offset = next_offset
+            if offset is None:
+                break
+
+            if limit and progress.processed >= limit:
+                break
+
+        logger.info(
+            f"Title reference resolution complete: "
+            f"{progress.enriched} resolved, {progress.not_found} unresolvable, "
+            f"{progress.errors} errors"
+        )
+        return progress
+
+    async def _resolve_title_batch(
+        self,
+        papers: list[tuple[str, dict]],
+        progress: EnrichmentProgress,
+        title_cache: dict[str, str | None],
+    ) -> int:
+        """Resolve TITLE:xxx refs in a batch of papers.
+
+        Args:
+            papers: List of (point_id, payload) tuples.
+            progress: EnrichmentProgress to update.
+            title_cache: Cache mapping TITLE:xxx -> resolved identifier or None.
+
+        Returns:
+            Number of papers with at least one resolved reference.
+        """
+        if not papers:
+            return 0
+
+        # Collect unique TITLE: values that aren't cached yet
+        uncached_titles: set[str] = set()
+        for _, payload in papers:
+            refs = payload.get("referenced_works", [])
+            for ref in refs:
+                if ref.startswith("TITLE:") and ref not in title_cache:
+                    uncached_titles.add(ref)
+
+        # Lookup uncached titles in parallel
+        if uncached_titles:
+            titles_list = list(uncached_titles)
+            tasks = [
+                self.search_title_for_identifier(title_ref[6:])  # Strip "TITLE:" prefix
+                for title_ref in titles_list
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            for title_ref, result in zip(titles_list, results):
+                if isinstance(result, APIRateLimitError):
+                    # Don't cache rate limit errors — will retry next run
+                    continue
+                if isinstance(result, Exception):
+                    logger.warning(f"Error resolving '{title_ref[:50]}': {result}")
+                    continue
+                # Cache result (None means not found, which IS cached)
+                title_cache[title_ref] = result
+
+        # Rebuild each paper's referenced_works with resolved entries
+        enriched = 0
+        updates: list[tuple[str, list[str]]] = []
+
+        for point_id, payload in papers:
+            progress.processed += 1
+            progress.processed_point_ids.add(point_id)
+
+            refs = payload.get("referenced_works", [])
+            new_refs = []
+            changed = False
+
+            for ref in refs:
+                if ref.startswith("TITLE:") and ref in title_cache:
+                    resolved = title_cache[ref]
+                    if resolved is not None:
+                        new_refs.append(resolved)
+                        changed = True
+                    else:
+                        # Not found in OpenAlex, keep original
+                        new_refs.append(ref)
+                        progress.not_found += 1
+                else:
+                    new_refs.append(ref)
+
+            if changed:
+                updates.append((point_id, new_refs))
+                progress.enriched += 1
+                enriched += 1
+
+        # Batch update storage
+        if updates:
+            self.storage.batch_update_referenced_works(updates)
+
+        return enriched
+
+    def _load_title_cache(self, enrichment_type: EnrichmentType) -> dict[str, str | None]:
+        """Load title resolution cache from checkpoint file.
+
+        Args:
+            enrichment_type: Type of enrichment.
+
+        Returns:
+            Dict mapping TITLE:xxx keys to resolved identifiers or None.
+        """
+        checkpoint_file = self._get_checkpoint_file(enrichment_type)
+        if checkpoint_file.exists():
+            with open(checkpoint_file) as f:
+                data = json.load(f)
+            return data.get("title_cache", {})
+        return {}
+
+    def _save_resolve_checkpoint(
+        self,
+        progress: EnrichmentProgress,
+        enrichment_type: EnrichmentType,
+        title_cache: dict[str, str | None],
+    ) -> None:
+        """Save progress and title cache to checkpoint file.
+
+        Args:
+            progress: EnrichmentProgress to save.
+            enrichment_type: Type of enrichment.
+            title_cache: Title resolution cache to persist.
+        """
+        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        data = {
+            "total_to_process": progress.total_to_process,
+            "processed": progress.processed,
+            "enriched": progress.enriched,
+            "not_found": progress.not_found,
+            "errors": progress.errors,
+            "last_offset": progress.last_offset,
+            "processed_point_ids": list(progress.processed_point_ids),
+            "started_at": progress.started_at,
+            "last_updated": progress.last_updated,
+            "title_cache": title_cache,
+        }
+        checkpoint_file = self._get_checkpoint_file(enrichment_type)
+        with open(checkpoint_file, "w") as f:
+            json.dump(data, f, indent=2)
 
     def _load_checkpoint(self, enrichment_type: EnrichmentType) -> EnrichmentProgress:
         """Load progress from checkpoint file.

@@ -7,7 +7,8 @@
 #   3.2 CrossRef        - Additional citations from CrossRef
 #   3.3 Title Lookup    - Papers WITHOUT DOIs via title search
 #   3.4 Abstracts       - Fill missing abstracts
-#   3.5 Stubs           - Stub paper metadata (optional, expensive)
+#   3.6 Resolve Titles  - Resolve TITLE:xxx refs via OpenAlex
+#   3.7 Stubs           - Stub paper metadata (optional, expensive)
 
 set -e
 
@@ -24,6 +25,7 @@ SKIP_CROSSREF=${SKIP_CROSSREF:-false}
 SKIP_TITLE=${SKIP_TITLE:-false}
 SKIP_ABSTRACTS=${SKIP_ABSTRACTS:-false}
 SKIP_PDF=${SKIP_PDF:-false}
+SKIP_RESOLVE_TITLES=${SKIP_RESOLVE_TITLES:-false}
 ENRICH_STUBS=${ENRICH_STUBS:-false}
 RETRY_INCOMPLETE=${RETRY_INCOMPLETE:-false}
 
@@ -58,6 +60,10 @@ while [[ $# -gt 0 ]]; do
             SKIP_PDF=true
             shift
             ;;
+        --skip-resolve-titles)
+            SKIP_RESOLVE_TITLES=true
+            shift
+            ;;
         --enrich-stubs)
             ENRICH_STUBS=true
             shift
@@ -89,6 +95,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --skip-title       Skip title-based enrichment"
             echo "  --skip-abstracts   Skip abstract enrichment"
             echo "  --skip-pdf         Skip PDF/GROBID extraction"
+            echo "  --skip-resolve-titles  Skip TITLE:xxx reference resolution"
             echo "  --enrich-stubs     Also enrich stub papers (expensive)"
             echo "  --retry-incomplete Re-process papers still missing data"
             echo "  --citations-only   Only enrich citations (skip abstracts)"
@@ -101,6 +108,7 @@ while [[ $# -gt 0 ]]; do
             echo "  ./scripts/enrichment/enrich_by_title.sh"
             echo "  ./scripts/enrichment/enrich_abstracts.sh"
             echo "  ./scripts/enrichment/enrich_pdf.sh"
+            echo "  ./scripts/enrichment/resolve_title_refs.sh"
             echo "  ./scripts/enrichment/enrich_stubs.sh"
             exit 0
             ;;
@@ -111,10 +119,10 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Calculate total steps (base: 5 steps including PDF)
-TOTAL_STEPS=5
+# Calculate total steps (base: 6 steps including PDF and title ref resolution)
+TOTAL_STEPS=6
 if [ "$ENRICH_STUBS" = true ]; then
-    TOTAL_STEPS=6
+    TOTAL_STEPS=7
 fi
 
 echo "=========================================="
@@ -127,6 +135,7 @@ echo "Skip CrossRef: $SKIP_CROSSREF"
 echo "Skip Title Lookup: $SKIP_TITLE"
 echo "Skip Abstracts: $SKIP_ABSTRACTS"
 echo "Skip PDF/GROBID: $SKIP_PDF"
+echo "Skip Resolve Titles: $SKIP_RESOLVE_TITLES"
 echo "Enrich Stubs: $ENRICH_STUBS"
 echo "Retry Incomplete: $RETRY_INCOMPLETE"
 echo "=========================================="
@@ -190,9 +199,21 @@ else
     echo ""
 fi
 
-# Step 3.6: Stub enrichment (optional)
+# Step 3.6: Resolve TITLE:xxx references via OpenAlex
+if [ "$SKIP_RESOLVE_TITLES" = false ]; then
+    echo "--- [3.6/$TOTAL_STEPS] Resolve Title Refs ---"
+    CMD="$SCRIPT_DIR/resolve_title_refs.sh --parallel 3 --batch-size 100"
+    [ "$RETRY_INCOMPLETE" = true ] && CMD="$CMD --retry-incomplete"
+    $CMD
+    echo ""
+else
+    echo "--- [3.6/$TOTAL_STEPS] Resolve Title Refs (SKIPPED) ---"
+    echo ""
+fi
+
+# Step 3.7: Stub enrichment (optional)
 if [ "$ENRICH_STUBS" = true ]; then
-    echo "--- [3.6/$TOTAL_STEPS] Stubs ---"
+    echo "--- [3.7/$TOTAL_STEPS] Stubs ---"
     "$SCRIPT_DIR/enrich_stubs.sh" --parallel 5
     echo ""
 fi

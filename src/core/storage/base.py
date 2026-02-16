@@ -255,6 +255,13 @@ class QdrantStorage:
     ) -> tuple[list[tuple[str, dict]], str | None]:
         return self.readers.get_papers_with_references(limit, offset)
 
+    def get_papers_with_title_refs(
+        self,
+        limit: int = 100,
+        offset: str | None = None,
+    ) -> tuple[list[tuple[str, dict]], str | None]:
+        return self.readers.get_papers_with_title_refs(limit, offset)
+
     def get_papers_needing_resolution(
         self,
         limit: int = 100,

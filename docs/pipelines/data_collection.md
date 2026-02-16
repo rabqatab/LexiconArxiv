@@ -1117,6 +1117,11 @@ uv run python -m src.cli.core_collect clear-enrich-1-checkpoint
 uv run python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --dry-run
 uv run python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --parallel 10
 uv run python -m src.cli.core_collect clear-abstract-checkpoint
+
+# Resolve TITLE:xxx references (after GROBID extraction)
+uv run python -m src.cli.core_collect enrich-9-resolve-title-refs-via-openalex --dry-run
+uv run python -m src.cli.core_collect enrich-9-resolve-title-refs-via-openalex --parallel 3
+uv run python -m src.cli.core_collect clear-enrich-9-checkpoint
 ```
 
 **Implementation:**
@@ -1124,6 +1129,7 @@ uv run python -m src.cli.core_collect clear-abstract-checkpoint
 - Storage methods:
   - `get_papers_missing_references()`, `batch_update_referenced_works()`
   - `get_papers_missing_abstracts()`, `batch_update_abstracts()`
+  - `get_papers_with_title_refs()` (for TITLE:xxx resolution)
   - `get_data_quality_stats()`
 - Checkpoints:
   - `data/core/checkpoints/citation_enrichment.json`

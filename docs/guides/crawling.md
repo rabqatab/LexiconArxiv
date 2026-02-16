@@ -936,6 +936,9 @@ uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --by-title --p
 # 4. PDF Extraction (last resort, slowest)
 docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.0 &
 uv run python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid --parallel 2
+
+# 5. Resolve TITLE:xxx refs from GROBID (fuzzy match via OpenAlex)
+uv run python -m src.cli.core_collect enrich-9-resolve-title-refs-via-openalex --parallel 3
 ```
 
 ---

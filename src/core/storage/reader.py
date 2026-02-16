@@ -191,6 +191,48 @@ class PaperReader:
 
         return [(str(p.id), p.payload) for p in results], next_offset
 
+    def get_papers_with_title_refs(
+        self,
+        limit: int = 100,
+        offset: str | None = None,
+    ) -> tuple[list[tuple[str, dict]], str | None]:
+        """Get papers whose referenced_works contain TITLE:xxx entries.
+
+        Only fetches the referenced_works field (not full payload) for efficiency.
+
+        Args:
+            limit: Maximum number of papers to return.
+            offset: Scroll offset for pagination.
+
+        Returns:
+            Tuple of (list of (point_id, payload), next_offset).
+        """
+        # Get papers with non-empty referenced_works
+        scroll_filter = models.Filter(
+            must_not=[
+                models.IsEmptyCondition(
+                    is_empty=models.PayloadField(key="referenced_works"),
+                )
+            ]
+        )
+
+        results, next_offset = self.client.scroll(
+            collection_name=self.collection_name,
+            scroll_filter=scroll_filter,
+            limit=limit,
+            offset=offset,
+            with_payload=["referenced_works"],
+        )
+
+        # Filter to papers that have at least one TITLE: entry
+        papers = []
+        for p in results:
+            refs = p.payload.get("referenced_works", [])
+            if any(ref.startswith("TITLE:") for ref in refs):
+                papers.append((str(p.id), p.payload))
+
+        return papers, next_offset
+
     def get_papers_needing_resolution(
         self,
         limit: int = 100,

@@ -153,6 +153,9 @@ uv run python -m src.cli.core_collect enrich-2-refs-by-doi-via-crossref --parall
 uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2                         # Semantic Scholar
 uv run python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --parallel 10    # Abstracts
 
+# Resolve TITLE:xxx refs from GROBID (fuzzy match via OpenAlex)
+uv run python -m src.cli.core_collect enrich-9-resolve-title-refs-via-openalex --parallel 3
+
 # Retry enrichment for papers still missing data after rate limits
 uv run python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex --retry-incomplete
 uv run python -m src.cli.core_collect enrich-3-refs-and-abstracts-by-title-via-openalex --retry-incomplete

@@ -47,7 +47,8 @@ scripts/
 │   ├── enrich_by_title.sh            # Step 3.3: Title-based lookup
 │   ├── enrich_abstracts.sh           # Step 3.4: Abstract enrichment
 │   ├── enrich_pdf.sh                 # Step 3.5: PDF/GROBID extraction
-│   └── enrich_stubs.sh               # Step 3.6: Stub paper metadata
+│   ├── resolve_title_refs.sh         # Step 3.6: Resolve TITLE:xxx refs via OpenAlex
+│   └── enrich_stubs.sh               # Step 3.7: Stub paper metadata
 │
 ├── resolution/                       # Stage 4: Resolution
 │   ├── run_resolution.sh             # Orchestrator: all resolution
@@ -190,7 +191,8 @@ Options:
   --skip-title       Skip Step 3.3: Title lookup
   --skip-abstracts   Skip Step 3.4: Abstracts
   --skip-pdf         Skip Step 3.5: PDF/GROBID extraction
-  --enrich-stubs     Include Step 3.6: Stub enrichment (expensive)
+  --skip-resolve-titles  Skip Step 3.6: TITLE:xxx resolution
+  --enrich-stubs     Include Step 3.7: Stub enrichment (expensive)
   --citations-only   Only enrich citations (skip abstracts)
   --abstracts-only   Only enrich abstracts
 ```
@@ -204,14 +206,15 @@ Options:
 | `enrich_by_title.sh` | 3.3 | Enrich papers WITHOUT DOIs via title search |
 | `enrich_abstracts.sh` | 3.4 | Fill missing abstracts via OpenAlex |
 | `enrich_pdf.sh` | 3.5 | Extract refs from PDFs via GROBID (fallback) |
-| `enrich_stubs.sh` | 3.6 | Fetch metadata for stub papers (optional) |
+| `resolve_title_refs.sh` | 3.6 | Resolve TITLE:xxx refs to DOI/OpenAlex IDs |
+| `enrich_stubs.sh` | 3.7 | Fetch metadata for stub papers (optional) |
 
 **Example**: Only enrich abstracts:
 ```bash
 ./scripts/enrichment/run_enrichment.sh --abstracts-only
 ```
 
-**Note**: Step 3.5 (stubs) is expensive (~187K papers) and not included by default.
+**Note**: Step 3.7 (stubs) is expensive (~187K papers) and not included by default.
 
 ---
 

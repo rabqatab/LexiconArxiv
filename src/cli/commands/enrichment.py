@@ -664,3 +664,83 @@ def register_commands(cli: click.Group):
                     click.echo("  (Dry run - no changes made)")
 
         asyncio.run(run_enrichment())
+
+    @cli.command("enrich-9-resolve-title-refs-via-openalex")
+    @click.option("--dry-run", is_flag=True, help="Count papers without resolving")
+    @click.option("--limit", "-n", type=int, help="Max papers to process")
+    @click.option("--batch-size", type=int, default=100, help="Batch size")
+    @click.option("--delay", type=float, default=0.1, help="Delay between API calls")
+    @click.option("--parallel", "-p", type=int, default=None, help="Concurrent requests (auto: 3 for API key, 1 for email)")
+    @click.option("--retry-incomplete", is_flag=True, help="Re-process papers still missing data (clears checkpoint)")
+    def enrich_9_resolve_title_refs_via_openalex(
+        dry_run: bool,
+        limit: int | None,
+        batch_size: int,
+        delay: float,
+        parallel: int | None,
+        retry_incomplete: bool,
+    ) -> None:
+        """Resolve TITLE:xxx references to DOI/OpenAlex identifiers via OpenAlex title search.
+
+        When GROBID extracts references from PDFs and only has a title (no DOI,
+        no arXiv ID), it stores TITLE:<title> in referenced_works. This command
+        resolves those to proper DOI:xxx or Wxxx identifiers by searching
+        OpenAlex and fuzzy-matching titles.
+
+        Examples:
+
+          # Count papers with TITLE: refs
+          python -m src.cli.core_collect enrich-9-resolve-title-refs-via-openalex --dry-run
+
+          # Resolve all TITLE: refs
+          python -m src.cli.core_collect enrich-9-resolve-title-refs-via-openalex
+
+          # Resolve with parallel requests
+          python -m src.cli.core_collect enrich-9-resolve-title-refs-via-openalex --parallel 5
+
+          # Resolve first 100 papers
+          python -m src.cli.core_collect enrich-9-resolve-title-refs-via-openalex --limit 100
+        """
+        from src.core.enrichment.openalex import EnrichmentType, PaperEnricher
+
+        async def run_enrichment():
+            storage = QdrantStorage()
+            async with PaperEnricher(
+                storage=storage,
+                batch_size=batch_size,
+                delay=delay,
+                max_concurrent=parallel,
+            ) as enricher:
+                if retry_incomplete:
+                    enricher.clear_checkpoint(EnrichmentType.RESOLVE_TITLE_REFS)
+                    click.echo("Checkpoint cleared — retrying title reference resolution.")
+                progress = await enricher.resolve_title_references(
+                    dry_run=dry_run,
+                    limit=limit,
+                )
+
+                click.echo(f"\nTitle Reference Resolution Results:")
+                click.echo(f"  Processed: {progress.processed}")
+                click.echo(f"  Resolved:  {progress.enriched}")
+                click.echo(f"  Not found: {progress.not_found}")
+                click.echo(f"  Errors:    {progress.errors}")
+
+                if dry_run:
+                    click.echo(f"\n  Total papers to resolve: {progress.total_to_process}")
+                    click.echo("  (Dry run - no changes made)")
+
+        asyncio.run(run_enrichment())
+
+    @cli.command("clear-enrich-9-checkpoint")
+    def clear_enrich_9_checkpoint() -> None:
+        """Clear checkpoint for enrich-9 (resolve-title-refs-via-openalex).
+
+        Examples:
+
+          python -m src.cli.core_collect clear-enrich-9-checkpoint
+        """
+        from src.core.enrichment.openalex import PaperEnricher, EnrichmentType
+
+        enricher = PaperEnricher()
+        enricher.clear_checkpoint(EnrichmentType.RESOLVE_TITLE_REFS)
+        click.echo("Enrich-9 (title ref resolution) checkpoint cleared.")
