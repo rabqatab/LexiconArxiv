@@ -328,14 +328,21 @@ def register_commands(cli: click.Group):
         enriched_set = set(enriched_ids)
 
         # 1. Clear DOI, referenced_works, abstract in Qdrant
+        # Note: set_payload with None deletes the field (Qdrant behavior).
+        # Use delete_payload for doi/abstract, and set_payload for referenced_works.
         click.echo(f"\nClearing DOI, refs, and abstract for {len(enriched_ids)} papers...")
         cleared = 0
         for i in range(0, len(enriched_ids), 100):
             batch = enriched_ids[i:i + 100]
             try:
+                storage.client.delete_payload(
+                    collection_name=storage.collection_name,
+                    keys=["doi", "abstract"],
+                    points=batch,
+                )
                 storage.client.set_payload(
                     collection_name=storage.collection_name,
-                    payload={"doi": None, "referenced_works": [], "abstract": None},
+                    payload={"referenced_works": []},
                     points=batch,
                 )
                 cleared += len(batch)

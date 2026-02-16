@@ -39,12 +39,12 @@ class PaperReader:
                 is_empty=models.PayloadField(key="referenced_works"),
             )
         ]
-        # Exclude papers where DOI is null (we need DOI for lookup)
+        # Exclude papers where DOI is null/missing (we need DOI for lookup)
         must_not_conditions = []
         if has_doi:
             must_not_conditions.append(
-                models.IsNullCondition(
-                    is_null=models.PayloadField(key="doi"),
+                models.IsEmptyCondition(
+                    is_empty=models.PayloadField(key="doi"),
                 )
             )
 
@@ -86,12 +86,12 @@ class PaperReader:
                 match=models.MatchValue(value=""),
             )
         ]
-        # Exclude papers where DOI is null (we need DOI for lookup)
+        # Exclude papers where DOI is null/missing (we need DOI for lookup)
         must_not_conditions = []
         if has_doi:
             must_not_conditions.append(
-                models.IsNullCondition(
-                    is_null=models.PayloadField(key="doi"),
+                models.IsEmptyCondition(
+                    is_empty=models.PayloadField(key="doi"),
                 )
             )
 
@@ -128,13 +128,13 @@ class PaperReader:
         Returns:
             Tuple of (list of (point_id, payload), next_offset).
         """
-        # Papers with empty referenced_works AND null DOI
+        # Papers with empty referenced_works AND null/missing DOI
         filter_conditions = [
             models.IsEmptyCondition(
                 is_empty=models.PayloadField(key="referenced_works"),
             ),
-            models.IsNullCondition(
-                is_null=models.PayloadField(key="doi"),
+            models.IsEmptyCondition(
+                is_empty=models.PayloadField(key="doi"),
             ),
         ]
 
