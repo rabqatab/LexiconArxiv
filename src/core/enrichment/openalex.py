@@ -821,25 +821,35 @@ class PaperEnricher(BaseEnricher, OpenAlexMixin):
         updates: list[tuple[str, list[str]]] = []
 
         for point_id, payload in papers:
-            progress.processed += 1
-            progress.processed_point_ids.add(point_id)
-
             refs = payload.get("referenced_works", [])
             new_refs = []
             changed = False
+            has_uncached = False
 
             for ref in refs:
-                if ref.startswith("TITLE:") and ref in title_cache:
-                    resolved = title_cache[ref]
-                    if resolved is not None:
-                        new_refs.append(resolved)
-                        changed = True
+                if ref.startswith("TITLE:"):
+                    if ref in title_cache:
+                        resolved = title_cache[ref]
+                        if resolved is not None:
+                            new_refs.append(resolved)
+                            changed = True
+                        else:
+                            # Not found in OpenAlex, keep original
+                            new_refs.append(ref)
+                            progress.not_found += 1
                     else:
-                        # Not found in OpenAlex, keep original
+                        # Rate-limited — not yet cached
                         new_refs.append(ref)
-                        progress.not_found += 1
+                        has_uncached = True
                 else:
                     new_refs.append(ref)
+
+            progress.processed += 1
+            if has_uncached:
+                # Don't mark as processed — will retry on next run
+                progress.errors += 1
+            else:
+                progress.processed_point_ids.add(point_id)
 
             if changed:
                 updates.append((point_id, new_refs))
