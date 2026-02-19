@@ -298,6 +298,10 @@ class PaperReader:
     ) -> tuple[list[tuple[str, dict]], str | None]:
         """Get papers for keyword extraction.
 
+        Only returns papers that have a non-null, non-empty abstract.
+        Papers without abstracts (e.g. stubs) are skipped and will be
+        picked up automatically once their abstracts are enriched.
+
         Args:
             limit: Maximum number of papers to return.
             offset: Scroll offset for pagination.
@@ -306,17 +310,31 @@ class PaperReader:
         Returns:
             Tuple of (list of (point_id, payload), next_offset).
         """
-        filter_conditions = []
+        must_conditions = []
+        must_not_conditions = [
+            # Skip papers with null abstract (e.g. stubs)
+            models.IsNullCondition(
+                is_null=models.PayloadField(key="abstract"),
+            ),
+            # Skip papers with empty string abstract
+            models.FieldCondition(
+                key="abstract",
+                match=models.MatchValue(value=""),
+            ),
+        ]
 
         if skip_existing:
             # Papers without keywords (empty list or null)
-            filter_conditions.append(
+            must_conditions.append(
                 models.IsEmptyCondition(
                     is_empty=models.PayloadField(key="keywords"),
                 )
             )
 
-        scroll_filter = models.Filter(must=filter_conditions) if filter_conditions else None
+        scroll_filter = models.Filter(
+            must=must_conditions if must_conditions else None,
+            must_not=must_not_conditions,
+        )
 
         results, next_offset = self.client.scroll(
             collection_name=self.collection_name,
