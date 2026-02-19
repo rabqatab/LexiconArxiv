@@ -196,11 +196,11 @@ class TestExtractorInit:
             use_keybert=False,
             use_llm=True,
             llm_backend="gemini",
-            gemini_model="gemini-3-flash",
+            gemini_model="gemini-3-flash-preview",
         )
         assert ext.use_llm is True
         assert ext.llm_backend == "gemini"
-        assert ext.gemini_model == "gemini-3-flash"
+        assert ext.gemini_model == "gemini-3-flash-preview"
 
     def test_init_with_judge_params(self):
         ext = KeywordExtractor(

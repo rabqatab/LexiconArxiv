@@ -46,8 +46,8 @@ def register_commands(cli: click.Group):
     )
     @click.option(
         "--gemini-model",
-        default="gemini-3-flash",
-        help="Gemini model name (default: gemini-3-flash)",
+        default="gemini-3-flash-preview",
+        help="Gemini model name (default: gemini-3-flash-preview)",
     )
     @click.option(
         "--ollama-timeout",

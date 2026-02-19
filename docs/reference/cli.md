@@ -495,7 +495,7 @@ uv run python -m src.cli.core_collect extract-keywords --batch-size 200
 | `--judge` | Enable LLM judge validation |
 | `--judge-backend` | Judge backend: `gemini` or `ollama` (default: same as `--llm-backend`) |
 | `--ollama-model` | Ollama model name (default: `llama3.1:8b`) |
-| `--gemini-model` | Gemini model name (default: `gemini-3-flash`) |
+| `--gemini-model` | Gemini model name (default: `gemini-3-flash-preview`) |
 
 **Behavior:**
 - Default: Skips papers that already have keywords

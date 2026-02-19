@@ -98,7 +98,7 @@ clean = re.sub(r"\s+", " ", clean).strip()   # Collapse all whitespace
 
 - Uses `google-genai` SDK with `response_schema=SentenceLabels`
 - Structured JSON output via `response_mime_type="application/json"`
-- Default model: `gemini-3-flash`
+- Default model: `gemini-3-flash-preview`
 - Supports multiple API keys (comma-separated) for round-robin rotation
 - Rate limiting: `asyncio.Semaphore` (max_concurrent=5) + configurable delay
 - Retry with exponential backoff (max 5 attempts)
@@ -223,7 +223,7 @@ Note: Sentences can appear in multiple roles (multi-label classification). All s
 | `--batch-size N` | 100 | Papers per batch |
 | `--force` | off | Re-label papers with existing abstract_structure |
 | `--llm-backend` | `gemini` | LLM backend: `gemini` or `ollama` |
-| `--gemini-model` | `gemini-3-flash` | Gemini model name |
+| `--gemini-model` | `gemini-3-flash-preview` | Gemini model name |
 | `--ollama-model` | `llama3.1:8b` | Ollama model name |
 | `--ollama-timeout` | `180` | Ollama request timeout in seconds |
 

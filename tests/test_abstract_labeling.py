@@ -268,7 +268,7 @@ class TestLabelerInit:
     def test_default_init(self):
         labeler = AbstractLabeler()
         assert labeler.llm_backend == "gemini"
-        assert labeler.gemini_model == "gemini-3-flash"
+        assert labeler.gemini_model == "gemini-3-flash-preview"
         assert labeler.ollama_model == "llama3.1:8b"
         assert labeler.ollama_timeout == 180.0
 

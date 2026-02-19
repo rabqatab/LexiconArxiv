@@ -237,7 +237,7 @@ class ExtractedKeywords(BaseModel):
 
 - Uses `google-genai` SDK with `response_schema=ExtractedKeywords`
 - Structured JSON output via `response_mime_type="application/json"`
-- Default model: `gemini-3-flash`
+- Default model: `gemini-3-flash-preview`
 - Rate limiting: `asyncio.Semaphore` + configurable delay
 - Temperature: 0.1
 
@@ -395,7 +395,7 @@ Output format:
 | `--judge` | off | Enable LLM judge validation |
 | `--judge-backend` | same as `--llm-backend` | Judge backend: `gemini` or `ollama` |
 | `--ollama-model` | `llama3.1:8b` | Ollama model name |
-| `--gemini-model` | `gemini-3-flash` | Gemini model name |
+| `--gemini-model` | `gemini-3-flash-preview` | Gemini model name |
 | `--ollama-timeout` | `180` | Ollama request timeout in seconds |
 
 ---

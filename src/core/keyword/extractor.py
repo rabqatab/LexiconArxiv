@@ -55,7 +55,7 @@ class KeywordExtractor:
         use_judge: bool = False,
         judge_backend: str | None = None,
         ollama_model: str = "llama3.1:8b",
-        gemini_model: str = "gemini-3-flash",
+        gemini_model: str = "gemini-3-flash-preview",
         ollama_timeout: float = 180.0,
     ):
         """Initialize keyword extractor.
