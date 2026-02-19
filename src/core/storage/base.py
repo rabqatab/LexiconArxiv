@@ -285,6 +285,12 @@ class QdrantStorage:
     ) -> tuple[list[tuple[str, dict]], str | None]:
         return self.readers.get_papers_for_abstract_labeling(limit, offset, skip_existing)
 
+    def count_papers_for_keyword_extraction(self, skip_existing: bool = True) -> int:
+        return self.readers.count_papers_for_keyword_extraction(skip_existing)
+
+    def count_papers_for_abstract_labeling(self, skip_existing: bool = True) -> int:
+        return self.readers.count_papers_for_abstract_labeling(skip_existing)
+
     def get_all_papers_for_index(
         self,
         fields: list[str],

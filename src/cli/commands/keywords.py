@@ -347,6 +347,11 @@ def _run_extraction_loop(
     dry_run: bool,
 ) -> tuple[int, int, int, list[tuple[str, str, list[str]]]]:
     """Synchronous extraction loop (regex + KeyBERT only)."""
+    total_eligible = storage.count_papers_for_keyword_extraction(skip_existing=not force)
+    if limit:
+        total_eligible = min(total_eligible, limit)
+    click.echo(f"Papers to process: {total_eligible:,}\n")
+
     processed = 0
     papers_with_keywords = 0
     total_keywords = 0
@@ -390,8 +395,8 @@ def _run_extraction_loop(
 
         offset = next_offset
 
-        if processed % 500 == 0:
-            click.echo(f"  Processed {processed} papers...")
+        pct = processed / total_eligible * 100 if total_eligible else 0
+        click.echo(f"  Processed {processed:,}/{total_eligible:,} ({pct:.1f}%)")
 
         if limit and processed >= limit:
             break
@@ -411,6 +416,11 @@ async def _run_extraction_loop_async(
     dry_run: bool,
 ) -> tuple[int, int, int, list[tuple[str, str, list[str], dict | None]]]:
     """Async extraction loop (with LLM and/or judge)."""
+    total_eligible = storage.count_papers_for_keyword_extraction(skip_existing=not force)
+    if limit:
+        total_eligible = min(total_eligible, limit)
+    click.echo(f"Papers to process: {total_eligible:,}\n")
+
     processed = 0
     papers_with_keywords = 0
     total_keywords = 0
@@ -464,8 +474,8 @@ async def _run_extraction_loop_async(
 
         offset = next_offset
 
-        if processed % 500 == 0:
-            click.echo(f"  Processed {processed} papers...")
+        pct = processed / total_eligible * 100 if total_eligible else 0
+        click.echo(f"  Processed {processed:,}/{total_eligible:,} ({pct:.1f}%)")
 
         if limit and processed >= limit:
             break

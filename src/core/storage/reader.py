@@ -346,6 +346,46 @@ class PaperReader:
 
         return [(str(p.id), p.payload) for p in results], next_offset
 
+    def count_papers_for_keyword_extraction(self, skip_existing: bool = True) -> int:
+        """Count papers eligible for keyword extraction."""
+        must_conditions = []
+        must_not_conditions = [
+            models.IsNullCondition(is_null=models.PayloadField(key="abstract")),
+            models.FieldCondition(key="abstract", match=models.MatchValue(value="")),
+        ]
+        if skip_existing:
+            must_conditions.append(
+                models.IsEmptyCondition(is_empty=models.PayloadField(key="keywords"))
+            )
+        result = self.client.count(
+            collection_name=self.collection_name,
+            count_filter=models.Filter(
+                must=must_conditions if must_conditions else None,
+                must_not=must_not_conditions,
+            ),
+        )
+        return result.count
+
+    def count_papers_for_abstract_labeling(self, skip_existing: bool = True) -> int:
+        """Count papers eligible for abstract labeling."""
+        must_not_conditions = [
+            models.IsNullCondition(is_null=models.PayloadField(key="abstract")),
+            models.FieldCondition(key="abstract", match=models.MatchValue(value="")),
+        ]
+        must_conditions = []
+        if skip_existing:
+            must_conditions.append(
+                models.IsEmptyCondition(is_empty=models.PayloadField(key="abstract_structure"))
+            )
+        result = self.client.count(
+            collection_name=self.collection_name,
+            count_filter=models.Filter(
+                must=must_conditions if must_conditions else None,
+                must_not=must_not_conditions,
+            ),
+        )
+        return result.count
+
     def get_papers_for_abstract_labeling(
         self,
         limit: int = 100,
