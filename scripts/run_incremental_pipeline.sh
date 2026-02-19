@@ -132,16 +132,37 @@ echo ""
 echo "[Step 4/8] Enriching citations (CrossRef)..."
 uv run python -m src.cli.core_collect enrich-2-refs-by-doi-via-crossref --parallel "$PARALLEL"
 
-# Step 5: Extract keywords
+# Steps 5+6: Keywords & Labeling (parallel — independent fields)
+KEYWORDS_PID=""
+LABELING_PID=""
+
 echo ""
 echo "[Step 5/8] Extracting keywords..."
-uv run python -m src.cli.core_collect extract-keywords
+uv run python -m src.cli.core_collect extract-keywords &
+KEYWORDS_PID=$!
 
-# Step 6: Label abstracts
 if [ "$SKIP_LABELING" = false ]; then
     echo ""
     echo "[Step 6/8] Labeling abstracts..."
-    uv run python -m src.cli.core_collect label-abstracts
+    uv run python -m src.cli.core_collect label-abstracts &
+    LABELING_PID=$!
+fi
+
+# Wait for parallel steps to complete
+FAILED=false
+if ! wait "$KEYWORDS_PID"; then
+    echo "[ERROR] Keyword extraction failed."
+    FAILED=true
+fi
+if [ -n "$LABELING_PID" ]; then
+    if ! wait "$LABELING_PID"; then
+        echo "[ERROR] Abstract labeling failed."
+        FAILED=true
+    fi
+fi
+if [ "$FAILED" = true ]; then
+    echo "One or more parallel steps failed."
+    exit 1
 fi
 
 # Step 7: Resolve references and create stubs

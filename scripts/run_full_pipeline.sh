@@ -234,25 +234,45 @@ else
     echo ""
 fi
 
-# Stage 6: Keywords
+# Stage 6+7: Keywords & Labeling (parallel — independent fields)
+KEYWORDS_PID=""
+LABELING_PID=""
+
 if [ "$SKIP_KEYWORDS" = false ]; then
     echo "============ [6/7] KEYWORDS ============"
-    "$SCRIPT_DIR/keywords/run_keywords.sh"
-    echo ""
+    "$SCRIPT_DIR/keywords/run_keywords.sh" &
+    KEYWORDS_PID=$!
 else
     echo "============ [6/7] KEYWORDS (SKIPPED) ============"
-    echo ""
 fi
 
-# Stage 7: Labeling
 if [ "$SKIP_LABELING" = false ]; then
     echo "============ [7/7] LABELING ============"
-    "$SCRIPT_DIR/labeling/run_labeling.sh"
-    echo ""
+    "$SCRIPT_DIR/labeling/run_labeling.sh" &
+    LABELING_PID=$!
 else
     echo "============ [7/7] LABELING (SKIPPED) ============"
-    echo ""
 fi
+
+# Wait for parallel stages to complete
+FAILED=false
+if [ -n "$KEYWORDS_PID" ]; then
+    if ! wait "$KEYWORDS_PID"; then
+        echo "[ERROR] Keywords stage failed."
+        FAILED=true
+    fi
+fi
+if [ -n "$LABELING_PID" ]; then
+    if ! wait "$LABELING_PID"; then
+        echo "[ERROR] Labeling stage failed."
+        FAILED=true
+    fi
+fi
+if [ "$FAILED" = true ]; then
+    echo "One or more parallel stages failed."
+    exit 1
+fi
+echo ""
 
 echo "=========================================="
 echo "Pipeline complete!"
