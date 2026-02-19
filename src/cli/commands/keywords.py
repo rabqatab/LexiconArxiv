@@ -429,14 +429,25 @@ async def _run_extraction_loop_async(
 
         updates: list[tuple[str, list[str], str, dict | None]] = []
 
+        # Collect eligible papers and apply limit
+        eligible = []
         for point_id, payload in papers:
             title = payload.get("title", "")
             abstract = payload.get("abstract")
+            if limit and processed + len(eligible) >= limit:
+                break
+            eligible.append((point_id, title, abstract))
 
-            keywords, source, structured = (
-                await extractor.extract_pipeline_with_source(title, abstract)
-            )
+        # Process batch concurrently
+        async def _extract_one(point_id, title, abstract):
+            kw, src, structured = await extractor.extract_pipeline_with_source(title, abstract)
+            return point_id, title, kw, src, structured
 
+        results = await asyncio.gather(
+            *[_extract_one(pid, t, a) for pid, t, a in eligible]
+        )
+
+        for point_id, title, keywords, source, structured in results:
             if keywords:
                 papers_with_keywords += 1
                 total_keywords += len(keywords)
@@ -447,8 +458,6 @@ async def _run_extraction_loop_async(
                 samples.append((title[:80], source, keywords, structured))
 
             processed += 1
-            if limit and processed >= limit:
-                break
 
         if not dry_run and updates:
             storage.batch_update_keywords_with_source(updates)

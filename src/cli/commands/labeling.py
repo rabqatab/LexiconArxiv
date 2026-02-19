@@ -149,16 +149,27 @@ async def _run_labeling_loop(
 
         updates: list[tuple[str, dict, str]] = []
 
+        # Filter papers with abstracts and apply limit
+        eligible = []
         for point_id, payload in papers:
             title = payload.get("title", "")
             abstract = payload.get("abstract", "")
-
             if not abstract:
                 processed += 1
                 continue
+            if limit and processed + len(eligible) >= limit:
+                break
+            eligible.append((point_id, title, abstract))
 
-            structure, source = await labeler.label_abstract(title, abstract)
+        # Process batch concurrently
+        async def _label_one(point_id, title, abstract):
+            return point_id, title, *await labeler.label_abstract(title, abstract)
 
+        results = await asyncio.gather(
+            *[_label_one(pid, t, a) for pid, t, a in eligible]
+        )
+
+        for point_id, title, structure, source in results:
             if structure:
                 labeled += 1
                 updates.append((point_id, structure, source))
@@ -167,8 +178,6 @@ async def _run_labeling_loop(
                     samples.append((title[:80], source, structure))
 
             processed += 1
-            if limit and processed >= limit:
-                break
 
         if not dry_run and updates:
             storage.batch_update_abstract_structure(updates)
