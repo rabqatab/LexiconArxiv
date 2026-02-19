@@ -37,7 +37,7 @@ class GeminiKeywordExtractor(BaseLLMExtractor):
     def __init__(
         self,
         model: str = "gemini-3-flash-preview",
-        max_concurrent: int = 5,
+        max_concurrent: int = 10,
         delay: float = 0.1,
         max_retries: int = 5,
     ):
@@ -115,7 +115,7 @@ class GeminiJudge(BaseLLMJudge):
     def __init__(
         self,
         model: str = "gemini-3-flash-preview",
-        max_concurrent: int = 5,
+        max_concurrent: int = 10,
         delay: float = 0.1,
     ):
         api_keys = get_gemini_api_keys()

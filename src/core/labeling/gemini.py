@@ -28,7 +28,7 @@ class GeminiAbstractLabeler(BaseAbstractLabeler):
     def __init__(
         self,
         model: str = "gemini-3-flash-preview",
-        max_concurrent: int = 5,
+        max_concurrent: int = 10,
         delay: float = 0.1,
         max_retries: int = 5,
     ):
