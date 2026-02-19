@@ -48,7 +48,7 @@ scripts/
 │   ├── enrich_crossref.sh            # Step 3.2: CrossRef citations
 │   ├── enrich_by_title.sh            # Step 3.3: Title-based lookup
 │   ├── enrich_abstracts.sh           # Step 3.4: Abstract enrichment
-│   ├── enrich_pdf.sh                 # Step 3.5: PDF/GROBID extraction
+│   ├── enrich_pdf.sh                 # Step 3.5: PDF/GROBID refs + abstracts
 │   ├── resolve_title_refs.sh         # Step 3.6: Resolve TITLE:xxx refs via OpenAlex
 │   └── enrich_stubs.sh               # Step 3.7: Stub paper metadata
 │
@@ -217,7 +217,7 @@ Options:
 | `enrich_crossref.sh` | 3.2 | Additional citations from CrossRef |
 | `enrich_by_title.sh` | 3.3 | Enrich papers WITHOUT DOIs via title search |
 | `enrich_abstracts.sh` | 3.4 | Fill missing abstracts via OpenAlex |
-| `enrich_pdf.sh` | 3.5 | Extract refs from PDFs via GROBID (fallback) |
+| `enrich_pdf.sh` | 3.5 | Extract refs + abstracts from PDFs via GROBID (fallback) |
 | `resolve_title_refs.sh` | 3.6 | Resolve TITLE:xxx refs to DOI/OpenAlex IDs |
 | `enrich_stubs.sh` | 3.7 | Fetch metadata for stub papers (optional) |
 

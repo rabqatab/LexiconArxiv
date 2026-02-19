@@ -1,6 +1,10 @@
 #!/bin/bash
-# Step 3.6: Extract references from PDFs using GROBID
+# Step 3.5: Extract references and abstracts from PDFs using GROBID
 # Last-resort fallback when API-based enrichment fails
+#
+# Runs:
+#   enrich-5: Extract references from PDFs
+#   enrich-7: Extract abstracts from PDFs
 #
 # Requires GROBID server running:
 #   docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.0
@@ -45,7 +49,7 @@ while [[ $# -gt 0 ]]; do
         --help)
             echo "Usage: $0 [OPTIONS]"
             echo ""
-            echo "Step 3.6: Extract references from PDFs using GROBID"
+            echo "Step 3.5: Extract references and abstracts from PDFs using GROBID"
             echo ""
             echo "This is the last-resort fallback for papers where"
             echo "API-based enrichment (OpenAlex, CrossRef) failed."
@@ -80,6 +84,24 @@ if ! curl -s --connect-timeout 5 "$GROBID_URL/api/isalive" > /dev/null 2>&1; the
 fi
 
 CMD="uv run python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid --parallel $PARALLEL --batch-size $BATCH_SIZE --grobid-url $GROBID_URL"
+
+if [ "$DRY_RUN" = true ]; then
+    CMD="$CMD --dry-run"
+fi
+
+if [ "$LIMIT" -gt 0 ]; then
+    CMD="$CMD --limit $LIMIT"
+fi
+
+$CMD
+
+echo "[PDF/GROBID] Reference extraction complete."
+echo ""
+
+# Also extract abstracts from PDFs (enrich-7)
+echo "[PDF/GROBID] Extracting abstracts from PDFs..."
+
+CMD="uv run python -m src.cli.core_collect enrich-7-abstracts-by-pdf-via-grobid --parallel $PARALLEL --batch-size $BATCH_SIZE --grobid-url $GROBID_URL"
 
 if [ "$DRY_RUN" = true ]; then
     CMD="$CMD --dry-run"
