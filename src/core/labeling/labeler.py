@@ -44,7 +44,7 @@ class AbstractLabeler:
         self,
         llm_backend: str = "gemini",
         ollama_model: str = "llama3.1:8b",
-        gemini_model: str = "gemini-2.0-flash",
+        gemini_model: str = "gemini-3-flash",
         ollama_timeout: float = 180.0,
     ):
         self.llm_backend = llm_backend

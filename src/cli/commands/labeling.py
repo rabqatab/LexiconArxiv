@@ -25,8 +25,8 @@ def register_commands(cli: click.Group):
     )
     @click.option(
         "--gemini-model",
-        default="gemini-2.0-flash",
-        help="Gemini model name (default: gemini-2.0-flash)",
+        default="gemini-3-flash",
+        help="Gemini model name (default: gemini-3-flash)",
     )
     @click.option(
         "--ollama-model",
