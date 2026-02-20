@@ -298,6 +298,20 @@ class QdrantStorage:
     ) -> tuple[list[tuple[str, dict]], str | None]:
         return self.readers.get_papers_missing_code_repos(limit, offset)
 
+    def get_papers_missing_code_repos_with_pdf(
+        self,
+        limit: int = 100,
+        offset: str | None = None,
+    ) -> tuple[list[tuple[str, dict]], str | None]:
+        return self.readers.get_papers_missing_code_repos_with_pdf(limit, offset)
+
+    def get_papers_missing_code_repos_with_year(
+        self,
+        limit: int = 100,
+        offset: str | None = None,
+    ) -> tuple[list[tuple[str, dict]], str | None]:
+        return self.readers.get_papers_missing_code_repos_with_year(limit, offset)
+
     def get_all_papers_for_index(
         self,
         fields: list[str],

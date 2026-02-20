@@ -51,6 +51,9 @@ GEMINI_API_KEYS_ENV = "GEMINI_API_KEYS"
 GEMINI_API_KEY_ENV = "GEMINI_API_KEY"       # fallback (singular)
 GOOGLE_API_KEY_ENV = "GOOGLE_API_KEY"       # fallback (legacy)
 
+# GitHub API
+GITHUB_TOKEN_ENV = "GITHUB_TOKEN"
+
 # Ollama
 OLLAMA_BASE_URL_ENV = "OLLAMA_BASE_URL"
 DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434"
@@ -143,6 +146,11 @@ def get_gemini_api_keys() -> list[str]:
         or ""
     )
     return [k.strip() for k in raw.split(",") if k.strip()]
+
+
+def get_github_token() -> str | None:
+    """Get GitHub API token from environment."""
+    return os.getenv(GITHUB_TOKEN_ENV)
 
 
 def get_ollama_base_url() -> str:

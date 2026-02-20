@@ -828,3 +828,160 @@ def register_commands(cli: click.Group):
         enricher = CodeRepoEnricher()
         enricher.clear_checkpoint()
         click.echo("Enrich-10 (code repos) checkpoint cleared.")
+
+    @cli.command("enrich-11-code-repos-via-grobid")
+    @click.option("--dry-run", is_flag=True, help="Count papers without extracting")
+    @click.option("--limit", "-n", type=int, help="Max papers to process")
+    @click.option("--batch-size", type=int, default=20, help="Batch size")
+    @click.option("--parallel", "-p", type=int, default=5, help="Concurrent PDF downloads + GROBID extractions")
+    @click.option("--grobid-url", type=str, help="GROBID server URL (default: http://localhost:8070)")
+    @click.option("--retry-incomplete", is_flag=True, help="Re-process papers (clears checkpoint)")
+    def enrich_11_code_repos_via_grobid(
+        dry_run: bool,
+        limit: int | None,
+        batch_size: int,
+        parallel: int,
+        grobid_url: str | None,
+        retry_incomplete: bool,
+    ) -> None:
+        """Extract GitHub code repo URLs from paper PDFs via GROBID full-text.
+
+        Downloads PDFs, extracts full-text TEI-XML via GROBID, then finds
+        and classifies GitHub URLs based on section and context heuristics.
+
+        Requires GROBID server running:
+          docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.0
+
+        Examples:
+
+          # Count papers with PDF URLs needing code repos
+          python -m src.cli.core_collect enrich-11-code-repos-via-grobid --dry-run
+
+          # Extract from first 10 papers
+          python -m src.cli.core_collect enrich-11-code-repos-via-grobid --limit 10
+
+          # Use custom GROBID URL
+          python -m src.cli.core_collect enrich-11-code-repos-via-grobid --grobid-url http://grobid:8070
+        """
+        from src.core.enrichment.grobid_code_repos import GrobidCodeRepoExtractor
+
+        async def run_enrichment():
+            storage = QdrantStorage()
+            async with GrobidCodeRepoExtractor(
+                storage=storage,
+                grobid_url=grobid_url,
+                batch_size=batch_size,
+                max_concurrent=parallel,
+            ) as extractor:
+                if retry_incomplete:
+                    extractor.clear_checkpoint()
+                    click.echo("Checkpoint cleared — retrying GROBID code repo extraction.")
+                progress = await extractor.enrich_code_repos_via_grobid(
+                    dry_run=dry_run,
+                    limit=limit,
+                )
+
+                click.echo(f"\nGROBID Code Repo Extraction Results:")
+                click.echo(f"  Processed:        {progress.processed}")
+                click.echo(f"  Enriched:         {progress.enriched}")
+                click.echo(f"  Download failed:  {progress.download_failed}")
+                click.echo(f"  GROBID failed:    {progress.grobid_failed}")
+                click.echo(f"  No URLs found:    {progress.no_urls_found}")
+                click.echo(f"  Errors:           {progress.errors}")
+
+                if dry_run:
+                    click.echo(f"\n  Total papers with PDF: {progress.total_to_process}")
+                    click.echo("  (Dry run - no changes made)")
+
+        asyncio.run(run_enrichment())
+
+    @cli.command("enrich-12-code-repos-via-github")
+    @click.option("--dry-run", is_flag=True, help="Count papers without searching")
+    @click.option("--limit", "-n", type=int, help="Max papers to process")
+    @click.option("--batch-size", type=int, default=50, help="Batch size")
+    @click.option("--github-token", type=str, help="GitHub API token (or set GITHUB_TOKEN env)")
+    @click.option("--retry-incomplete", is_flag=True, help="Re-process papers (clears checkpoint)")
+    def enrich_12_code_repos_via_github(
+        dry_run: bool,
+        limit: int | None,
+        batch_size: int,
+        github_token: str | None,
+        retry_incomplete: bool,
+    ) -> None:
+        """Search GitHub API for code repositories matching papers.
+
+        Two-tier strategy:
+          Tier A: arXiv ID in README.md (high precision)
+          Tier B: Title search with validation heuristics
+
+        Rate limits: 30 req/min with GITHUB_TOKEN, 10/min without.
+
+        Examples:
+
+          # Count papers needing GitHub search
+          python -m src.cli.core_collect enrich-12-code-repos-via-github --dry-run
+
+          # Search first 10 papers
+          python -m src.cli.core_collect enrich-12-code-repos-via-github --limit 10
+
+          # Provide token directly
+          python -m src.cli.core_collect enrich-12-code-repos-via-github --github-token ghp_xxx
+        """
+        from src.core.enrichment.github_search import GitHubSearchEnricher
+
+        async def run_enrichment():
+            storage = QdrantStorage()
+            async with GitHubSearchEnricher(
+                storage=storage,
+                github_token=github_token,
+                batch_size=batch_size,
+            ) as enricher:
+                if retry_incomplete:
+                    enricher.clear_checkpoint()
+                    click.echo("Checkpoint cleared — retrying GitHub search enrichment.")
+                progress = await enricher.enrich_code_repos_via_github(
+                    dry_run=dry_run,
+                    limit=limit,
+                )
+
+                click.echo(f"\nGitHub Search Enrichment Results:")
+                click.echo(f"  Processed:      {progress.processed}")
+                click.echo(f"  Enriched:       {progress.enriched}")
+                click.echo(f"    Tier A (arXiv):  {progress.tier_a_hits}")
+                click.echo(f"    Tier B (title):  {progress.tier_b_hits}")
+                click.echo(f"  Not found:      {progress.not_found}")
+                click.echo(f"  Errors:         {progress.errors}")
+
+                if dry_run:
+                    click.echo(f"\n  Total papers to search: {progress.total_to_process}")
+                    click.echo("  (Dry run - no changes made)")
+
+        asyncio.run(run_enrichment())
+
+    @cli.command("clear-enrich-11-checkpoint")
+    def clear_enrich_11_checkpoint() -> None:
+        """Clear checkpoint for enrich-11 (GROBID code repos).
+
+        Examples:
+
+          python -m src.cli.core_collect clear-enrich-11-checkpoint
+        """
+        from src.core.enrichment.grobid_code_repos import GrobidCodeRepoExtractor
+
+        extractor = GrobidCodeRepoExtractor()
+        extractor.clear_checkpoint()
+        click.echo("Enrich-11 (GROBID code repos) checkpoint cleared.")
+
+    @cli.command("clear-enrich-12-checkpoint")
+    def clear_enrich_12_checkpoint() -> None:
+        """Clear checkpoint for enrich-12 (GitHub search).
+
+        Examples:
+
+          python -m src.cli.core_collect clear-enrich-12-checkpoint
+        """
+        from src.core.enrichment.github_search import GitHubSearchEnricher
+
+        enricher = GitHubSearchEnricher()
+        enricher.clear_checkpoint()
+        click.echo("Enrich-12 (GitHub search) checkpoint cleared.")

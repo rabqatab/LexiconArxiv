@@ -483,6 +483,92 @@ class PaperReader:
 
         return [(str(p.id), p.payload) for p in results], next_offset
 
+    def get_papers_missing_code_repos_with_pdf(
+        self,
+        limit: int = 100,
+        offset: str | None = None,
+    ) -> tuple[list[tuple[str, dict]], str | None]:
+        """Get non-stub papers without code_repositories that have a pdf_url.
+
+        Used by enrich-11 (GROBID full-text GitHub URL extraction).
+
+        Args:
+            limit: Maximum number of papers to return.
+            offset: Scroll offset for pagination.
+
+        Returns:
+            Tuple of (list of (point_id, payload), next_offset).
+        """
+        scroll_filter = models.Filter(
+            must=[
+                models.IsEmptyCondition(
+                    is_empty=models.PayloadField(key="code_repositories"),
+                ),
+            ],
+            must_not=[
+                models.FieldCondition(
+                    key="is_stub",
+                    match=models.MatchValue(value=True),
+                ),
+                models.IsEmptyCondition(
+                    is_empty=models.PayloadField(key="pdf_url"),
+                ),
+                models.IsNullCondition(
+                    is_null=models.PayloadField(key="pdf_url"),
+                ),
+            ],
+        )
+
+        results, next_offset = self.client.scroll(
+            collection_name=self.collection_name,
+            scroll_filter=scroll_filter,
+            limit=limit,
+            offset=offset,
+            with_payload=["source_id", "doi", "title", "pdf_url"],
+        )
+
+        return [(str(p.id), p.payload) for p in results], next_offset
+
+    def get_papers_missing_code_repos_with_year(
+        self,
+        limit: int = 100,
+        offset: str | None = None,
+    ) -> tuple[list[tuple[str, dict]], str | None]:
+        """Get non-stub papers without code_repositories (with year for validation).
+
+        Used by enrich-12 (GitHub API search).
+
+        Args:
+            limit: Maximum number of papers to return.
+            offset: Scroll offset for pagination.
+
+        Returns:
+            Tuple of (list of (point_id, payload), next_offset).
+        """
+        scroll_filter = models.Filter(
+            must=[
+                models.IsEmptyCondition(
+                    is_empty=models.PayloadField(key="code_repositories"),
+                ),
+            ],
+            must_not=[
+                models.FieldCondition(
+                    key="is_stub",
+                    match=models.MatchValue(value=True),
+                ),
+            ],
+        )
+
+        results, next_offset = self.client.scroll(
+            collection_name=self.collection_name,
+            scroll_filter=scroll_filter,
+            limit=limit,
+            offset=offset,
+            with_payload=["source_id", "doi", "title", "year"],
+        )
+
+        return [(str(p.id), p.payload) for p in results], next_offset
+
     def get_all_papers_for_index(
         self,
         fields: list[str],

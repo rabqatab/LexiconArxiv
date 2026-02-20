@@ -10,6 +10,8 @@
 #   3.6 Resolve Titles  - Resolve TITLE:xxx refs via OpenAlex
 #   3.7 Stubs           - Stub paper metadata (optional, expensive)
 #   3.8 Code Repos      - GitHub code repository URLs via PWC/HuggingFace
+#   3.9 GROBID Code      - GitHub URL extraction from paper PDFs via GROBID
+#   3.10 GitHub Search   - Code repository search via GitHub API
 
 set -e
 
@@ -28,6 +30,8 @@ SKIP_ABSTRACTS=${SKIP_ABSTRACTS:-false}
 SKIP_PDF=${SKIP_PDF:-false}
 SKIP_RESOLVE_TITLES=${SKIP_RESOLVE_TITLES:-false}
 SKIP_CODE_REPOS=${SKIP_CODE_REPOS:-false}
+SKIP_CODE_REPOS_GROBID=${SKIP_CODE_REPOS_GROBID:-false}
+SKIP_CODE_REPOS_GITHUB=${SKIP_CODE_REPOS_GITHUB:-false}
 ENRICH_STUBS=${ENRICH_STUBS:-false}
 RETRY_INCOMPLETE=${RETRY_INCOMPLETE:-false}
 
@@ -70,6 +74,14 @@ while [[ $# -gt 0 ]]; do
             SKIP_CODE_REPOS=true
             shift
             ;;
+        --skip-code-repos-grobid)
+            SKIP_CODE_REPOS_GROBID=true
+            shift
+            ;;
+        --skip-code-repos-github)
+            SKIP_CODE_REPOS_GITHUB=true
+            shift
+            ;;
         --enrich-stubs)
             ENRICH_STUBS=true
             shift
@@ -102,7 +114,9 @@ while [[ $# -gt 0 ]]; do
             echo "  --skip-abstracts   Skip abstract enrichment"
             echo "  --skip-pdf         Skip PDF/GROBID extraction"
             echo "  --skip-resolve-titles  Skip TITLE:xxx reference resolution"
-            echo "  --skip-code-repos  Skip code repository enrichment"
+            echo "  --skip-code-repos  Skip code repository enrichment (PWC/HF)"
+            echo "  --skip-code-repos-grobid  Skip GROBID code repo extraction"
+            echo "  --skip-code-repos-github  Skip GitHub API code repo search"
             echo "  --enrich-stubs     Also enrich stub papers (expensive)"
             echo "  --retry-incomplete Re-process papers still missing data"
             echo "  --citations-only   Only enrich citations (skip abstracts)"
@@ -117,6 +131,8 @@ while [[ $# -gt 0 ]]; do
             echo "  ./scripts/enrichment/enrich_pdf.sh"
             echo "  ./scripts/enrichment/resolve_title_refs.sh"
             echo "  ./scripts/enrichment/enrich_code_repos.sh"
+            echo "  ./scripts/enrichment/enrich_code_repos_grobid.sh"
+            echo "  ./scripts/enrichment/enrich_code_repos_github.sh"
             echo "  ./scripts/enrichment/enrich_stubs.sh"
             exit 0
             ;;
@@ -127,10 +143,10 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Calculate total steps (base: 7 steps including PDF, title ref resolution, and code repos)
-TOTAL_STEPS=7
+# Calculate total steps (base: 9 steps including PDF, title ref resolution, code repos, GROBID code, GitHub search)
+TOTAL_STEPS=9
 if [ "$ENRICH_STUBS" = true ]; then
-    TOTAL_STEPS=8
+    TOTAL_STEPS=10
 fi
 
 echo "=========================================="
@@ -145,6 +161,8 @@ echo "Skip Abstracts: $SKIP_ABSTRACTS"
 echo "Skip PDF/GROBID: $SKIP_PDF"
 echo "Skip Resolve Titles: $SKIP_RESOLVE_TITLES"
 echo "Skip Code Repos: $SKIP_CODE_REPOS"
+echo "Skip Code Repos GROBID: $SKIP_CODE_REPOS_GROBID"
+echo "Skip Code Repos GitHub: $SKIP_CODE_REPOS_GITHUB"
 echo "Enrich Stubs: $ENRICH_STUBS"
 echo "Retry Incomplete: $RETRY_INCOMPLETE"
 echo "=========================================="
@@ -220,9 +238,9 @@ else
     echo ""
 fi
 
-# Step 3.7: Code repository enrichment
+# Step 3.7: Code repository enrichment (PWC/HuggingFace)
 if [ "$SKIP_CODE_REPOS" = false ]; then
-    echo "--- [3.7/$TOTAL_STEPS] Code Repos ---"
+    echo "--- [3.7/$TOTAL_STEPS] Code Repos (PWC/HF) ---"
     CMD="$SCRIPT_DIR/enrich_code_repos.sh --parallel $PARALLEL --batch-size $BATCH_SIZE"
     [ "$RETRY_INCOMPLETE" = true ] && CMD="$CMD --retry-incomplete"
     $CMD
@@ -232,9 +250,33 @@ else
     echo ""
 fi
 
-# Step 3.8: Stub enrichment (optional)
+# Step 3.8: GROBID code repository extraction from PDFs
+if [ "$SKIP_CODE_REPOS_GROBID" = false ]; then
+    echo "--- [3.8/$TOTAL_STEPS] GROBID Code Repos ---"
+    CMD="$SCRIPT_DIR/enrich_code_repos_grobid.sh --parallel 5 --batch-size 20"
+    [ "$RETRY_INCOMPLETE" = true ] && CMD="$CMD --retry-incomplete"
+    $CMD
+    echo ""
+else
+    echo "--- [3.8/$TOTAL_STEPS] GROBID Code Repos (SKIPPED) ---"
+    echo ""
+fi
+
+# Step 3.9: GitHub API search for code repositories
+if [ "$SKIP_CODE_REPOS_GITHUB" = false ]; then
+    echo "--- [3.9/$TOTAL_STEPS] GitHub Search Code Repos ---"
+    CMD="$SCRIPT_DIR/enrich_code_repos_github.sh --batch-size 50"
+    [ "$RETRY_INCOMPLETE" = true ] && CMD="$CMD --retry-incomplete"
+    $CMD
+    echo ""
+else
+    echo "--- [3.9/$TOTAL_STEPS] GitHub Search Code Repos (SKIPPED) ---"
+    echo ""
+fi
+
+# Step 3.10: Stub enrichment (optional)
 if [ "$ENRICH_STUBS" = true ]; then
-    echo "--- [3.8/$TOTAL_STEPS] Stubs ---"
+    echo "--- [3.10/$TOTAL_STEPS] Stubs ---"
     "$SCRIPT_DIR/enrich_stubs.sh" --parallel 5
     echo ""
 fi

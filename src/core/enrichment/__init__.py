@@ -8,6 +8,8 @@ This package contains enrichers for:
 - PDF (pdf.py) - Reference extraction from PDFs via GROBID
 - Stub (stub.py) - Metadata enrichment for stub papers (external references)
 - Code Repos (code_repos.py) - GitHub code repository URL enrichment via PWC/HuggingFace
+- GROBID Code Repos (grobid_code_repos.py) - GitHub URL extraction from paper PDFs via GROBID
+- GitHub Search (github_search.py) - Code repository search via GitHub API
 """
 
 from src.core.enrichment.base import (
@@ -40,6 +42,14 @@ from src.core.enrichment.code_repos import (
     CodeRepoEnricher,
     CodeRepoEnrichmentProgress,
 )
+from src.core.enrichment.grobid_code_repos import (
+    GrobidCodeRepoExtractor,
+    GrobidCodeRepoProgress,
+)
+from src.core.enrichment.github_search import (
+    GitHubSearchEnricher,
+    GitHubSearchProgress,
+)
 
 __all__ = [
     # Base classes
@@ -65,4 +75,10 @@ __all__ = [
     # Code repo enricher
     "CodeRepoEnricher",
     "CodeRepoEnrichmentProgress",
+    # GROBID code repo extractor
+    "GrobidCodeRepoExtractor",
+    "GrobidCodeRepoProgress",
+    # GitHub search enricher
+    "GitHubSearchEnricher",
+    "GitHubSearchProgress",
 ]
