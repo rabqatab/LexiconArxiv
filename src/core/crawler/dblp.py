@@ -80,8 +80,8 @@ DBLP_VENUES = {
     },
 }
 
-# Backward compatibility alias
-ACM_VENUES = {k: v for k, v in DBLP_VENUES.items() if k in ["kdd", "sigir", "www", "recsys", "cikm", "wsdm"]}
+# ACM venue keys (subset of DBLP venues that are ACM conferences)
+ACM_VENUE_KEYS = frozenset({"kdd", "sigir", "www", "recsys", "cikm", "wsdm"})
 
 
 class DBLPCollector(BaseCrawler):
@@ -502,18 +502,3 @@ def get_dblp_venues() -> list[str]:
 def get_dblp_venue_info(venue: str) -> dict[str, Any] | None:
     """Get information about a DBLP venue."""
     return DBLP_VENUES.get(venue.lower())
-
-
-# Backward compatibility aliases for acm_open.py migration
-def get_acm_venues() -> list[str]:
-    """Get list of ACM venues (subset of DBLP venues)."""
-    return list(ACM_VENUES.keys())
-
-
-def get_acm_venue_info(venue: str) -> dict[str, Any] | None:
-    """Get information about an ACM venue."""
-    return ACM_VENUES.get(venue.lower())
-
-
-# Alias for backward compatibility
-ACMOpenCollector = DBLPCollector

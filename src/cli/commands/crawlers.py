@@ -17,19 +17,14 @@ from src.core.crawler import (
     DBLPCollector,
     get_dblp_venues,
     DBLP_VENUES,
+    ACM_VENUE_KEYS,
     OpenReviewCollector,
     get_openreview_venues,
     OPENREVIEW_VENUES,
-    ACMOpenCollector,
-    get_acm_venues,
-    ACM_VENUES,
     AAOJSCollector,
     get_aaai_venues,
     AAAI_VENUES,
 )
-
-get_acm_open_venues = get_acm_venues
-ACM_OPEN_VENUES = ACM_VENUES
 
 logger = logging.getLogger(__name__)
 
@@ -137,11 +132,13 @@ def register_commands(cli: click.Group):
     @click.option("--since-year", "-y", default=2020, help="Collect papers from this year (default: 2020)")
     @click.option("--to-year", type=int, help="Collect papers until this year (inclusive)")
     @click.option("--all", "collect_all", is_flag=True, help="Collect from all DBLP venues")
+    @click.option("--acm-only", is_flag=True, help="Restrict to ACM venues only (KDD, SIGIR, WWW, RecSys, CIKM, WSDM)")
     def collect_dblp(
         venue: str | None,
         since_year: int,
         to_year: int | None,
         collect_all: bool,
+        acm_only: bool,
     ) -> None:
         """Collect papers from DBLP.
 
@@ -155,11 +152,21 @@ def register_commands(cli: click.Group):
 
           # Collect from all DBLP venues
           python -m src.cli.core_collect collect-dblp --all
+
+          # Collect ACM venues only
+          python -m src.cli.core_collect collect-dblp --all --acm-only
         """
         if not any([venue, collect_all]):
             click.echo("Error: Specify --venue or --all")
             click.echo(f"Available DBLP venues: {', '.join(get_dblp_venues())}")
             sys.exit(1)
+
+        if venue and acm_only:
+            venue_lower = venue.lower()
+            if venue_lower not in ACM_VENUE_KEYS:
+                click.echo(f"Error: '{venue}' is not an ACM venue")
+                click.echo(f"ACM venues: {', '.join(sorted(ACM_VENUE_KEYS))}")
+                sys.exit(1)
 
         async def run_collection() -> int:
             storage = QdrantStorage()
@@ -167,6 +174,14 @@ def register_commands(cli: click.Group):
 
             async with DBLPCollector(storage=storage) as collector:
                 if collect_all:
+                    if acm_only:
+                        # Collect only ACM venues
+                        total = 0
+                        for v in sorted(ACM_VENUE_KEYS):
+                            async for batch in collector.collect_venue(v, since_year, to_year):
+                                total += len(batch)
+                                click.echo(f"Collected {total} papers from DBLP {v}")
+                        return total
                     return await collector.collect_all(since_year, to_year)
                 elif venue:
                     venue_lower = venue.lower()
@@ -190,13 +205,15 @@ def register_commands(cli: click.Group):
     def list_dblp_venues() -> None:
         """List available DBLP venues."""
         click.echo("\n=== DBLP Venues ===\n")
-        click.echo(f"{'Name':12} {'Tier':6} {'Full Name'}")
-        click.echo("-" * 70)
+        click.echo(f"{'Name':12} {'Tier':6} {'ACM':5} {'Full Name'}")
+        click.echo("-" * 80)
 
         for name, info in DBLP_VENUES.items():
-            click.echo(f"{name:12} {info['tier']:6} {info['full_name']}")
+            acm_marker = "ACM" if name in ACM_VENUE_KEYS else ""
+            click.echo(f"{name:12} {info['tier']:6} {acm_marker:5} {info['full_name']}")
 
-        click.echo(f"\nTotal: {len(DBLP_VENUES)} venues")
+        click.echo(f"\nTotal: {len(DBLP_VENUES)} venues ({len(ACM_VENUE_KEYS)} ACM)")
+        click.echo("\nUse --acm-only with collect-dblp to collect only ACM venues.")
 
     @cli.command("collect-openreview")
     @click.option("--venue", "-V", help="OpenReview venue name (e.g., iclr, neurips, icml)")
@@ -278,75 +295,6 @@ def register_commands(cli: click.Group):
 
         click.echo(f"\nTotal: {len(OPENREVIEW_VENUES)} venues")
 
-    @cli.command("collect-acm")
-    @click.option("--venue", "-V", help="ACM venue name (e.g., kdd, sigir, www)")
-    @click.option("--since-year", "-y", default=2020, help="Collect papers from this year (default: 2020)")
-    @click.option("--to-year", type=int, help="Collect papers until this year (inclusive)")
-    @click.option("--all", "collect_all", is_flag=True, help="Collect from all ACM venues")
-    def collect_acm(
-        venue: str | None,
-        since_year: int,
-        to_year: int | None,
-        collect_all: bool,
-    ) -> None:
-        """Collect papers from ACM venues via DBLP.
-
-        Uses DBLP API for paper metadata. Abstracts are filled via enrichment pipeline.
-        Note: This is an alias for collect-dblp with ACM venues only.
-
-        Examples:
-
-          # Collect from KDD
-          python -m src.cli.core_collect collect-acm --venue kdd
-
-          # Collect from SIGIR from 2022 onwards
-          python -m src.cli.core_collect collect-acm --venue sigir --since-year 2022
-
-          # Collect from all ACM venues
-          python -m src.cli.core_collect collect-acm --all
-        """
-        if not any([venue, collect_all]):
-            click.echo("Error: Specify --venue or --all")
-            click.echo(f"Available ACM venues: {', '.join(get_acm_open_venues())}")
-            sys.exit(1)
-
-        async def run_collection() -> int:
-            storage = QdrantStorage()
-            storage.ensure_collection()
-
-            async with ACMOpenCollector(storage=storage) as collector:
-                if collect_all:
-                    return await collector.collect_all(since_year, to_year)
-                elif venue:
-                    venue_lower = venue.lower()
-                    if venue_lower not in ACM_OPEN_VENUES:
-                        click.echo(f"Error: Unknown ACM venue '{venue}'")
-                        click.echo(f"Available venues: {', '.join(get_acm_open_venues())}")
-                        sys.exit(1)
-
-                    total = 0
-                    async for batch in collector.collect_venue(venue_lower, since_year, to_year):
-                        total += len(batch)
-                        click.echo(f"Collected {total} papers from ACM {venue}")
-                    return total
-
-            return 0
-
-        total = asyncio.run(run_collection())
-        click.echo(f"\nACM collection complete: {total} papers")
-
-    @cli.command("list-acm-venues")
-    def list_acm_venues() -> None:
-        """List available ACM venues."""
-        click.echo("\n=== ACM Open Venues ===\n")
-        click.echo(f"{'Name':12} {'Tier':6} {'Full Name'}")
-        click.echo("-" * 80)
-
-        for name, info in ACM_OPEN_VENUES.items():
-            click.echo(f"{name:12} {info['tier']:6} {info['full_name']}")
-
-        click.echo(f"\nTotal: {len(ACM_OPEN_VENUES)} venues")
-
     @cli.command("collect-aaai")
     @click.option("--venue", "-V", help="AAAI venue name (e.g., aaai, icwsm)")
     @click.option("--since-year", "-y", default=2020, help="Collect papers from this year (default: 2020)")
@@ -423,9 +371,8 @@ def register_commands(cli: click.Group):
     @click.option("--to-date", type=str, help="End date in YYYY-MM or YYYY-MM-DD format (overrides --to-year)")
     @click.option("--skip-openalex", is_flag=True, help="Skip OpenAlex collection")
     @click.option("--skip-acl", is_flag=True, help="Skip ACL Anthology collection")
-    @click.option("--skip-dblp", is_flag=True, help="Skip DBLP collection")
+    @click.option("--skip-dblp", is_flag=True, help="Skip DBLP collection (includes ACM venues)")
     @click.option("--skip-openreview", is_flag=True, help="Skip OpenReview collection")
-    @click.option("--skip-acm", is_flag=True, help="Skip ACM Open collection")
     @click.option("--skip-aaai", is_flag=True, help="Skip AAAI OJS collection")
     @click.option("--include-workshops", is_flag=True, help="Include ACL workshop papers")
     @click.option("--dry-run", is_flag=True, help="Fetch papers but don't save to storage (output to JSON)")
@@ -440,14 +387,13 @@ def register_commands(cli: click.Group):
         skip_acl: bool,
         skip_dblp: bool,
         skip_openreview: bool,
-        skip_acm: bool,
         skip_aaai: bool,
         include_workshops: bool,
         dry_run: bool,
         output: str | None,
         collection: str | None,
     ) -> None:
-        """Collect papers from all sources (OpenAlex, ACL, DBLP, OpenReview, ACM, AAAI).
+        """Collect papers from all sources (OpenAlex, ACL, DBLP, OpenReview, AAAI).
 
         This is the main command for building the complete core corpus.
         Papers are deduplicated across sources.
@@ -598,27 +544,6 @@ def register_commands(cli: click.Group):
                         click.echo(f"  {venue}: {total} papers so far...")
                     results["openreview"] = total
                     click.echo(f"OpenReview: {total} papers" + (" (not saved)" if dry_run else ""))
-
-            # Collect from ACM Open
-            if not skip_acm:
-                click.echo("\n=== Collecting from ACM Open ===\n")
-                async with ACMOpenCollector(
-                    storage=storage,
-                    deduplicator=shared_deduplicator,
-                ) as collector:
-                    total = 0
-                    for venue in get_acm_open_venues():
-                        async for batch in collector.collect_venue(
-                            venue, since_year, to_year,
-                            save_to_storage=not dry_run,
-                            since_date=since_date, to_date=to_date
-                        ):
-                            if dry_run:
-                                all_papers.extend([p.model_dump() for p in batch])
-                            total += len(batch)
-                        click.echo(f"  {venue}: {total} papers so far...")
-                    results["acm"] = total
-                    click.echo(f"ACM Open: {total} papers" + (" (not saved)" if dry_run else ""))
 
             # Collect from AAAI OJS
             if not skip_aaai:

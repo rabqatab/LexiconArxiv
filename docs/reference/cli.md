@@ -80,7 +80,7 @@ uv run python -m src.cli.core_collect collect-acl --workshops-only --since-year 
 
 ### collect-dblp
 
-Collect papers from DBLP.
+Collect papers from DBLP (includes ACM venues: KDD, SIGIR, WWW, RecSys, CIKM, WSDM).
 
 ```bash
 # Single venue
@@ -88,6 +88,9 @@ uv run python -m src.cli.core_collect collect-dblp --venue icail --since-year 20
 
 # All DBLP venues
 uv run python -m src.cli.core_collect collect-dblp --all
+
+# ACM venues only
+uv run python -m src.cli.core_collect collect-dblp --all --acm-only
 ```
 
 ### collect-openreview
@@ -105,21 +108,6 @@ uv run python -m src.cli.core_collect collect-openreview --all
 uv run python -m src.cli.core_collect collect-openreview --venue iclr --include-rejected
 ```
 
-### collect-acm
-
-Collect papers from ACM Digital Library.
-
-```bash
-# Single venue
-uv run python -m src.cli.core_collect collect-acm --venue kdd --since-year 2020
-
-# All venues
-uv run python -m src.cli.core_collect collect-acm --all
-
-# Without abstracts (faster)
-uv run python -m src.cli.core_collect collect-acm --venue www --no-abstracts
-```
-
 ### collect-aaai
 
 Collect papers from AAAI OJS (2020-2023).
@@ -134,7 +122,8 @@ uv run python -m src.cli.core_collect collect-aaai --all
 
 ### collect-all-sources
 
-Collect from all sources in optimal order.
+Collect from all sources in optimal order (OpenAlex, ACL, DBLP, OpenReview, AAAI).
+DBLP collection includes all ACM venues.
 
 ```bash
 # Standard collection
@@ -580,14 +569,6 @@ List OpenReview venues.
 
 ```bash
 uv run python -m src.cli.core_collect list-openreview-venues
-```
-
-### list-acm-venues
-
-List ACM Digital Library venues.
-
-```bash
-uv run python -m src.cli.core_collect list-acm-venues
 ```
 
 ### list-aaai-venues

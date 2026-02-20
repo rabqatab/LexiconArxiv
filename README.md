@@ -67,7 +67,7 @@ uv run python -m src.cli.core_collect collect-all-sources --since-year 2020 --in
 # Collect specific source
 uv run python -m src.cli.core_collect collect-acl --all --include-workshops
 uv run python -m src.cli.core_collect collect-openreview --all
-uv run python -m src.cli.core_collect collect-acm --all
+uv run python -m src.cli.core_collect collect-dblp --all --acm-only
 
 # Check status
 uv run python -m src.cli.core_collect status
@@ -137,8 +137,7 @@ uv run python -m src.cli.core_collect list-openreview-venues
 uv run python -m src.cli.core_collect collect-all-sources [options]
 uv run python -m src.cli.core_collect collect-acl [options]
 uv run python -m src.cli.core_collect collect-openreview [options]
-uv run python -m src.cli.core_collect collect-acm [options]
-uv run python -m src.cli.core_collect collect-dblp [options]
+uv run python -m src.cli.core_collect collect-dblp [options]      # includes ACM venues
 uv run python -m src.cli.core_collect collect-aaai [options]
 
 # Maintenance

@@ -51,11 +51,11 @@ uv run python -m src.cli.core_collect collect-acl --workshops-only --since-year 
 # OpenReview collection
 uv run python -m src.cli.core_collect collect-openreview --since-year 2020
 
-# ACM collection
-uv run python -m src.cli.core_collect collect-acm --since-year 2020
-
-# DBLP collection
+# DBLP collection (includes ACM venues)
 uv run python -m src.cli.core_collect collect-dblp --since-year 2020
+
+# ACM venues only (via DBLP)
+uv run python -m src.cli.core_collect collect-dblp --all --acm-only --since-year 2020
 
 # AAAI collection
 uv run python -m src.cli.core_collect collect-aaai --since-year 2020
@@ -73,7 +73,6 @@ uv run python -m src.cli.core_collect collect-incremental --days 1
 uv run python -m src.cli.core_collect list-venues
 uv run python -m src.cli.core_collect list-acl-venues
 uv run python -m src.cli.core_collect list-openreview-venues
-uv run python -m src.cli.core_collect list-acm-venues
 uv run python -m src.cli.core_collect list-dblp-venues
 uv run python -m src.cli.core_collect list-aaai-venues
 ```

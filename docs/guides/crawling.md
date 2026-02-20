@@ -203,14 +203,14 @@ uv run python -m src.cli.core_collect collect-openreview --all
 | Papers | ~10,000 (2020-present) |
 
 ```bash
-# List ACM venues
-uv run python -m src.cli.core_collect list-acm-venues
+# List DBLP venues (ACM venues marked with ACM tag)
+uv run python -m src.cli.core_collect list-dblp-venues
 
-# Collect from specific venue
-uv run python -m src.cli.core_collect collect-acm --venue kdd --since-year 2020
+# Collect ACM venues only (via DBLP)
+uv run python -m src.cli.core_collect collect-dblp --venue kdd --since-year 2020
 
 # Collect all ACM venues
-uv run python -m src.cli.core_collect collect-acm --all
+uv run python -m src.cli.core_collect collect-dblp --all --acm-only
 ```
 
 ### AAAI OJS (AI Conference)
@@ -288,17 +288,14 @@ uv run python -m src.cli.core_collect collect-openreview --venue iclr --since-ye
 uv run python -m src.cli.core_collect collect-openreview --all
 ```
 
-### ACM Collection
+### ACM Collection (via DBLP)
 
 ```bash
-# Collect from a specific venue
-uv run python -m src.cli.core_collect collect-acm --venue kdd --since-year 2020
+# Collect from a specific ACM venue
+uv run python -m src.cli.core_collect collect-dblp --venue kdd --since-year 2020
 
 # Collect all ACM venues
-uv run python -m src.cli.core_collect collect-acm --all
-
-# Fast collection without abstracts
-uv run python -m src.cli.core_collect collect-acm --venue www --no-abstracts
+uv run python -m src.cli.core_collect collect-dblp --all --acm-only
 ```
 
 ### AAAI OJS Collection

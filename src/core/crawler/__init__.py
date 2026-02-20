@@ -23,13 +23,9 @@ from src.core.crawler.acl_anthology import (
 from src.core.crawler.dblp import (
     DBLPCollector,
     DBLP_VENUES,
+    ACM_VENUE_KEYS,
     get_dblp_venues,
     get_dblp_venue_info,
-    # Backward compatibility aliases (formerly in acm_open.py)
-    ACMOpenCollector,
-    ACM_VENUES,
-    get_acm_venues,
-    get_acm_venue_info,
 )
 from src.core.crawler.openreview import (
     OpenReviewCollector,
@@ -37,7 +33,6 @@ from src.core.crawler.openreview import (
     get_openreview_venues,
     get_openreview_venue_info,
 )
-# acm_open.py consolidated into dblp.py - aliases exported above
 from src.core.crawler.aaai_ojs import (
     AAOJSCollector,
     AAAI_VENUES,
@@ -61,13 +56,9 @@ __all__ = [
     # DBLP (includes ACM venues)
     "DBLPCollector",
     "DBLP_VENUES",
+    "ACM_VENUE_KEYS",
     "get_dblp_venues",
     "get_dblp_venue_info",
-    # DBLP backward compat aliases (formerly acm_open.py)
-    "ACMOpenCollector",
-    "ACM_VENUES",
-    "get_acm_venues",
-    "get_acm_venue_info",
     # OpenReview
     "OpenReviewCollector",
     "OPENREVIEW_VENUES",

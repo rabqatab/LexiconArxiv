@@ -26,13 +26,9 @@ from src.core.crawler import (
     get_dblp_venues,
     OpenReviewCollector,
     get_openreview_venues,
-    ACMOpenCollector,
-    get_acm_venues,
     AAOJSCollector,
     get_aaai_venues,
 )
-
-get_acm_open_venues = get_acm_venues
 
 logger = logging.getLogger(__name__)
 
@@ -295,7 +291,7 @@ def register_commands(cli: click.Group):
 
     @cli.command("collect-incremental")
     @click.option("--days", "-d", default=1, help="Days to look back (default: 1)")
-    @click.option("--source", "-s", type=click.Choice(["all", "openalex", "acl", "dblp", "openreview", "acm", "aaai"]),
+    @click.option("--source", "-s", type=click.Choice(["all", "openalex", "acl", "dblp", "openreview", "aaai"]),
                   default="all", help="Source to collect from")
     def collect_incremental(days: int, source: str) -> None:
         """Incremental collection for periodic updates.
@@ -385,17 +381,6 @@ def register_commands(cli: click.Group):
                             count += len(batch)
                     results["openreview"] = count
                     click.echo(f"  OpenReview: {count} new papers")
-
-            # ACM/DBLP - collect from since_year to current_year
-            if source in ["all", "acm"]:
-                click.echo(f"Collecting from ACM/DBLP ({since_year}-{current_year})...")
-                async with ACMOpenCollector(storage=storage) as collector:
-                    count = 0
-                    for venue in get_acm_open_venues():
-                        async for batch in collector.collect_venue(venue, since_year=since_year, to_year=current_year):
-                            count += len(batch)
-                    results["acm"] = count
-                    click.echo(f"  ACM/DBLP: {count} new papers")
 
             # AAAI - collect from since_year to current_year
             if source in ["all", "aaai"]:

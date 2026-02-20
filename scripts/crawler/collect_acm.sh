@@ -1,5 +1,5 @@
 #!/bin/bash
-# Step 1.5: Collect papers from ACM Digital Library
+# Collect papers from ACM venues via DBLP
 # ACM conferences (KDD, SIGIR, WWW, etc.)
 
 set -e
@@ -22,7 +22,7 @@ while [[ $# -gt 0 ]]; do
         --help)
             echo "Usage: $0 [OPTIONS]"
             echo ""
-            echo "Collect papers from ACM Digital Library (open access)"
+            echo "Collect papers from ACM venues via DBLP"
             echo ""
             echo "Options:"
             echo "  --since-year YEAR  Start year (default: 2020)"
@@ -38,6 +38,6 @@ done
 
 echo "[ACM] Collecting papers since $SINCE_YEAR..."
 
-uv run python -m src.cli.core_collect collect-acm --all --since-year $SINCE_YEAR
+uv run python -m src.cli.core_collect collect-dblp --all --acm-only --since-year $SINCE_YEAR
 
 echo "[ACM] Collection complete."

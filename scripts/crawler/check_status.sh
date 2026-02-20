@@ -45,9 +45,5 @@ echo "--- [1.4] OpenReview Venues ---"
 uv run python -m src.cli.core_collect list-openreview-venues
 
 echo ""
-echo "--- [1.5] ACM Venues ---"
-uv run python -m src.cli.core_collect list-acm-venues
-
-echo ""
-echo "--- [1.6] AAAI Venues ---"
+echo "--- [1.5] AAAI Venues ---"
 uv run python -m src.cli.core_collect list-aaai-venues

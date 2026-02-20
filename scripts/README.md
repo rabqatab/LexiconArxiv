@@ -134,8 +134,7 @@ Options:
   --skip-acl           Skip Step 1.2: ACL Anthology
   --skip-dblp          Skip Step 1.3: DBLP
   --skip-openreview    Skip Step 1.4: OpenReview
-  --skip-acm           Skip Step 1.5: ACM
-  --skip-aaai          Skip Step 1.6: AAAI
+  --skip-aaai          Skip Step 1.5: AAAI
 ```
 
 ### Individual Steps
@@ -362,7 +361,7 @@ export QDRANT_COLLECTION=lexicon_arxiv
 ```bash
 # Only OpenReview and ACL
 ./scripts/crawler/run_full_collection.sh \
-  --skip-openalex --skip-dblp --skip-acm --skip-aaai
+  --skip-openalex --skip-dblp --skip-aaai
 ```
 
 ### Enrich stubs separately
