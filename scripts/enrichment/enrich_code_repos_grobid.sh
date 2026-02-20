@@ -11,7 +11,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$PROJECT_ROOT"
 
 # Default values
-PARALLEL=${PARALLEL:-5}
+PARALLEL=${PARALLEL:-20}
 BATCH_SIZE=${BATCH_SIZE:-20}
 LIMIT=${LIMIT:-0}
 DRY_RUN=${DRY_RUN:-false}

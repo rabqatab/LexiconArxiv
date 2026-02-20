@@ -833,7 +833,7 @@ def register_commands(cli: click.Group):
     @click.option("--dry-run", is_flag=True, help="Count papers without extracting")
     @click.option("--limit", "-n", type=int, help="Max papers to process")
     @click.option("--batch-size", type=int, default=20, help="Batch size")
-    @click.option("--parallel", "-p", type=int, default=5, help="Concurrent PDF downloads + GROBID extractions")
+    @click.option("--parallel", "-p", type=int, default=20, help="Concurrent PDF downloads + GROBID extractions")
     @click.option("--grobid-url", type=str, help="GROBID server URL (default: http://localhost:8070)")
     @click.option("--retry-incomplete", is_flag=True, help="Re-process papers (clears checkpoint)")
     def enrich_11_code_repos_via_grobid(

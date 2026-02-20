@@ -253,7 +253,7 @@ fi
 # Step 3.8: GROBID code repository extraction from PDFs
 if [ "$SKIP_CODE_REPOS_GROBID" = false ]; then
     echo "--- [3.8/$TOTAL_STEPS] GROBID Code Repos ---"
-    CMD="$SCRIPT_DIR/enrich_code_repos_grobid.sh --parallel 5 --batch-size 20"
+    CMD="$SCRIPT_DIR/enrich_code_repos_grobid.sh --parallel 20 --batch-size 20"
     [ "$RETRY_INCOMPLETE" = true ] && CMD="$CMD --retry-incomplete"
     $CMD
     echo ""

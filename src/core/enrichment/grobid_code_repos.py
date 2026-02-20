@@ -160,7 +160,7 @@ class GrobidCodeRepoExtractor:
         grobid_url: str | None = None,
         checkpoint_dir: Path | str | None = None,
         batch_size: int = 20,
-        max_concurrent: int = 5,
+        max_concurrent: int = 20,
         download_timeout: float = 60.0,
         grobid_timeout: float = 180.0,
     ):
