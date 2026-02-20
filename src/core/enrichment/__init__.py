@@ -7,6 +7,7 @@ This package contains enrichers for:
 - CrossRef (crossref.py) - Citation enrichment for ACM/Springer papers
 - PDF (pdf.py) - Reference extraction from PDFs via GROBID
 - Stub (stub.py) - Metadata enrichment for stub papers (external references)
+- Code Repos (code_repos.py) - GitHub code repository URL enrichment via PWC/HuggingFace
 """
 
 from src.core.enrichment.base import (
@@ -35,6 +36,10 @@ from src.core.enrichment.stub import (
     StubEnricher,
     StubEnrichmentProgress,
 )
+from src.core.enrichment.code_repos import (
+    CodeRepoEnricher,
+    CodeRepoEnrichmentProgress,
+)
 
 __all__ = [
     # Base classes
@@ -57,4 +62,7 @@ __all__ = [
     # Stub enricher
     "StubEnricher",
     "StubEnrichmentProgress",
+    # Code repo enricher
+    "CodeRepoEnricher",
+    "CodeRepoEnrichmentProgress",
 ]

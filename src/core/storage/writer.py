@@ -302,6 +302,33 @@ class BatchWriter:
             )
         return len(updates)
 
+    def batch_update_code_repos(
+        self,
+        updates: list[tuple[str, list[dict], str | None]],
+    ) -> int:
+        """Batch update code_repositories and code_url for papers.
+
+        Args:
+            updates: List of (point_id, code_repositories, code_url) tuples.
+
+        Returns:
+            Number of papers updated.
+        """
+        now = datetime.now(timezone.utc).isoformat()
+        for point_id, repos, best_url in updates:
+            payload: dict[str, Any] = {
+                "code_repositories": repos,
+                "code_enriched_at": now,
+            }
+            if best_url:
+                payload["code_url"] = best_url
+            self.client.set_payload(
+                collection_name=self.collection_name,
+                payload=payload,
+                points=[point_id],
+            )
+        return len(updates)
+
     def clear_all_keywords(self) -> int:
         """Clear keywords from all papers.
 

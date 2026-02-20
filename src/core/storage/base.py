@@ -291,6 +291,13 @@ class QdrantStorage:
     def count_papers_for_abstract_labeling(self, skip_existing: bool = True) -> int:
         return self.readers.count_papers_for_abstract_labeling(skip_existing)
 
+    def get_papers_missing_code_repos(
+        self,
+        limit: int = 100,
+        offset: str | None = None,
+    ) -> tuple[list[tuple[str, dict]], str | None]:
+        return self.readers.get_papers_missing_code_repos(limit, offset)
+
     def get_all_papers_for_index(
         self,
         fields: list[str],
@@ -377,6 +384,12 @@ class QdrantStorage:
         updates: list[tuple[str, dict, str]],
     ) -> int:
         return self.writers.batch_update_abstract_structure(updates)
+
+    def batch_update_code_repos(
+        self,
+        updates: list[tuple[str, list[dict], str | None]],
+    ) -> int:
+        return self.writers.batch_update_code_repos(updates)
 
     def clear_all_keywords(self) -> int:
         return self.writers.clear_all_keywords()

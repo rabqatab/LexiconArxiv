@@ -440,6 +440,49 @@ class PaperReader:
 
         return [(str(p.id), p.payload) for p in results], next_offset
 
+    def get_papers_missing_code_repos(
+        self,
+        limit: int = 100,
+        offset: str | None = None,
+    ) -> tuple[list[tuple[str, dict]], str | None]:
+        """Get non-stub papers that don't have code_repositories yet.
+
+        Returns papers with source_id, doi, and title for matching against
+        PWC archive (by arXiv ID or title) and HuggingFace API.
+
+        Args:
+            limit: Maximum number of papers to return.
+            offset: Scroll offset for pagination.
+
+        Returns:
+            Tuple of (list of (point_id, payload), next_offset).
+        """
+        scroll_filter = models.Filter(
+            must=[
+                # Only papers without code_repositories yet
+                models.IsEmptyCondition(
+                    is_empty=models.PayloadField(key="code_repositories"),
+                ),
+            ],
+            must_not=[
+                # Exclude stub papers
+                models.FieldCondition(
+                    key="is_stub",
+                    match=models.MatchValue(value=True),
+                ),
+            ],
+        )
+
+        results, next_offset = self.client.scroll(
+            collection_name=self.collection_name,
+            scroll_filter=scroll_filter,
+            limit=limit,
+            offset=offset,
+            with_payload=["source_id", "doi", "title"],
+        )
+
+        return [(str(p.id), p.payload) for p in results], next_offset
+
     def get_all_papers_for_index(
         self,
         fields: list[str],

@@ -744,3 +744,87 @@ def register_commands(cli: click.Group):
         enricher = PaperEnricher()
         enricher.clear_checkpoint(EnrichmentType.RESOLVE_TITLE_REFS)
         click.echo("Enrich-9 (title ref resolution) checkpoint cleared.")
+
+    @cli.command("enrich-10-code-repos")
+    @click.option("--dry-run", is_flag=True, help="Count papers without enriching")
+    @click.option("--limit", "-n", type=int, help="Max papers to process")
+    @click.option("--batch-size", type=int, default=100, help="Batch size")
+    @click.option("--delay", type=float, default=0.05, help="Delay between HF API calls (seconds)")
+    @click.option("--parallel", "-p", type=int, default=10, help="Concurrent HF API requests")
+    @click.option("--retry-incomplete", is_flag=True, help="Re-process papers (clears checkpoint)")
+    def enrich_10_code_repos(
+        dry_run: bool,
+        limit: int | None,
+        batch_size: int,
+        delay: float,
+        parallel: int,
+        retry_incomplete: bool,
+    ) -> None:
+        """Enrich papers with GitHub code repository URLs.
+
+        Two-phase lookup:
+        1. PWC Archive (bulk offline, ~300K paper->repo mappings)
+        2. HuggingFace Papers API (live, for papers not in PWC)
+
+        Only processes papers with arXiv source_id.
+
+        Examples:
+
+          # Count papers needing code repo enrichment
+          python -m src.cli.core_collect enrich-10-code-repos --dry-run
+
+          # Enrich all papers
+          python -m src.cli.core_collect enrich-10-code-repos
+
+          # Enrich first 50 papers
+          python -m src.cli.core_collect enrich-10-code-repos --limit 50
+
+          # Adjust HF API concurrency
+          python -m src.cli.core_collect enrich-10-code-repos --parallel 20
+        """
+        from src.core.enrichment.code_repos import CodeRepoEnricher
+
+        async def run_enrichment():
+            storage = QdrantStorage()
+            async with CodeRepoEnricher(
+                storage=storage,
+                batch_size=batch_size,
+                delay=delay,
+                max_concurrent=parallel,
+            ) as enricher:
+                if retry_incomplete:
+                    enricher.clear_checkpoint()
+                    click.echo("Checkpoint cleared — retrying code repo enrichment.")
+                progress = await enricher.enrich_code_repos(
+                    dry_run=dry_run,
+                    limit=limit,
+                )
+
+                click.echo(f"\nCode Repository Enrichment Results:")
+                click.echo(f"  Processed:      {progress.processed}")
+                click.echo(f"  Enriched:       {progress.enriched}")
+                click.echo(f"    PWC (arXiv):     {progress.pwc_hits}")
+                click.echo(f"    PWC (title):     {progress.pwc_title_hits}")
+                click.echo(f"    HuggingFace:     {progress.hf_hits}")
+                click.echo(f"  Not found:      {progress.not_found}")
+                click.echo(f"  Errors:         {progress.errors}")
+
+                if dry_run:
+                    click.echo(f"\n  Total papers to enrich: {progress.total_to_process}")
+                    click.echo("  (Dry run - no changes made)")
+
+        asyncio.run(run_enrichment())
+
+    @cli.command("clear-enrich-10-checkpoint")
+    def clear_enrich_10_checkpoint() -> None:
+        """Clear checkpoint for enrich-10 (code-repos).
+
+        Examples:
+
+          python -m src.cli.core_collect clear-enrich-10-checkpoint
+        """
+        from src.core.enrichment.code_repos import CodeRepoEnricher
+
+        enricher = CodeRepoEnricher()
+        enricher.clear_checkpoint()
+        click.echo("Enrich-10 (code repos) checkpoint cleared.")
