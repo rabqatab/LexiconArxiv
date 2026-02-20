@@ -238,7 +238,7 @@ results = client.query_points(
 
 ### Option A: Add Text Index on Collection Creation
 
-Update `src/core/storage.py`:
+Update `src/core/storage/base.py`:
 
 ```python
 from qdrant_client.models import TextIndexParams, TokenizerType

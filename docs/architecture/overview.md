@@ -399,7 +399,7 @@ User Query: "Recent LLM evaluation benchmarks"
 ## 7. Technology Stack
 
 ### 7.1 Backend
-- **Language**: Python 3.11+
+- **Language**: Python 3.12+
 - **Framework**: FastAPI
 - **Async**: asyncio, httpx
 - **Task Queue**: Celery + Redis
