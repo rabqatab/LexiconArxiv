@@ -936,6 +936,15 @@ uv run python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid --parallel
 
 # 5. Resolve TITLE:xxx refs from GROBID (fuzzy match via OpenAlex)
 uv run python -m src.cli.core_collect enrich-9-resolve-title-refs-via-openalex --parallel 3
+
+# 6. Code repository enrichment (PWC/HuggingFace)
+uv run python -m src.cli.core_collect enrich-10-code-repos --parallel 10
+
+# 7. GROBID code repo extraction (requires GROBID server)
+uv run python -m src.cli.core_collect enrich-11-code-repos-via-grobid --parallel 5
+
+# 8. GitHub API code repo search (set GITHUB_TOKEN for 30 req/min)
+uv run python -m src.cli.core_collect enrich-12-code-repos-via-github --batch-size 50
 ```
 
 ---
@@ -1193,7 +1202,12 @@ uv run python -m src.cli.core_collect resolve-refs
 # 5. Build citation graph metrics
 uv run python -m src.cli.core_collect build-cited-by
 
-# 6. Extract keywords (for BM25 search)
+# 6. Code repository enrichment
+uv run python -m src.cli.core_collect enrich-10-code-repos --parallel 10
+uv run python -m src.cli.core_collect enrich-11-code-repos-via-grobid --parallel 5
+uv run python -m src.cli.core_collect enrich-12-code-repos-via-github --batch-size 50
+
+# 7. Extract keywords (for BM25 search)
 uv run python -m src.cli.core_collect extract-keywords --llm --judge
 ```
 

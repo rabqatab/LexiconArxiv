@@ -16,6 +16,9 @@ The enrichment pipeline fetches missing metadata (citations, abstracts) for pape
 | 6 | `enrich-6-abstracts-by-doi-via-openalex` | OpenAlex | Papers with DOI, missing abstracts |
 | 7 | `enrich-8-metadata-by-stub-via-openalex` | OpenAlex | Stub paper metadata |
 | 8 | `enrich-9-resolve-title-refs-via-openalex` | OpenAlex | Resolve TITLE:xxx references |
+| 9 | `enrich-10-code-repos` | PWC / HuggingFace | Code repository URLs |
+| 10 | `enrich-11-code-repos-via-grobid` | GROBID | GitHub URLs from paper PDFs |
+| 11 | `enrich-12-code-repos-via-github` | GitHub API | GitHub search (arXiv ID + title) |
 
 ---
 
@@ -47,13 +50,16 @@ The enrichment pipeline fetches missing metadata (citations, abstracts) for pape
 
 ```
 src/core/enrichment/
-├── __init__.py          # Package exports
-├── base.py              # Base classes and mixins
-├── openalex.py          # OpenAlex enricher (PaperEnricher)
-├── crossref.py          # CrossRef enricher
-├── semantic_scholar.py  # Semantic Scholar enricher
-├── stub.py              # Stub paper enricher
-└── pdf.py               # PDF reference extraction via GROBID
+├── __init__.py            # Package exports
+├── base.py                # Base classes and mixins
+├── openalex.py            # OpenAlex enricher (PaperEnricher)
+├── crossref.py            # CrossRef enricher
+├── semantic_scholar.py    # Semantic Scholar enricher
+├── stub.py                # Stub paper enricher
+├── pdf.py                 # PDF reference extraction via GROBID
+├── code_repos.py          # Code repo enrichment (PWC/HuggingFace)
+├── grobid_code_repos.py   # GitHub URL extraction from PDFs via GROBID
+└── github_search.py       # GitHub API search for code repositories
 ```
 
 ### Class Hierarchy
@@ -408,7 +414,110 @@ Module: `src/core/enrichment/stub.py`
 
 ---
 
-## 7. Data Quality Dashboard
+## 7. Code Repository Enrichment (Steps 10, 11, 12)
+
+### Overview
+
+The code repository enrichment pipeline finds GitHub repositories associated with papers using three sequential strategies:
+
+| Step | Source | Strategy | Hit Rate |
+|------|--------|----------|----------|
+| enrich-10 | PWC Archive + HuggingFace | arXiv ID + title lookup | ~13% |
+| enrich-11 | GROBID Full-Text | GitHub URL extraction from PDFs | Varies |
+| enrich-12 | GitHub API | arXiv ID in README + title search | Varies |
+
+### Data Flow
+
+```
+Papers without code_repositories
+       │
+  enrich-10: PWC Archive + HuggingFace API
+       │
+  enrich-11: GROBID Full-Text → GitHub URL extraction
+  (requires: pdf_url + GROBID server running)
+       │
+  enrich-12: GitHub API Search
+  Tier A: arXiv ID in README.md (high precision)
+  Tier B: Paper title search (validated)
+```
+
+### Step 10: PWC Archive + HuggingFace (Primary)
+
+Looks up code repositories from Papers With Code (PWC) Archive and HuggingFace Papers API using arXiv IDs and paper titles.
+
+```bash
+# Preview
+uv run python -m src.cli.core_collect enrich-10-code-repos --dry-run
+
+# Run
+uv run python -m src.cli.core_collect enrich-10-code-repos --parallel 10
+```
+
+### Step 11: GROBID Full-Text Extraction
+
+Downloads paper PDFs, processes full text via GROBID, and extracts GitHub URLs with section/context-based classification heuristics.
+
+**GitHub URL Classification:**
+- Blocklist (~40 well-known library repos) filters out common dependencies (pytorch/pytorch, tensorflow/tensorflow, etc.)
+- Section-based scoring: +3 for own-code phrases, +2 for abstract/conclusion, -2 for references section
+- URLs with score >= 2 are marked `is_official=True`
+
+**Prerequisites:** GROBID server running (`docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.0`)
+
+```bash
+# Preview
+uv run python -m src.cli.core_collect enrich-11-code-repos-via-grobid --dry-run
+
+# Run (low concurrency recommended for GROBID)
+uv run python -m src.cli.core_collect enrich-11-code-repos-via-grobid --parallel 5
+```
+
+### Step 12: GitHub API Search
+
+Two-tier GitHub API search for papers still missing code repositories:
+
+- **Tier A**: Search for arXiv ID in README.md files (high precision, `is_official=True`)
+- **Tier B**: Title search with validation heuristics (fork check, temporal check, title similarity >= 40%)
+
+**Rate Limits:** 30 search req/min with `GITHUB_TOKEN`, 10/min without.
+
+```bash
+# Preview
+uv run python -m src.cli.core_collect enrich-12-code-repos-via-github --dry-run
+
+# Run
+uv run python -m src.cli.core_collect enrich-12-code-repos-via-github --batch-size 50
+```
+
+### Repo Dict Structure
+
+All code repo enrichers write the same format:
+```json
+{
+    "url": "https://github.com/owner/repo",
+    "is_official": true,
+    "framework": null,
+    "stars": null,
+    "source": "pwc_archive|huggingface|grobid_fulltext|github_search_code|github_search_repo"
+}
+```
+
+### Implementation
+
+| Module | File |
+|--------|------|
+| PWC/HF Enricher | `src/core/enrichment/code_repos.py` |
+| GROBID Extraction | `src/core/enrichment/grobid_code_repos.py` |
+| GitHub Search | `src/core/enrichment/github_search.py` |
+
+Checkpoints:
+- `data/core/checkpoints/code_repo_enrichment.json`
+- `data/core/checkpoints/grobid_code_repo_extraction.json`
+- `data/core/checkpoints/github_search_enrichment.json`
+
+---
+
+## 8. Data Quality Dashboard
 
 Monitor enrichment coverage with the data quality CLI command:
 
@@ -458,7 +567,7 @@ Abstract enrichment: 1,330 papers can be enriched (have DOI, no abstract)
 
 ---
 
-## 8. Recommended Enrichment Pipeline Order
+## 9. Recommended Enrichment Pipeline Order
 
 For maximum coverage, run enrichment sources in this order:
 
@@ -492,11 +601,20 @@ uv run python -m src.cli.core_collect enrich-8-metadata-by-stub-via-openalex --l
 
 # 10. (Optional) Resolve TITLE:xxx references
 uv run python -m src.cli.core_collect enrich-9-resolve-title-refs-via-openalex --parallel 3
+
+# 11. Code repository enrichment (PWC/HuggingFace)
+uv run python -m src.cli.core_collect enrich-10-code-repos --parallel 10
+
+# 12. GROBID code repo extraction (requires GROBID server)
+uv run python -m src.cli.core_collect enrich-11-code-repos-via-grobid --parallel 5
+
+# 13. GitHub API code repo search
+uv run python -m src.cli.core_collect enrich-12-code-repos-via-github --batch-size 50
 ```
 
 ---
 
-## 9. Checkpoint Management
+## 10. Checkpoint Management
 
 Each enrichment step uses checkpoints for resumable processing:
 
@@ -508,6 +626,9 @@ uv run python -m src.cli.core_collect clear-enrich-4-checkpoint
 uv run python -m src.cli.core_collect clear-enrich-5-checkpoint
 uv run python -m src.cli.core_collect clear-enrich-6-checkpoint
 uv run python -m src.cli.core_collect clear-enrich-9-checkpoint
+uv run python -m src.cli.core_collect clear-enrich-10-checkpoint
+uv run python -m src.cli.core_collect clear-enrich-11-checkpoint
+uv run python -m src.cli.core_collect clear-enrich-12-checkpoint
 uv run python -m src.cli.core_collect clear-keyword-checkpoint
 ```
 
@@ -515,7 +636,7 @@ Checkpoint files are stored in `data/core/checkpoints/`.
 
 ---
 
-## 10. Environment Variables
+## 11. Environment Variables
 
 | Variable | Description | Required |
 |----------|-------------|----------|
@@ -523,6 +644,7 @@ Checkpoint files are stored in `data/core/checkpoints/`.
 | `OPENALEX_EMAIL` | Email for OpenAlex polite pool fallback (10 req/sec) | Yes |
 | `S2_API_KEY` | Semantic Scholar API key | No |
 | `CROSSREF_EMAIL` | Email for CrossRef polite pool | No |
+| `GITHUB_TOKEN` | GitHub personal access token (30 req/min vs 10/min) | No |
 
 ---
 

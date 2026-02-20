@@ -155,6 +155,11 @@ uv run python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --p
 # Resolve TITLE:xxx refs from GROBID (fuzzy match via OpenAlex)
 uv run python -m src.cli.core_collect enrich-9-resolve-title-refs-via-openalex --parallel 3
 
+# Code repository enrichment (find GitHub repos for papers)
+uv run python -m src.cli.core_collect enrich-10-code-repos --parallel 10             # PWC + HuggingFace
+uv run python -m src.cli.core_collect enrich-11-code-repos-via-grobid --parallel 5    # GROBID PDF extraction
+uv run python -m src.cli.core_collect enrich-12-code-repos-via-github --batch-size 50 # GitHub API search
+
 # Retry enrichment for papers still missing data after rate limits
 uv run python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex --retry-incomplete
 uv run python -m src.cli.core_collect enrich-3-refs-and-abstracts-by-title-via-openalex --retry-incomplete
@@ -238,7 +243,10 @@ lexiconarxiv/
 │   │   │   ├── crossref.py      # CrossRef (ACM/Springer papers)
 │   │   │   ├── semantic_scholar.py  # S2 fallback
 │   │   │   ├── stub.py          # Stub paper enrichment with dedup
-│   │   │   └── pdf.py           # PDF reference extraction
+│   │   │   ├── pdf.py           # PDF reference extraction
+│   │   │   ├── code_repos.py    # Code repos via PWC/HuggingFace
+│   │   │   ├── grobid_code_repos.py  # GitHub URLs from PDFs via GROBID
+│   │   │   └── github_search.py # GitHub API code repo search
 │   │   ├── resolution/          # Reference resolution
 │   │   │   ├── normalizer.py    # ID normalization (DOI, arXiv, OpenAlex)
 │   │   │   └── resolver.py      # Citation graph builder
@@ -264,6 +272,7 @@ lexiconarxiv/
 
 ## Recent Updates (Feb 2026)
 
+- **Code Repository Enrichment**: 3-tier strategy (PWC/HuggingFace, GROBID PDF extraction, GitHub API search) with URL classification heuristics
 - **Abstract Labeling**: Sentence-level rhetorical classification (7 roles) using Gemini/Ollama with structured JSON output
 - **Multi-Key Gemini**: Round-robin rotation across multiple comma-separated Gemini API keys for rate limit distribution
 - **LLM-First Keywords**: Gemini/Ollama as primary keyword extraction with regex + KeyBERT fallback, LLM judge validation, retry with exponential backoff
@@ -351,6 +360,7 @@ QDRANT_URL=http://localhost:6333
 QDRANT_COLLECTION=lexicon_arxiv        # Optional, default collection name
 GEMINI_API_KEYS=key1,key2,...           # Comma-separated for round-robin (keywords + labeling)
 OLLAMA_BASE_URL=http://localhost:11434 # Local LLM (default)
+GITHUB_TOKEN=ghp_...                   # GitHub token for code repo search (30 req/min vs 10/min)
 ```
 
 ## License

@@ -307,6 +307,75 @@ uv run python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid --dry-run
 uv run python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid --parallel 2
 ```
 
+### enrich-10-code-repos
+
+Find code repositories for papers via PWC Archive and HuggingFace Papers API.
+
+```bash
+# Preview
+uv run python -m src.cli.core_collect enrich-10-code-repos --dry-run
+
+# Run with parallel requests
+uv run python -m src.cli.core_collect enrich-10-code-repos --parallel 10
+
+# With limit
+uv run python -m src.cli.core_collect enrich-10-code-repos --limit 500
+```
+
+### enrich-11-code-repos-via-grobid
+
+Extract GitHub URLs from paper PDFs using GROBID full-text extraction with section/context-based classification.
+
+```bash
+# Start GROBID first
+docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.0
+
+# Preview
+uv run python -m src.cli.core_collect enrich-11-code-repos-via-grobid --dry-run
+
+# Run
+uv run python -m src.cli.core_collect enrich-11-code-repos-via-grobid --parallel 5
+
+# Custom GROBID URL
+uv run python -m src.cli.core_collect enrich-11-code-repos-via-grobid --grobid-url http://myserver:8070
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--dry-run` | Count papers without extracting |
+| `-n, --limit N` | Max papers to process |
+| `-p, --parallel N` | Concurrent extractions (default: 5) |
+| `--batch-size N` | Batch size (default: 20) |
+| `--grobid-url URL` | GROBID server URL (default: `http://localhost:8070`) |
+| `--retry-incomplete` | Re-process papers (clears checkpoint) |
+
+### enrich-12-code-repos-via-github
+
+Search GitHub API for code repositories matching papers. Two-tier strategy: Tier A (arXiv ID in README) and Tier B (title search with validation).
+
+```bash
+# Preview
+uv run python -m src.cli.core_collect enrich-12-code-repos-via-github --dry-run
+
+# Run
+uv run python -m src.cli.core_collect enrich-12-code-repos-via-github --batch-size 50
+
+# With limit
+uv run python -m src.cli.core_collect enrich-12-code-repos-via-github --limit 200
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--dry-run` | Count papers without searching |
+| `-n, --limit N` | Max papers to process |
+| `--batch-size N` | Batch size (default: 50) |
+| `--github-token` | Override `GITHUB_TOKEN` env var |
+| `--retry-incomplete` | Re-process papers (clears checkpoint) |
+
+**Rate Limits:** 30 search req/min with `GITHUB_TOKEN`, 10/min without.
+
 ---
 
 ## Reference Resolution Commands
@@ -663,6 +732,30 @@ Clear checkpoint for enrich-7 (abstracts-by-pdf-via-grobid).
 uv run python -m src.cli.core_collect clear-enrich-7-checkpoint
 ```
 
+### clear-enrich-10-checkpoint
+
+Clear checkpoint for enrich-10 (code-repos via PWC/HuggingFace).
+
+```bash
+uv run python -m src.cli.core_collect clear-enrich-10-checkpoint
+```
+
+### clear-enrich-11-checkpoint
+
+Clear checkpoint for enrich-11 (code-repos-via-grobid).
+
+```bash
+uv run python -m src.cli.core_collect clear-enrich-11-checkpoint
+```
+
+### clear-enrich-12-checkpoint
+
+Clear checkpoint for enrich-12 (code-repos-via-github).
+
+```bash
+uv run python -m src.cli.core_collect clear-enrich-12-checkpoint
+```
+
 ### clear-resolve-checkpoint
 
 Clear reference resolution checkpoint.
@@ -698,6 +791,7 @@ uv run python -m src.cli.core_collect clear-keyword-checkpoint
 | `GEMINI_API_KEY` | Fallback for `GEMINI_API_KEYS` (singular) | No |
 | `GOOGLE_API_KEY` | Fallback (legacy) | No |
 | `OLLAMA_BASE_URL` | Ollama server URL (default: `http://localhost:11434`) | No |
+| `GITHUB_TOKEN` | GitHub personal access token for code repo search (30 req/min vs 10/min) | No |
 
 ---
 

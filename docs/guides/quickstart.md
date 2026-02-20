@@ -99,14 +99,15 @@ uv run python -m src.cli.core_collect init-storage
 ./scripts/run_full_pipeline.sh --since-year 2018 --include-workshops
 ```
 
-This runs all 7 stages:
+This runs all 8 stages:
 1. **Collection** - Crawl papers from all sources
 2. **Deduplication** - Remove cross-source duplicates
 3. **Enrichment** - Add citations and abstracts via OpenAlex
 4. **Resolution** - Resolve references to internal IDs
 5. **Graph** - Build citation graph (cited_by)
-6. **Keyword Extraction** - Extract acronyms and semantic keywords for BM25 search
-7. **Abstract Labeling** - Classify abstract sentences into rhetorical roles
+6. **Code Repos** - Find GitHub repositories via PWC/HuggingFace/GROBID/GitHub API
+7. **Keyword Extraction** - Extract acronyms and semantic keywords for BM25 search
+8. **Abstract Labeling** - Classify abstract sentences into rhetorical roles
 
 ### Option B: Step by Step
 
@@ -133,13 +134,18 @@ uv run python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --p
 # 7. Resolve references (build citation graph)
 uv run python -m src.cli.core_collect resolve-refs
 
-# 8. Extract keywords (for BM25 search)
+# 8. Code repository enrichment
+uv run python -m src.cli.core_collect enrich-10-code-repos --parallel 10
+uv run python -m src.cli.core_collect enrich-11-code-repos-via-grobid --parallel 5
+uv run python -m src.cli.core_collect enrich-12-code-repos-via-github --batch-size 50
+
+# 9. Extract keywords (for BM25 search)
 uv run python -m src.cli.core_collect extract-keywords --llm --judge
 
-# 9. Label abstracts (rhetorical role classification)
+# 10. Label abstracts (rhetorical role classification)
 uv run python -m src.cli.core_collect label-abstracts
 
-# 10. Check final status
+# 11. Check final status
 uv run python -m src.cli.core_collect status
 uv run python -m src.cli.core_collect ref-stats
 uv run python -m src.cli.core_collect keyword-stats

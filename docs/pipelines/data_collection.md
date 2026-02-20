@@ -828,7 +828,7 @@ core_coverage = Gauge('core_coverage', 'Core coverage by venue', ['venue'])
 
 **Constants Module**: Centralized API URLs and environment variable helpers:
 - `OPENALEX_BASE_URL`, `CROSSREF_BASE_URL`, `S2_BASE_URL`
-- `get_openalex_email()`, `get_openalex_api_key()`, `get_openalex_api_keys()`, `get_crossref_email()`, `get_s2_api_key()`
+- `get_openalex_email()`, `get_openalex_api_key()`, `get_openalex_api_keys()`, `get_crossref_email()`, `get_s2_api_key()`, `get_github_token()`
 - `get_qdrant_url()`, `get_qdrant_collection()`
 
 ### 11.2 Crawler Modules
@@ -877,6 +877,9 @@ Separate from the batch crawlers, the `src/collectors/` module provides on-deman
 | Semantic Scholar Enricher | `src/core/enrichment/semantic_scholar.py` | ✅ Complete |
 | Stub Enricher | `src/core/enrichment/stub.py` | ✅ Complete |
 | PDF Reference Extractor | `src/core/enrichment/pdf.py` | ✅ Complete |
+| Code Repo Enricher (PWC/HF) | `src/core/enrichment/code_repos.py` | ✅ Complete |
+| GROBID Code Repo Extractor | `src/core/enrichment/grobid_code_repos.py` | ✅ Complete |
+| GitHub Search Enricher | `src/core/enrichment/github_search.py` | ✅ Complete |
 
 **Enrichment Architecture**: See [Enrichment Pipeline](./enrichment.md#8-enrichment-architecture) for details on `BaseEnricher`, `OpenAlexMixin`, and `CrossRefMixin`.
 
