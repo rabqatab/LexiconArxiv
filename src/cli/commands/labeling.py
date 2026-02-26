@@ -132,10 +132,14 @@ async def _run_labeling_loop(
     dry_run: bool,
 ) -> tuple[int, int, list[tuple[str, str, dict]]]:
     """Async labeling loop."""
-    total_eligible = storage.count_papers_for_abstract_labeling(skip_existing=not force)
-    if limit:
-        total_eligible = min(total_eligible, limit)
-    click.echo(f"Papers to process: {total_eligible:,}\n")
+    try:
+        total_eligible = storage.count_papers_for_abstract_labeling(skip_existing=not force)
+        if limit:
+            total_eligible = min(total_eligible, limit)
+        click.echo(f"Papers to process: {total_eligible:,}\n")
+    except Exception:
+        total_eligible = None
+        click.echo("Papers to process: (count unavailable)\n")
 
     processed = 0
     labeled = 0
@@ -189,8 +193,11 @@ async def _run_labeling_loop(
 
         offset = next_offset
 
-        pct = processed / total_eligible * 100 if total_eligible else 0
-        click.echo(f"  Processed {processed:,}/{total_eligible:,} ({pct:.1f}%)")
+        if total_eligible:
+            pct = processed / total_eligible * 100
+            click.echo(f"  Processed {processed:,}/{total_eligible:,} ({pct:.1f}%)")
+        else:
+            click.echo(f"  Processed {processed:,} papers...")
 
         if limit and processed >= limit:
             break
