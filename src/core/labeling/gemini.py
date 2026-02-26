@@ -28,8 +28,8 @@ class GeminiAbstractLabeler(BaseAbstractLabeler):
     def __init__(
         self,
         model: str = "gemini-3-flash-preview",
-        max_concurrent: int = 10,
-        delay: float = 0.1,
+        max_concurrent: int = 200,
+        delay: float = 0.0,
         max_retries: int = 5,
     ):
         api_keys = get_gemini_api_keys()

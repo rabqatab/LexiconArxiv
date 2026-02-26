@@ -15,7 +15,7 @@ def register_commands(cli: click.Group):
     @cli.command("label-abstracts")
     @click.option("--dry-run", is_flag=True, help="Preview without saving")
     @click.option("--limit", type=int, help="Maximum papers to process")
-    @click.option("--batch-size", default=100, help="Papers per batch (default: 100)")
+    @click.option("--batch-size", default=500, help="Papers per batch (default: 500)")
     @click.option("--force", is_flag=True, help="Re-label papers that already have abstract_structure")
     @click.option(
         "--llm-backend",
