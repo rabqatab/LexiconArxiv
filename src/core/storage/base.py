@@ -59,9 +59,9 @@ class QdrantStorage:
 
         # Initialize client
         if self.api_key:
-            self.client = QdrantClient(url=self.url, api_key=self.api_key)
+            self.client = QdrantClient(url=self.url, api_key=self.api_key, timeout=60)
         else:
-            self.client = QdrantClient(url=self.url)
+            self.client = QdrantClient(url=self.url, timeout=60)
 
         # Compose helper objects
         self.queries = PaperQuery(self.client, self.collection_name)
