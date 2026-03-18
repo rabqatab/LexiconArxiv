@@ -6,8 +6,11 @@ from dataclasses import dataclass, field
 
 import httpx
 
+from qdrant_client import models as qdrant_models
+
 from src.core.constants import (
     DEFAULT_EMBEDDING_MODEL,
+    EMBEDDING_VECTOR_NAME,
     EMBEDDING_VECTOR_SIZE,
     get_ollama_base_url,
 )
@@ -107,3 +110,55 @@ class PaperEmbedder:
         except Exception as e:
             logger.error(f"Failed to check Ollama models: {e}")
             return False
+
+    async def embed_and_upsert_batch(
+        self,
+        papers: list[tuple[str, dict]],
+        storage: "QdrantStorage",
+        dense_vector_name: str = EMBEDDING_VECTOR_NAME,
+    ) -> int:
+        """Embed abstracts and update vectors in Qdrant (preserves payloads).
+
+        Uses client.update_vectors() — NOT upsert — to attach vectors
+        to existing points without touching their payloads.
+
+        Args:
+            papers: List of (point_id, payload) tuples. payload must have "abstract".
+            storage: QdrantStorage instance.
+            dense_vector_name: Name of the dense vector in Qdrant.
+
+        Returns:
+            Number of points successfully embedded and updated.
+        """
+        # Prepend instruction prefix for Qwen3 retrieval quality
+        instruction = "Retrieve academic papers: "
+        abstracts = [instruction + p[1]["abstract"] for p in papers]
+
+        # Get dense embeddings from Ollama
+        vectors = await self.embed_texts(abstracts)
+        if vectors is None:
+            logger.error("Failed to get embeddings for batch")
+            return 0
+
+        # Build PointVectors for update_vectors (preserves existing payloads)
+        point_vectors = [
+            qdrant_models.PointVectors(
+                id=point_id,
+                vector={
+                    dense_vector_name: dense_vector,
+                    "bm25": qdrant_models.Document(
+                        text=payload["abstract"],
+                        model="qdrant/bm25",
+                    ),
+                },
+            )
+            for (point_id, payload), dense_vector in zip(papers, vectors)
+        ]
+
+        # Update vectors only — payloads are untouched
+        storage.client.update_vectors(
+            collection_name=storage.collection_name,
+            points=point_vectors,
+        )
+
+        return len(point_vectors)
