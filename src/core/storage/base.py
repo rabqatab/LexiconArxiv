@@ -354,6 +354,37 @@ class QdrantStorage:
     ) -> dict[str, dict]:
         return self.readers.get_all_papers_for_index(fields, limit)
 
+    def get_papers_for_embedding(
+        self,
+        limit: int = 100,
+        offset: str | None = None,
+    ) -> tuple[list[tuple[str, dict]], str | None]:
+        """Get non-stub papers with abstracts for embedding."""
+        return self.readers.get_papers_for_embedding(limit, offset)
+
+    def count_papers_for_embedding(self) -> int:
+        """Count non-stub papers with non-empty abstracts."""
+        return self.client.count(
+            self.collection_name,
+            count_filter=models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="is_stub",
+                        match=models.MatchValue(value=False),
+                    ),
+                ],
+                must_not=[
+                    models.IsNullCondition(
+                        is_null=models.PayloadField(key="abstract"),
+                    ),
+                    models.FieldCondition(
+                        key="abstract",
+                        match=models.MatchValue(value=""),
+                    ),
+                ],
+            ),
+        ).count
+
     # =========================================================================
     # Writer Facade (delegated to BatchWriter)
     # =========================================================================

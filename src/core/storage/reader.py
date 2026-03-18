@@ -569,6 +569,43 @@ class PaperReader:
 
         return [(str(p.id), p.payload) for p in results], next_offset
 
+    def get_papers_for_embedding(
+        self,
+        limit: int = 100,
+        offset: str | None = None,
+    ) -> tuple[list[tuple[str, dict]], str | None]:
+        """Get non-stub papers with abstracts for embedding.
+
+        Returns (list of (point_id, payload), next_offset).
+        """
+        results, next_offset = self.client.scroll(
+            collection_name=self.collection_name,
+            scroll_filter=models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="is_stub",
+                        match=models.MatchValue(value=False),
+                    ),
+                ],
+                must_not=[
+                    models.IsNullCondition(
+                        is_null=models.PayloadField(key="abstract"),
+                    ),
+                    models.FieldCondition(
+                        key="abstract",
+                        match=models.MatchValue(value=""),
+                    ),
+                ],
+            ),
+            limit=limit,
+            offset=offset,
+            with_payload=["title", "abstract"],
+        )
+        return [
+            (str(point.id), point.payload)
+            for point in results
+        ], next_offset
+
     def get_all_papers_for_index(
         self,
         fields: list[str],
