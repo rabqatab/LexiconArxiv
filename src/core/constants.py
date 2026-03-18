@@ -58,6 +58,12 @@ GITHUB_TOKEN_ENV = "GITHUB_TOKEN"
 OLLAMA_BASE_URL_ENV = "OLLAMA_BASE_URL"
 DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434"
 
+# Embedding model
+DEFAULT_EMBEDDING_MODEL = "qwen3-embedding:8b"
+EMBEDDING_VECTOR_NAME = "abstract-qwen3-8b"
+EMBEDDING_VECTOR_SIZE = 1024
+EMBEDDING_FULL_SIZE = 4096  # Ollama returns full dim, truncate client-side
+
 
 # =============================================================================
 # Helper Functions
