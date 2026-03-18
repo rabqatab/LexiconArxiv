@@ -170,3 +170,111 @@ class TestEmbedAndUpsert:
         assert len(point.vector["abstract-qwen3-8b"]) == 4  # Truncated from 8d mock
         # CRITICAL: Verify payloads were preserved (not wiped)
         assert point.payload["title"] == "Paper 1"
+
+
+@pytest.mark.integration
+class TestEmbeddingIntegration:
+    """End-to-end test: embed papers and verify hybrid search works.
+
+    Requires: Ollama running with qwen3-embedding:8b pulled.
+    Run with: uv run pytest tests/test_embedder.py -m integration -v
+    """
+
+    def setup_method(self):
+        self.collection = "_test_e2e_embedding"
+        self.client = QdrantClient(url="http://localhost:6333")
+        try:
+            self.client.delete_collection(self.collection)
+        except Exception:
+            pass
+        self.client.create_collection(
+            collection_name=self.collection,
+            vectors_config={
+                "abstract-qwen3-8b": models.VectorParams(
+                    size=1024, distance=models.Distance.COSINE
+                ),
+            },
+            sparse_vectors_config={
+                "bm25": models.SparseVectorParams(modifier=models.Modifier.IDF),
+            },
+        )
+        self.client.upsert(
+            collection_name=self.collection,
+            points=[
+                models.PointStruct(
+                    id="e2e00001-0000-0000-0000-000000000001",
+                    vector={},
+                    payload={
+                        "title": "Attention Is All You Need",
+                        "abstract": "The dominant sequence transduction models are based on complex recurrent or convolutional neural networks that include an encoder and a decoder. The best performing models also connect the encoder and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms.",
+                        "is_stub": False,
+                    },
+                ),
+                models.PointStruct(
+                    id="e2e00001-0000-0000-0000-000000000002",
+                    vector={},
+                    payload={
+                        "title": "BERT: Pre-training of Deep Bidirectional Transformers",
+                        "abstract": "We introduce a new language representation model called BERT which stands for Bidirectional Encoder Representations from Transformers. BERT is designed to pre-train deep bidirectional representations from unlabeled text by jointly conditioning on both left and right context.",
+                        "is_stub": False,
+                    },
+                ),
+            ],
+        )
+
+    def teardown_method(self):
+        try:
+            self.client.delete_collection(self.collection)
+        except Exception:
+            pass
+
+    @pytest.mark.asyncio
+    async def test_embed_and_hybrid_search(self):
+        from src.core.embedding.embedder import PaperEmbedder
+        from src.core.storage.base import QdrantStorage
+
+        storage = QdrantStorage(collection_name=self.collection)
+        embedder = PaperEmbedder(target_dim=1024, max_concurrent=1)
+
+        async with embedder:
+            # Check model available
+            if not await embedder.check_model_available():
+                pytest.skip("Ollama qwen3-embedding:8b not available")
+
+            # Embed papers
+            papers = [
+                ("e2e00001-0000-0000-0000-000000000001", {"abstract": "The dominant sequence transduction models are based on complex recurrent or convolutional neural networks that include an encoder and a decoder. The best performing models also connect the encoder and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms."}),
+                ("e2e00001-0000-0000-0000-000000000002", {"abstract": "We introduce a new language representation model called BERT which stands for Bidirectional Encoder Representations from Transformers. BERT is designed to pre-train deep bidirectional representations from unlabeled text by jointly conditioning on both left and right context."}),
+            ]
+            count = await embedder.embed_and_upsert_batch(papers=papers, storage=storage)
+            assert count == 2
+
+            # Query: "transformer attention mechanism" should rank Attention paper first
+            query_vectors = await embedder.embed_texts(["Retrieve academic papers: transformer attention mechanism"])
+            assert query_vectors is not None
+
+            results = self.client.query_points(
+                collection_name=self.collection,
+                prefetch=[
+                    models.Prefetch(
+                        query=query_vectors[0],
+                        using="abstract-qwen3-8b",
+                        limit=10,
+                    ),
+                    models.Prefetch(
+                        query=models.Document(
+                            text="transformer attention mechanism",
+                            model="qdrant/bm25",
+                        ),
+                        using="bm25",
+                        limit=10,
+                    ),
+                ],
+                query=models.FusionQuery(fusion=models.Fusion.RRF),
+                limit=2,
+                with_payload=True,
+            )
+
+            assert len(results.points) == 2
+            # Attention paper should rank first for "transformer attention mechanism"
+            assert results.points[0].payload["title"] == "Attention Is All You Need"
