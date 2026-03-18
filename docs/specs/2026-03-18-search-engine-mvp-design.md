@@ -76,12 +76,13 @@ The existing `lexicon_arxiv` collection was created with `vectors_config={}` (pa
 
 This migration preserves all existing data while enabling both dense and sparse vector search. The migration script is a one-time operation (~10-15 minutes for 1.87M points).
 
-**BM25 approach:** Qdrant 1.16 supports server-side BM25 via sparse vectors with `Modifier.IDF`. At index time, abstract text is tokenized and stored as sparse vectors. At query time, Qdrant scores them using BM25. This participates in RRF fusion natively — unlike `TextIndexParams` which only supports binary filter matching.
+**BM25 approach:** Qdrant 1.16 supports server-side BM25 via the `qdrant/bm25` inference model. At upsert time, pass `Document(text=abstract, model="qdrant/bm25")` as the sparse vector — Qdrant tokenizes and stores it automatically. At query time, pass `Document(text=query, model="qdrant/bm25")` — Qdrant scores using BM25 with IDF. No client-side tokenization needed. This participates in RRF fusion natively.
 
 ### 3.3 Vector upload
 
-- After migration, use `client.update_vectors()` to attach dense vectors to existing points
-- BM25 sparse vectors for `abstract` text are generated and uploaded in the same embedding pipeline pass
+- Dense + sparse vectors are upserted together in a single `client.upsert()` call per batch:
+  - Dense: Qwen3-8B embedding (1024d, truncated client-side from 4096d via MRL)
+  - Sparse: `models.Document(text=abstract, model="qdrant/bm25")` — server-side BM25 tokenization
 - Ollama's `/api/embed` returns full 4096d output — **client-side truncation to the first 1024 dimensions** is required (Ollama does not support MRL truncation natively). This is valid because Qwen3-Embedding was trained with Matryoshka Representation Learning.
 
 ### 3.4 Batch embedding
@@ -89,7 +90,7 @@ This migration preserves all existing data while enabling both dense and sparse 
 - New module: `src/core/embedding/embedder.py`
 - Async batch embedding via `httpx` POST to Ollama `/api/embed` endpoint (consistent with existing Ollama usage in `src/core/keyword/ollama.py` and `src/core/labeling/ollama.py` — no `ollama` Python SDK)
 - Dense vectors: Qwen3-8B via Ollama, truncate 4096d → 1024d client-side
-- Sparse vectors: tokenize abstract text and compute term frequencies for Qdrant's server-side BM25 (IDF modifier handles the scoring)
+- Sparse vectors: Qdrant server-side BM25 via `Document(text=abstract, model="qdrant/bm25")` — no client-side tokenization
 - Batch size: 32-64 abstracts per request
 - Concurrency: multiple parallel Ollama requests via `asyncio.gather`
 - Checkpoint/resume: track embedded paper IDs in file-based checkpoint (existing pattern)
@@ -171,11 +172,10 @@ Response:
 ### 4.3 Search orchestration
 
 1. Embed user query via `httpx` to Ollama `/api/embed` (Qwen3-8B, truncate to 1024d) — ~50-100ms
-2. Tokenize query text for BM25 sparse vector
-3. Qdrant hybrid search via `query_points` with `prefetch`:
-   - Dense sub-query: named vector `"abstract-qwen3-8b"` (cosine similarity)
-   - Sparse sub-query: `"bm25"` sparse vector (server-side BM25 scoring with IDF modifier)
-4. Fusion: `RrfQuery` (Reciprocal Rank Fusion, k=60)
+2. Qdrant hybrid search via `query_points` with `prefetch`:
+   - Dense sub-query: query vector on named vector `"abstract-qwen3-8b"` (cosine similarity)
+   - Sparse sub-query: `Document(text=query, model="qdrant/bm25")` on `"bm25"` (server-side BM25 scoring)
+3. Fusion: `FusionQuery(fusion=Fusion.RRF)`
 4. Apply payload filters (venue, year, tier)
 5. Return ranked results with score breakdown
 
@@ -196,7 +196,7 @@ Target latency: <2 seconds P95 (per PRD).
 ### 4.4.1 Ollama failure handling
 
 - **Startup:** Health check via `GET /api/tags` — verify Ollama is reachable AND `qwen3-embedding:8b` appears in the model list. Log warning if unavailable but allow API to start.
-- **Query time:** 5-second timeout on query embedding. If Ollama is down or times out, fall back to BM25-only sparse search on the `"bm25"` vector (degraded but functional — query text is tokenized client-side, no LLM needed). Response includes `"search_mode": "hybrid"` or `"search_mode": "bm25_only"` to indicate which mode was used.
+- **Query time:** 5-second timeout on query embedding. If Ollama is down or times out, fall back to BM25-only search via `Document(text=query, model="qdrant/bm25")` on the `"bm25"` vector (degraded but functional — Qdrant handles tokenization server-side, no LLM needed). Response includes `"search_mode": "hybrid"` or `"search_mode": "bm25_only"` to indicate which mode was used.
 
 ### 4.5 Web UI
 
