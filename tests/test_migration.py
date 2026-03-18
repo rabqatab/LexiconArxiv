@@ -1,5 +1,6 @@
 from qdrant_client import QdrantClient, models
 from src.core.storage.base import QdrantStorage
+from src.core.embedding.migration import CollectionMigrator
 
 
 class TestEnsureCollectionWithVectors:
@@ -92,3 +93,67 @@ class TestGetPapersForEmbedding:
         assert len(papers) == 1
         point_id, payload = papers[0]
         assert payload["title"] == "Paper 1"
+
+
+class TestCollectionMigrator:
+    def setup_method(self):
+        self.client = QdrantClient(url="http://localhost:6333")
+        self.old_name = "_test_old_collection"
+        self.new_name = "_test_new_collection"
+        for name in [self.old_name, self.new_name]:
+            try:
+                self.client.delete_collection(name)
+            except Exception:
+                pass
+
+    def teardown_method(self):
+        for name in [self.old_name, self.new_name]:
+            try:
+                self.client.delete_collection(name)
+            except Exception:
+                pass
+
+    def test_migrates_points_preserving_ids_and_payloads(self):
+        # Create old payload-only collection
+        self.client.create_collection(
+            collection_name=self.old_name,
+            vectors_config={},
+        )
+        self.client.upsert(
+            collection_name=self.old_name,
+            points=[
+                models.PointStruct(
+                    id="aaaaaaaa-1111-2222-3333-444444444444",
+                    vector={},
+                    payload={"title": "Test Paper 1", "abstract": "About ML", "is_core": True},
+                ),
+                models.PointStruct(
+                    id="bbbbbbbb-1111-2222-3333-444444444444",
+                    vector={},
+                    payload={"title": "Test Paper 2", "abstract": "About NLP", "is_stub": True},
+                ),
+            ],
+        )
+
+        migrator = CollectionMigrator(
+            url="http://localhost:6333",
+            old_collection=self.old_name,
+            new_collection=self.new_name,
+        )
+        stats = migrator.migrate()
+
+        assert stats["points_migrated"] == 2
+
+        # Verify new collection has correct vector config
+        info = self.client.get_collection(self.new_name)
+        assert "abstract-qwen3-8b" in info.config.params.vectors
+
+        # Verify points preserved
+        result = self.client.scroll(self.new_name, limit=10, with_payload=True)
+        points = result[0]
+        assert len(points) == 2
+        ids = {str(p.id) for p in points}
+        assert "aaaaaaaa-1111-2222-3333-444444444444" in ids
+        payloads = {p.payload["title"] for p in points}
+        assert "Test Paper 1" in payloads
+        assert "Test Paper 2" in payloads
