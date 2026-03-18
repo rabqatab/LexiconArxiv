@@ -89,6 +89,41 @@ class QdrantStorage:
             logger.info(f"Created collection '{self.collection_name}'")
             return True
 
+    def ensure_collection_with_vectors(
+        self,
+        dense_vector_name: str = "abstract-qwen3-8b",
+        dense_vector_size: int = 1024,
+    ) -> bool:
+        """Create collection with dense + BM25 sparse vector configs.
+
+        Returns:
+            True if created, False if already exists.
+        """
+        try:
+            self.client.get_collection(self.collection_name)
+            logger.info(f"Collection '{self.collection_name}' already exists")
+            return False
+        except (UnexpectedResponse, Exception):
+            self.client.create_collection(
+                collection_name=self.collection_name,
+                vectors_config={
+                    dense_vector_name: models.VectorParams(
+                        size=dense_vector_size,
+                        distance=models.Distance.COSINE,
+                    ),
+                },
+                sparse_vectors_config={
+                    "bm25": models.SparseVectorParams(
+                        modifier=models.Modifier.IDF,
+                    ),
+                },
+            )
+            logger.info(
+                f"Created collection '{self.collection_name}' with dense "
+                f"vector '{dense_vector_name}' ({dense_vector_size}d) and BM25 sparse vector"
+            )
+            return True
+
     def delete_collection(self) -> bool:
         """Delete the collection.
 
