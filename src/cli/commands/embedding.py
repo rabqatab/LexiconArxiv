@@ -1,0 +1,178 @@
+"""CLI commands for embedding pipeline."""
+
+import asyncio
+import json
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+import click
+
+from src.cli._logging import logger
+
+
+def register_commands(cli: click.Group):
+    @cli.command()
+    @click.option("--new-collection", default=None, help="Name for new collection (default: {old}_v2)")
+    @click.option("--delete-old", is_flag=True, help="Delete old collection after migration")
+    @click.option("--dry-run", is_flag=True, help="Show what would be migrated without doing it")
+    def migrate_collection(new_collection, delete_old, dry_run):
+        """Migrate payload-only collection to vector-enabled collection.
+
+        Creates a new collection with dense (Qwen3-8B, 1024d) and sparse
+        (BM25) vector configs, then copies all points from the old collection.
+
+        Examples:
+
+          uv run python -m src.cli.core_collect migrate-collection
+
+          uv run python -m src.cli.core_collect migrate-collection --delete-old
+        """
+        from src.core.embedding.migration import CollectionMigrator
+        from src.core.constants import get_qdrant_url, get_qdrant_collection
+
+        url = get_qdrant_url()
+        old_name = get_qdrant_collection()
+
+        if dry_run:
+            from qdrant_client import QdrantClient
+            client = QdrantClient(url=url)
+            count = client.count(old_name).count
+            click.echo(f"Would migrate {count:,} points from '{old_name}' to '{new_collection or old_name + '_v2'}'")
+            return
+
+        migrator = CollectionMigrator(
+            url=url,
+            old_collection=old_name,
+            new_collection=new_collection,
+        )
+        click.echo(f"Migrating '{old_name}' → '{migrator.new_collection}'...")
+        stats = migrator.migrate(delete_old=delete_old)
+
+        click.echo(f"\nMigration complete:")
+        click.echo(f"  Points migrated: {stats['points_migrated']:,}")
+        click.echo(f"  New collection:  {stats['new_collection']}")
+        click.echo(f"  Snapshot:        {stats['snapshot_name']}")
+        click.echo(f"  Time:            {stats['elapsed_seconds']}s")
+
+        if not delete_old:
+            click.echo(f"\n  Old collection '{old_name}' preserved.")
+            click.echo(f"  Update QDRANT_COLLECTION={stats['new_collection']} in .env to use new collection.")
+
+    @cli.command()
+    @click.option("--batch-size", type=int, default=32, help="Abstracts per Ollama request")
+    @click.option("--concurrency", "-p", type=int, default=4, help="Parallel Ollama requests")
+    @click.option("--limit", "-n", type=int, default=None, help="Max papers to embed")
+    @click.option("--resume/--no-resume", default=True, help="Resume from checkpoint")
+    @click.option("--dry-run", is_flag=True, help="Count papers to embed without doing it")
+    def embed_papers(batch_size, concurrency, limit, resume, dry_run):
+        """Embed paper abstracts with Qwen3-8B and BM25 sparse vectors.
+
+        Examples:
+
+          uv run python -m src.cli.core_collect embed-papers
+
+          uv run python -m src.cli.core_collect embed-papers -p 8
+
+          uv run python -m src.cli.core_collect embed-papers -n 100
+
+          uv run python -m src.cli.core_collect embed-papers --no-resume
+        """
+        from src.core.embedding.embedder import PaperEmbedder
+        from src.core.storage.base import QdrantStorage
+
+        CHECKPOINT_DIR = Path("data/core/checkpoints")
+        CHECKPOINT_FILE = CHECKPOINT_DIR / "embedding.json"
+
+        storage = QdrantStorage()
+
+        if dry_run:
+            total = storage.count_papers_for_embedding()
+            click.echo(f"Papers to embed: {total:,}")
+            return
+
+        # Pre-flight: verify collection has vector config
+        try:
+            info = storage.client.get_collection(storage.collection_name)
+            vectors = info.config.params.vectors
+            if not vectors or "abstract-qwen3-8b" not in vectors:
+                click.echo(
+                    "Error: Collection missing vector config. "
+                    "Run: uv run python -m src.cli.core_collect migrate-collection",
+                    err=True,
+                )
+                sys.exit(1)
+        except Exception as e:
+            click.echo(f"Error: Cannot connect to Qdrant: {e}", err=True)
+            sys.exit(1)
+
+        # Load checkpoint
+        processed_ids: set[str] = set()
+        if resume and CHECKPOINT_FILE.exists():
+            try:
+                with open(CHECKPOINT_FILE) as f:
+                    data = json.load(f)
+                processed_ids = set(data.get("processed_point_ids", []))
+                click.echo(f"Resuming from checkpoint: {len(processed_ids):,} already embedded")
+            except Exception as e:
+                logger.warning(f"Failed to load checkpoint: {e}")
+
+        async def run():
+            nonlocal processed_ids
+            embedder = PaperEmbedder(max_concurrent=concurrency)
+            async with embedder:
+                # Check model availability
+                if not await embedder.check_model_available():
+                    click.echo(
+                        "Error: Embedding model not found in Ollama. "
+                        "Run: ollama pull qwen3-embedding:8b",
+                        err=True,
+                    )
+                    sys.exit(1)
+
+                total_embedded = 0
+                offset = None
+
+                while True:
+                    papers, next_offset = storage.get_papers_for_embedding(
+                        limit=batch_size,
+                        offset=offset,
+                    )
+
+                    if not papers:
+                        break
+
+                    # Filter out already-processed papers
+                    papers = [(pid, p) for pid, p in papers if pid not in processed_ids]
+
+                    if papers:
+                        count = await embedder.embed_and_upsert_batch(
+                            papers=papers,
+                            storage=storage,
+                        )
+                        total_embedded += count
+
+                        # Update checkpoint
+                        for pid, _ in papers:
+                            processed_ids.add(pid)
+                        CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
+                        with open(CHECKPOINT_FILE, "w") as f:
+                            json.dump({
+                                "processed_point_ids": list(processed_ids),
+                                "total_embedded": total_embedded,
+                                "last_updated": datetime.now(timezone.utc).isoformat(),
+                            }, f)
+
+                        if total_embedded % 1000 == 0:
+                            click.echo(f"  Embedded {total_embedded:,} papers...")
+
+                    if limit and total_embedded >= limit:
+                        break
+
+                    if next_offset is None:
+                        break
+                    offset = next_offset
+
+                click.echo(f"\nEmbedding complete: {total_embedded:,} papers embedded")
+
+        asyncio.run(run())
