@@ -132,7 +132,7 @@ class PaperEmbedder:
         """
         # Prepend instruction prefix for Qwen3 retrieval quality
         instruction = "Retrieve academic papers: "
-        abstracts = [instruction + p[1]["abstract"] for p in papers]
+        abstracts = [instruction + (p[1].get("abstract") or "") for p in papers]
 
         # Get dense embeddings from Ollama
         vectors = await self.embed_texts(abstracts)
@@ -147,7 +147,7 @@ class PaperEmbedder:
                 vector={
                     dense_vector_name: dense_vector,
                     "bm25": qdrant_models.Document(
-                        text=payload["abstract"],
+                        text=payload.get("abstract") or "",
                         model="qdrant/bm25",
                     ),
                 },
