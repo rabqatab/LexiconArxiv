@@ -285,7 +285,16 @@ While the citation graph captures explicit reference relationships, the semantic
 
 The MCP server wraps `SearchService` and provides five tools: `search_papers`, `get_paper`, `get_citations`, `get_similar_papers`, and `get_corpus_stats`. It communicates over stdio and is compatible with Claude Desktop, Claude Code, and other MCP clients.
 
-### 4.8 On-demand Retrieval
+### 4.8 Monitoring Dashboard & Pipeline Alerting
+
+The system includes a data health dashboard at `/dashboard` (API: `GET /api/dashboard`) that provides:
+
+- **Pipeline status**: Reads `data/core/pipeline_status.json` to show the last-run status of each pipeline stage (collection, enrichment, embedding, etc.)
+- **Data validation warnings**: Flags anomalies such as low coverage rates, missing years, or venues with unusually few papers
+- **Caching**: Dashboard responses are cached with a 5-minute TTL; append `?refresh=true` to force a fresh computation
+- **Rate limiting**: All API endpoints are rate-limited at 120 requests/min per IP
+
+### 4.9 On-demand Retrieval
 
 ```python
 class OnDemandRetriever:

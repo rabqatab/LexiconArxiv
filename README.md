@@ -5,8 +5,10 @@ AI Research Insights Engine - Hybrid semantic search, on-demand retrieval, trend
 ## Features
 
 - **Hybrid Search**: Dense vector (Qwen3-Embedding-8B) + server-side BM25 via Qdrant Reciprocal Rank Fusion
-- **Search Web UI**: Interactive search interface at `/search` with faceted filtering
-- **MCP Server**: AI agent integration via Model Context Protocol (`search_papers`, `get_paper`, `get_citations`, `get_corpus_stats` tools)
+- **Search Web UI**: Interactive search interface at `/search` with faceted filtering, venue dropdown, landing page with corpus stats and trending keywords
+- **Keyword Autocomplete**: `GET /api/search/suggest?q=prefix` for real-time keyword suggestions
+- **Data Health Dashboard**: Monitoring dashboard at `/dashboard` with pipeline alerting, data validation warnings, and 5-min cached stats
+- **MCP Server**: AI agent integration via Model Context Protocol (`search_papers`, `get_paper`, `get_citations`, `get_corpus_stats`, `expand_search` tools)
 - **On-demand Retrieval**: User-triggered arXiv + OpenAlex expansion with core/connected/external labeling
 - **Trends & Analytics**: Notable paper scoring, keyword trends, rising keywords, UMAP+HDBSCAN topic clustering, and 2D topic map
 - **Embedding Pipeline**: Qwen3-Embedding-8B embeddings (1024d via Matryoshka Representation Learning), server-side BM25 index
@@ -105,6 +107,9 @@ open http://localhost:8000/search
 # Trends dashboard
 open http://localhost:8000/trends
 
+# Data health dashboard
+open http://localhost:8000/dashboard
+
 # Graph visualization
 open http://localhost:8000
 
@@ -114,9 +119,11 @@ open http://localhost:8000/docs
 
 **Search & Retrieval Endpoints**:
 - `POST /api/search` - Hybrid search (dense + BM25 fusion) with venue/year/tier filters
+- `GET /api/search/suggest?q=prefix` - Keyword autocomplete suggestions
 - `POST /api/search/expand` - On-demand expansion via arXiv + OpenAlex
-- `GET /api/paper/{paper_id}` - Full paper detail
+- `GET /api/paper/{paper_id}` - Full paper detail (includes similar papers by section type)
 - `GET /api/stats` - Corpus statistics
+- `GET /api/dashboard` - Data health monitoring (5-min TTL cache, `?refresh=true` to force)
 
 **Trends & Analytics Endpoints**:
 - `GET /api/trends/notable` - Top papers ranked by notable score
@@ -135,6 +142,8 @@ open http://localhost:8000/docs
 - `GET /graph/subgraph/{paper_id}?hops=1&direction=both` - Citation subgraph (D3.js format)
 
 **Visualization Features**:
+- Shared navigation bar across all pages (Search, Trends, Graph, Dashboard)
+- Page titles and favicons on all pages
 - Interactive force-directed citation graph with D3.js
 - Color-coded edges (cyan=citing, orange=cited, gray=other)
 - Click nodes to explore neighborhoods
@@ -147,12 +156,13 @@ open http://localhost:8000/docs
 uv run python -m src.mcp.server
 ```
 
-Exposes five tools for AI agents via the Model Context Protocol:
+Exposes six tools for AI agents via the Model Context Protocol:
 - `search_papers` - Hybrid search with venue/year/tier filters
 - `get_paper` - Lookup by UUID, DOI, or arXiv ID
 - `get_citations` - Citation relationships (refs, cited_by, both)
 - `get_similar_papers` - Find semantically similar papers by section type
 - `get_corpus_stats` - Corpus summary statistics
+- `expand_search` - On-demand expansion via arXiv + OpenAlex
 
 ## Data Sources
 
@@ -201,6 +211,7 @@ uv run python -m src.cli.core_collect status
 uv run python -m src.cli.core_collect deduplicate --dry-run
 uv run python -m src.cli.core_collect clear-checkpoint
 uv run python -m src.cli.core_collect reset-title-enriched --dry-run   # Reset title-matched papers
+uv run python -m src.cli.core_collect delete-old-collection --collection lexicon_arxiv_v1 --confirm
 
 # Enrichment (add citations/abstracts)
 uv run python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex --parallel 10    # OpenAlex
@@ -353,9 +364,12 @@ lexiconarxiv/
 
 ## Recent Updates (Mar 2026) — v0.11.0
 
-- **Hybrid Search**: Dense Qwen3-Embedding-8B + server-side BM25 via Qdrant Reciprocal Rank Fusion (RRF)
-- **Search Web UI**: Interactive search at `/search` with faceted filters (venue, year, tier)
-- **MCP Server**: AI agent integration via Model Context Protocol with 4 tools (search_papers, get_paper, get_citations, get_corpus_stats)
+- **Hybrid Search**: Dense Qwen3-Embedding-8B + server-side BM25 via Qdrant Reciprocal Rank Fusion (RRF); title now included in BM25 and dense vectors
+- **Search Web UI**: Interactive search at `/search` with faceted filters (venue dropdown with 21 major venues, year, tier), landing page with corpus stats and trending keywords, similar papers by section type in paper detail
+- **Keyword Autocomplete**: Real-time suggestions via `GET /api/search/suggest`
+- **Data Health Dashboard**: `/dashboard` with pipeline alerting (`data/core/pipeline_status.json`), data validation warnings, 5-min TTL cache
+- **Rate Limiting**: 120 requests/min per IP globally
+- **MCP Server**: AI agent integration via Model Context Protocol with 6 tools including `expand_search`
 - **On-demand Retrieval**: Expand search results in real-time via arXiv + OpenAlex with core/connected/external labeling
 - **Trends & Analytics**: Notable paper scoring, keyword time-series, rising keyword detection, UMAP+HDBSCAN topic clustering with 2D map
 - **Embedding Pipeline**: Qwen3-Embedding-8B with Matryoshka Representation Learning (1024d), batch processing with collection migration

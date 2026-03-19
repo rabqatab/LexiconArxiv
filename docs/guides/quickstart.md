@@ -168,6 +168,8 @@ uv run uvicorn src.api.main:app --port 8000
 
 # Visit http://localhost:8000/search for hybrid search
 # Visit http://localhost:8000/trends for trend analysis
+# Visit http://localhost:8000/dashboard for data health monitoring
+# All pages share a navigation bar (Search, Trends, Graph, Dashboard)
 
 # 4. (Optional) Compute topic clusters for trends page
 scripts/analytics/run_clustering.sh

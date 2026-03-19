@@ -38,6 +38,24 @@ Check collection status and statistics.
 uv run python -m src.cli.core_collect status
 ```
 
+### delete-old-collection
+
+Delete an old Qdrant collection (e.g., after migration to a new vector-enabled collection).
+
+```bash
+# Preview (no --confirm flag = dry run)
+uv run python -m src.cli.core_collect delete-old-collection --collection lexicon_arxiv_v1
+
+# Delete
+uv run python -m src.cli.core_collect delete-old-collection --collection lexicon_arxiv_v1 --confirm
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--collection` | Name of the collection to delete (required) |
+| `--confirm` | Actually delete the collection (without this flag, only previews) |
+
 ---
 
 ## Collection Commands
