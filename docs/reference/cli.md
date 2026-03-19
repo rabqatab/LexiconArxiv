@@ -583,6 +583,87 @@ uv run python -m src.cli.core_collect clear-keywords --confirm
 
 ---
 
+## Embedding Commands
+
+### migrate-collection
+
+Migrate payload-only collection to vector-enabled (dense + BM25).
+
+```bash
+# Preview
+uv run python -m src.cli.core_collect migrate-collection --dry-run
+
+# Run migration
+uv run python -m src.cli.core_collect migrate-collection
+
+# Custom new collection name
+uv run python -m src.cli.core_collect migrate-collection --new-collection my_collection_v2
+
+# Delete old collection after migration
+uv run python -m src.cli.core_collect migrate-collection --delete-old
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--new-collection` | Name for the new vector-enabled collection |
+| `--delete-old` | Delete the old collection after successful migration |
+| `--dry-run` | Preview migration without making changes |
+
+### embed-papers
+
+Embed paper abstracts with Qwen3-8B and BM25 sparse vectors.
+
+```bash
+# Preview
+uv run python -m src.cli.core_collect embed-papers --dry-run
+
+# Run with defaults
+uv run python -m src.cli.core_collect embed-papers
+
+# Custom concurrency and batch size
+uv run python -m src.cli.core_collect embed-papers --batch-size 64 -p 8
+
+# Limit number of papers
+uv run python -m src.cli.core_collect embed-papers -n 1000
+
+# Disable resume (start from scratch)
+uv run python -m src.cli.core_collect embed-papers --no-resume
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--batch-size` | Number of papers per batch |
+| `--concurrency`, `-p` | Concurrent embedding requests |
+| `--limit`, `-n` | Max papers to embed |
+| `--resume/--no-resume` | Resume from last checkpoint (default: resume) |
+| `--dry-run` | Preview without embedding |
+
+### compute-topics
+
+Compute UMAP + HDBSCAN topic clusters from paper embeddings.
+
+```bash
+# Preview
+uv run python -m src.cli.core_collect compute-topics --dry-run
+
+# Run with defaults
+uv run python -m src.cli.core_collect compute-topics
+
+# Custom clustering parameters
+uv run python -m src.cli.core_collect compute-topics --min-cluster-size 50 --min-samples 10
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--min-cluster-size` | Minimum cluster size for HDBSCAN |
+| `--min-samples` | Minimum samples for HDBSCAN |
+| `--dry-run` | Preview without computing |
+
+---
+
 ## Data Quality Commands
 
 ### data-quality

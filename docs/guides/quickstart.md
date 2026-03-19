@@ -153,7 +153,32 @@ uv run python -m src.cli.core_collect keyword-stats
 
 ---
 
-## 6. Monitor Progress
+## 6. Embedding & Search (after enrichment)
+
+```bash
+# 1. Migrate collection for vector support
+uv run python -m src.cli.core_collect migrate-collection
+# Update QDRANT_COLLECTION=lexicon_arxiv_v2 in .env
+
+# 2. Embed papers (25-50 min for 145K papers)
+scripts/embedding/run_embedding.sh
+
+# 3. Start the API
+uv run uvicorn src.api.main:app --port 8000
+
+# Visit http://localhost:8000/search for hybrid search
+# Visit http://localhost:8000/trends for trend analysis
+
+# 4. (Optional) Compute topic clusters for trends page
+scripts/analytics/run_clustering.sh
+
+# 5. (Optional) Start MCP server for AI agents
+uv run python -m src.mcp.server
+```
+
+---
+
+## 7. Monitor Progress
 
 ```bash
 # Check collection status
@@ -322,7 +347,7 @@ See `docker/grobid-arm64/grobid_arm64_troubleshooting.md` for details.
 
 ---
 
-## 7. Incremental Updates (Weekly Cron Job)
+## 8. Incremental Updates (Weekly Cron Job)
 
 After initial collection, set up automated weekly updates:
 
