@@ -1,0 +1,1459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LexiconArxiv Search</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+        }
+
+        /* Header */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            background: rgba(30, 30, 50, 0.98);
+            border-bottom: 1px solid #333;
+            backdrop-filter: blur(10px);
+        }
+        .header-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 16px 24px;
+        }
+        .header-top {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 12px;
+        }
+        .logo {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #22d3ee;
+            white-space: nowrap;
+            text-decoration: none;
+        }
+        .logo span {
+            color: #f97316;
+        }
+        .search-bar {
+            flex: 1;
+            display: flex;
+            gap: 8px;
+        }
+        .search-bar input {
+            flex: 1;
+            padding: 10px 16px;
+            border: 1px solid #444;
+            border-radius: 8px;
+            background: #2a2a4a;
+            color: #fff;
+            font-size: 0.95rem;
+        }
+        .search-bar input:focus {
+            outline: none;
+            border-color: #22d3ee;
+            box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.15);
+        }
+        .search-bar input::placeholder {
+            color: #777;
+        }
+        .search-btn {
+            padding: 10px 24px;
+            background: #22d3ee;
+            color: #1a1a2e;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            font-weight: 600;
+            transition: background 0.2s;
+            white-space: nowrap;
+        }
+        .search-btn:hover {
+            background: #06b6d4;
+        }
+        .search-btn:disabled {
+            background: #555;
+            color: #999;
+            cursor: not-allowed;
+        }
+        .nav-link {
+            color: #888;
+            font-size: 0.85rem;
+            text-decoration: none;
+            white-space: nowrap;
+            transition: color 0.2s;
+        }
+        .nav-link:hover {
+            color: #22d3ee;
+        }
+
+        /* Filter bar */
+        .filter-bar {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .filter-label {
+            font-size: 0.8rem;
+            color: #888;
+            white-space: nowrap;
+        }
+        .filter-input {
+            padding: 5px 8px;
+            border: 1px solid #444;
+            border-radius: 6px;
+            background: #2a2a4a;
+            color: #fff;
+            font-size: 0.8rem;
+            width: 72px;
+        }
+        .filter-input.venue-input {
+            width: 140px;
+        }
+        .filter-input:focus {
+            outline: none;
+            border-color: #22d3ee;
+        }
+        .tier-checks {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .tier-check {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+        .tier-check input[type="checkbox"] {
+            accent-color: #22d3ee;
+            cursor: pointer;
+        }
+        .tier-0 { color: #22d3ee; }
+        .tier-1 { color: #f97316; }
+        .tier-2 { color: #9ca3af; }
+
+        /* Main content */
+        .main {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 140px 24px 40px;
+            transition: padding-top 0.2s;
+        }
+        .main.detail-open {
+            padding-right: calc(50% + 12px);
+        }
+
+        /* Search info bar */
+        .search-info {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 0;
+            margin-bottom: 8px;
+            border-bottom: 1px solid #333;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .search-info-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 0.85rem;
+            color: #aaa;
+        }
+        .search-info-left strong {
+            color: #eee;
+        }
+        .badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .badge-hybrid {
+            background: rgba(34, 211, 238, 0.15);
+            color: #22d3ee;
+            border: 1px solid rgba(34, 211, 238, 0.3);
+        }
+        .badge-bm25 {
+            background: rgba(249, 115, 22, 0.15);
+            color: #f97316;
+            border: 1px solid rgba(249, 115, 22, 0.3);
+        }
+        .pagination {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            color: #aaa;
+        }
+        .page-btn {
+            padding: 4px 12px;
+            background: #2a2a4a;
+            color: #eee;
+            border: 1px solid #444;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+        .page-btn:hover:not(:disabled) {
+            border-color: #22d3ee;
+            color: #22d3ee;
+        }
+        .page-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        /* Results list */
+        .results-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .result-card {
+            background: rgba(42, 42, 74, 0.6);
+            border: 1px solid #333;
+            border-radius: 10px;
+            padding: 18px 20px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .result-card:hover {
+            border-color: #444;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+        }
+        .result-title {
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: #22d3ee;
+            cursor: pointer;
+            line-height: 1.4;
+            transition: color 0.2s;
+            text-decoration: none;
+            display: inline;
+        }
+        .result-title:hover {
+            color: #67e8f9;
+            text-decoration: underline;
+        }
+        .result-meta {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 6px;
+            flex-wrap: wrap;
+        }
+        .result-authors {
+            font-size: 0.85rem;
+            color: #aaa;
+            line-height: 1.3;
+        }
+        .venue-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .venue-tier-0 {
+            background: rgba(34, 211, 238, 0.12);
+            color: #22d3ee;
+            border: 1px solid rgba(34, 211, 238, 0.25);
+        }
+        .venue-tier-1 {
+            background: rgba(249, 115, 22, 0.12);
+            color: #f97316;
+            border: 1px solid rgba(249, 115, 22, 0.25);
+        }
+        .venue-tier-2 {
+            background: rgba(156, 163, 175, 0.12);
+            color: #9ca3af;
+            border: 1px solid rgba(156, 163, 175, 0.25);
+        }
+        .citation-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            font-size: 0.75rem;
+            color: #fbbf24;
+        }
+        .citation-badge svg {
+            width: 12px;
+            height: 12px;
+        }
+        .result-abstract {
+            font-size: 0.88rem;
+            color: #bbb;
+            line-height: 1.55;
+            margin-top: 8px;
+        }
+        .result-bottom {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+        .keyword-tag {
+            display: inline-block;
+            padding: 2px 8px;
+            background: rgba(139, 92, 246, 0.12);
+            color: #a78bfa;
+            border: 1px solid rgba(139, 92, 246, 0.2);
+            border-radius: 10px;
+            font-size: 0.72rem;
+        }
+        .result-links {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-left: auto;
+        }
+        .result-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.78rem;
+            color: #888;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        .result-link:hover {
+            color: #22d3ee;
+        }
+        .result-link svg {
+            width: 14px;
+            height: 14px;
+        }
+        .result-score {
+            font-size: 0.72rem;
+            color: #666;
+        }
+
+        /* Loading spinner */
+        .loading-spinner {
+            display: none;
+            text-align: center;
+            padding: 60px 0;
+        }
+        .spinner {
+            display: inline-block;
+            width: 36px;
+            height: 36px;
+            border: 3px solid #333;
+            border-top: 3px solid #22d3ee;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .loading-text {
+            margin-top: 12px;
+            color: #888;
+            font-size: 0.9rem;
+        }
+
+        /* No results */
+        .no-results {
+            text-align: center;
+            padding: 80px 0;
+            color: #666;
+        }
+        .no-results h3 {
+            font-size: 1.1rem;
+            color: #888;
+            margin-bottom: 8px;
+        }
+        .no-results p {
+            font-size: 0.9rem;
+        }
+
+        /* Welcome state */
+        .welcome {
+            text-align: center;
+            padding: 100px 20px;
+        }
+        .welcome h2 {
+            font-size: 1.8rem;
+            color: #22d3ee;
+            margin-bottom: 12px;
+        }
+        .welcome p {
+            color: #888;
+            font-size: 1rem;
+            max-width: 500px;
+            margin: 0 auto;
+            line-height: 1.5;
+        }
+
+        /* Detail panel */
+        .detail-panel {
+            position: fixed;
+            top: 0;
+            right: -50%;
+            width: 50%;
+            height: 100vh;
+            background: rgba(26, 26, 46, 0.99);
+            border-left: 1px solid #333;
+            z-index: 150;
+            overflow-y: auto;
+            transition: right 0.3s ease;
+            box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
+        }
+        .detail-panel.open {
+            right: 0;
+        }
+        .detail-content {
+            padding: 24px;
+        }
+        .detail-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .detail-close {
+            width: 32px;
+            height: 32px;
+            background: #2a2a4a;
+            border: 1px solid #444;
+            border-radius: 6px;
+            color: #aaa;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+        .detail-close:hover {
+            border-color: #22d3ee;
+            color: #22d3ee;
+        }
+        .detail-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #eee;
+            line-height: 1.4;
+        }
+        .detail-meta-grid {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 6px 16px;
+            margin-bottom: 20px;
+            font-size: 0.88rem;
+        }
+        .detail-meta-label {
+            color: #777;
+            font-weight: 500;
+        }
+        .detail-meta-value {
+            color: #ccc;
+        }
+        .detail-meta-value a {
+            color: #22d3ee;
+            text-decoration: none;
+        }
+        .detail-meta-value a:hover {
+            text-decoration: underline;
+        }
+        .detail-section {
+            margin-bottom: 20px;
+        }
+        .detail-section-title {
+            font-size: 0.85rem;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+        .detail-abstract {
+            font-size: 0.9rem;
+            line-height: 1.7;
+            color: #ccc;
+        }
+        .rhetorical-sentence {
+            border-radius: 3px;
+            padding: 4px 6px;
+            margin: 0 1px;
+            display: block;
+        }
+        .rhetorical-task {
+            background: rgba(59, 130, 246, 0.12);
+            border-left: 2px solid #3b82f6;
+            padding-left: 6px;
+        }
+        .rhetorical-method {
+            background: rgba(34, 197, 94, 0.12);
+            border-left: 2px solid #22c55e;
+            padding-left: 6px;
+        }
+        .rhetorical-result {
+            background: rgba(249, 115, 22, 0.12);
+            border-left: 2px solid #f97316;
+            padding-left: 6px;
+        }
+        .rhetorical-conclusion {
+            background: rgba(168, 85, 247, 0.12);
+            border-left: 2px solid #a855f7;
+            padding-left: 6px;
+        }
+        .rhetorical-background {
+            background: rgba(156, 163, 175, 0.08);
+            border-left: 2px solid #6b7280;
+            padding-left: 6px;
+        }
+        .rhetorical-objective {
+            background: rgba(234, 179, 8, 0.12);
+            border-left: 2px solid #eab308;
+            padding-left: 6px;
+        }
+        .rhetorical-other {
+            background: rgba(156, 163, 175, 0.06);
+            border-left: 2px solid #4b5563;
+            padding-left: 6px;
+        }
+        .rhetorical-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+            font-size: 0.75rem;
+        }
+        .rhetorical-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            color: #999;
+        }
+        .rhetorical-legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 2px;
+            display: inline-block;
+        }
+        .detail-keywords {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .detail-keyword {
+            padding: 3px 10px;
+            background: rgba(139, 92, 246, 0.12);
+            color: #a78bfa;
+            border: 1px solid rgba(139, 92, 246, 0.2);
+            border-radius: 12px;
+            font-size: 0.8rem;
+        }
+        .detail-repos {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .detail-repo-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: rgba(42, 42, 74, 0.8);
+            border: 1px solid #444;
+            border-radius: 8px;
+            color: #eee;
+            text-decoration: none;
+            font-size: 0.85rem;
+            transition: border-color 0.2s;
+        }
+        .detail-repo-link:hover {
+            border-color: #22d3ee;
+        }
+        .detail-repo-link svg {
+            width: 16px;
+            height: 16px;
+        }
+        .detail-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 1px solid #333;
+        }
+        .detail-action-btn {
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        .btn-graph {
+            background: rgba(139, 92, 246, 0.15);
+            color: #a78bfa;
+            border: 1px solid rgba(139, 92, 246, 0.3);
+        }
+        .btn-graph:hover {
+            background: rgba(139, 92, 246, 0.25);
+        }
+        .btn-pdf {
+            background: rgba(249, 115, 22, 0.15);
+            color: #f97316;
+            border: 1px solid rgba(249, 115, 22, 0.3);
+        }
+        .btn-pdf:hover {
+            background: rgba(249, 115, 22, 0.25);
+        }
+        .btn-code {
+            background: rgba(34, 197, 94, 0.15);
+            color: #22c55e;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+        .btn-code:hover {
+            background: rgba(34, 197, 94, 0.25);
+        }
+
+        /* Detail overlay for mobile */
+        .detail-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 140;
+        }
+        .detail-overlay.open {
+            display: block;
+        }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            .detail-panel {
+                width: 100%;
+                right: -100%;
+            }
+            .main.detail-open {
+                padding-right: 24px;
+            }
+            .filter-bar {
+                gap: 10px;
+            }
+        }
+        @media (max-width: 600px) {
+            .header-inner {
+                padding: 12px 16px;
+            }
+            .header-top {
+                flex-wrap: wrap;
+            }
+            .search-bar {
+                order: 3;
+                width: 100%;
+            }
+            .main {
+                padding: 160px 16px 40px;
+            }
+            .result-card {
+                padding: 14px 16px;
+            }
+            .result-links {
+                margin-left: 0;
+                margin-top: 4px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-inner">
+            <div class="header-top">
+                <a class="logo" href="/static/search.html">Lexicon<span>Arxiv</span></a>
+                <div class="search-bar">
+                    <input type="text" id="searchInput" placeholder="Search papers by title, abstract, keywords..." autocomplete="off">
+                    <button class="search-btn" id="searchBtn">Search</button>
+                </div>
+                <a class="nav-link" href="/static/index.html">Graph Explorer</a>
+            </div>
+            <div class="filter-bar">
+                <div class="filter-group">
+                    <span class="filter-label">Year</span>
+                    <input type="number" class="filter-input" id="yearMin" placeholder="Min" min="1900" max="2099">
+                    <span class="filter-label">&ndash;</span>
+                    <input type="number" class="filter-input" id="yearMax" placeholder="Max" min="1900" max="2099">
+                </div>
+                <div class="filter-group">
+                    <span class="filter-label">Tier</span>
+                    <div class="tier-checks">
+                        <label class="tier-check tier-0"><input type="checkbox" id="tier0" value="0"> T0</label>
+                        <label class="tier-check tier-1"><input type="checkbox" id="tier1" value="1"> T1</label>
+                        <label class="tier-check tier-2"><input type="checkbox" id="tier2" value="2"> T2</label>
+                    </div>
+                </div>
+                <div class="filter-group">
+                    <span class="filter-label">Venue</span>
+                    <input type="text" class="filter-input venue-input" id="venueFilter" placeholder="e.g. NeurIPS, ACL">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="main" id="mainArea">
+        <div class="welcome" id="welcomeState">
+            <h2>Search AI Research Papers</h2>
+            <p>Enter a query above to search across titles, abstracts, and keywords using hybrid semantic + BM25 search.</p>
+        </div>
+
+        <div class="loading-spinner" id="loadingSpinner">
+            <div class="spinner"></div>
+            <div class="loading-text">Searching...</div>
+        </div>
+
+        <div id="searchInfoBar" style="display:none;">
+            <div class="search-info">
+                <div class="search-info-left">
+                    <span id="resultCount"></span>
+                    <span id="searchModeBadge"></span>
+                </div>
+                <div class="pagination">
+                    <span id="paginationInfo"></span>
+                    <button class="page-btn" id="prevBtn" disabled>Prev</button>
+                    <button class="page-btn" id="nextBtn" disabled>Next</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="results-list" id="resultsList"></div>
+
+        <div class="no-results" id="noResults" style="display:none;">
+            <h3>No results found</h3>
+            <p>Try adjusting your query or filters.</p>
+        </div>
+    </div>
+
+    <div class="detail-overlay" id="detailOverlay"></div>
+    <div class="detail-panel" id="detailPanel">
+        <div class="detail-content" id="detailContent"></div>
+    </div>
+
+    <script>
+        var API_BASE = window.location.origin;
+        var PAGE_SIZE = 20;
+        var currentOffset = 0;
+        var currentTotal = 0;
+        var lastQuery = '';
+
+        // SVG icon markup
+        var ICON_GITHUB_SVG = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>';
+        var ICON_PDF_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>';
+        var ICON_CITE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l1.65-3.8a9 9 0 1 1 3.4 2.9L3 21"/></svg>';
+
+        // Escape HTML to prevent XSS -- creates a text node and extracts its content
+        function esc(str) {
+            if (str === null || str === undefined) return '';
+            var div = document.createElement('div');
+            div.appendChild(document.createTextNode(String(str)));
+            return div.textContent;
+        }
+
+        // Safe text content setter
+        function setText(el, text) {
+            if (typeof el === 'string') el = document.getElementById(el);
+            if (el) el.textContent = text;
+        }
+
+        // Safe DOM element builder
+        function buildElement(tag, attrs, children) {
+            var el = document.createElement(tag);
+            if (attrs) {
+                Object.keys(attrs).forEach(function(key) {
+                    if (key === 'className') el.className = attrs[key];
+                    else if (key === 'onclick') el.addEventListener('click', attrs[key]);
+                    else if (key === 'href' || key === 'target' || key === 'rel' || key === 'title' || key === 'type' || key === 'placeholder') el.setAttribute(key, attrs[key]);
+                    else if (key === 'style') el.setAttribute('style', attrs[key]);
+                    else el.setAttribute(key, attrs[key]);
+                });
+            }
+            if (children) {
+                if (typeof children === 'string') el.textContent = children;
+                else if (Array.isArray(children)) {
+                    children.forEach(function(child) {
+                        if (child) {
+                            if (typeof child === 'string') el.appendChild(document.createTextNode(child));
+                            else el.appendChild(child);
+                        }
+                    });
+                } else {
+                    el.appendChild(children);
+                }
+            }
+            return el;
+        }
+
+        // Safely set HTML for trusted SVG icon content only
+        function createIconSpan(svgMarkup) {
+            var span = document.createElement('span');
+            span.style.display = 'inline-flex';
+            span.style.alignItems = 'center';
+            // SVG icons are hardcoded constants, not user input
+            span.innerHTML = svgMarkup;
+            return span;
+        }
+
+        // Build filters from UI
+        function buildFilters() {
+            var filters = {};
+            var yearMin = document.getElementById('yearMin').value;
+            var yearMax = document.getElementById('yearMax').value;
+            var venue = document.getElementById('venueFilter').value.trim();
+            var tiers = [];
+
+            if (yearMin) filters.year_min = parseInt(yearMin);
+            if (yearMax) filters.year_max = parseInt(yearMax);
+            if (venue) {
+                filters.venues = venue.split(',').map(function(v) { return v.trim(); }).filter(Boolean);
+            }
+
+            if (document.getElementById('tier0').checked) tiers.push(0);
+            if (document.getElementById('tier1').checked) tiers.push(1);
+            if (document.getElementById('tier2').checked) tiers.push(2);
+            if (tiers.length > 0) filters.tiers = tiers;
+
+            return filters;
+        }
+
+        // Main search function
+        function doSearch(offset) {
+            var query = document.getElementById('searchInput').value.trim();
+            if (!query) return;
+
+            lastQuery = query;
+            currentOffset = offset;
+
+            var btn = document.getElementById('searchBtn');
+            var spinner = document.getElementById('loadingSpinner');
+            var infoBar = document.getElementById('searchInfoBar');
+            var resultsList = document.getElementById('resultsList');
+            var noResults = document.getElementById('noResults');
+            var welcome = document.getElementById('welcomeState');
+
+            welcome.style.display = 'none';
+            noResults.style.display = 'none';
+            infoBar.style.display = 'none';
+            resultsList.textContent = '';
+            spinner.style.display = 'block';
+            btn.disabled = true;
+
+            var body = {
+                query: query,
+                filters: buildFilters(),
+                limit: PAGE_SIZE,
+                offset: offset
+            };
+
+            fetch(API_BASE + '/api/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            })
+            .then(function(resp) {
+                if (!resp.ok) {
+                    return resp.json().catch(function() { return {}; }).then(function(err) {
+                        throw new Error(err.detail || 'Search failed (' + resp.status + ')');
+                    });
+                }
+                return resp.json();
+            })
+            .then(function(data) {
+                currentTotal = data.total;
+
+                if (data.results.length === 0) {
+                    noResults.querySelector('h3').textContent = 'No results found';
+                    noResults.querySelector('p').textContent = 'Try adjusting your query or filters.';
+                    noResults.style.display = 'block';
+                    return;
+                }
+
+                renderSearchInfo(data);
+                renderResults(data.results);
+                infoBar.style.display = 'block';
+            })
+            .catch(function(err) {
+                noResults.querySelector('h3').textContent = 'Search Error';
+                noResults.querySelector('p').textContent = err.message;
+                noResults.style.display = 'block';
+            })
+            .finally(function() {
+                spinner.style.display = 'none';
+                btn.disabled = false;
+            });
+        }
+
+        // Render search info bar
+        function renderSearchInfo(data) {
+            var start = currentOffset + 1;
+            var end = Math.min(currentOffset + PAGE_SIZE, data.total);
+
+            var countEl = document.getElementById('resultCount');
+            countEl.textContent = '';
+            var strong1 = document.createElement('strong');
+            strong1.textContent = data.total.toLocaleString();
+            var strong2 = document.createElement('strong');
+            strong2.textContent = data.query_time_ms + 'ms';
+            countEl.appendChild(strong1);
+            countEl.appendChild(document.createTextNode(' results in '));
+            countEl.appendChild(strong2);
+
+            var mode = data.search_mode || 'hybrid';
+            var isHybrid = mode === 'hybrid';
+            var badgeEl = document.getElementById('searchModeBadge');
+            badgeEl.textContent = '';
+            var badge = document.createElement('span');
+            badge.className = 'badge ' + (isHybrid ? 'badge-hybrid' : 'badge-bm25');
+            badge.textContent = isHybrid ? 'Hybrid' : 'BM25 Only';
+            badgeEl.appendChild(badge);
+
+            setText('paginationInfo', start + '\u2013' + end + ' of ' + data.total.toLocaleString());
+
+            document.getElementById('prevBtn').disabled = currentOffset === 0;
+            document.getElementById('nextBtn').disabled = currentOffset + PAGE_SIZE >= data.total;
+        }
+
+        // Render results using DOM methods
+        function renderResults(results) {
+            var list = document.getElementById('resultsList');
+            list.textContent = '';
+
+            results.forEach(function(r) {
+                var card = document.createElement('div');
+                card.className = 'result-card';
+
+                // Title
+                var titleLink = document.createElement('a');
+                titleLink.className = 'result-title';
+                titleLink.textContent = r.title || 'Untitled';
+                titleLink.title = 'View paper details';
+                titleLink.setAttribute('data-id', r.id);
+                titleLink.addEventListener('click', function() { openDetail(r.id); });
+                card.appendChild(titleLink);
+
+                // Meta row
+                var meta = document.createElement('div');
+                meta.className = 'result-meta';
+
+                // Venue + year badge
+                var tierClass = r.tier === 0 ? 'venue-tier-0' : r.tier === 1 ? 'venue-tier-1' : 'venue-tier-2';
+                var venueText = '';
+                if (r.venue) venueText = r.venue + (r.year ? ' ' + r.year : '');
+                else if (r.year) venueText = String(r.year);
+                if (venueText) {
+                    var vb = document.createElement('span');
+                    vb.className = 'venue-badge ' + tierClass;
+                    vb.textContent = venueText;
+                    meta.appendChild(vb);
+                }
+
+                // Citation count
+                var citeCount = r.citation_count != null ? r.citation_count : 0;
+                if (citeCount > 0) {
+                    var citeBadge = document.createElement('span');
+                    citeBadge.className = 'citation-badge';
+                    citeBadge.appendChild(createIconSpan(ICON_CITE_SVG));
+                    citeBadge.appendChild(document.createTextNode(' ' + citeCount.toLocaleString()));
+                    meta.appendChild(citeBadge);
+                }
+
+                // Score
+                if (r.score != null) {
+                    var scoreSpan = document.createElement('span');
+                    scoreSpan.className = 'result-score';
+                    scoreSpan.textContent = 'score: ' + r.score.toFixed(4);
+                    meta.appendChild(scoreSpan);
+                }
+
+                card.appendChild(meta);
+
+                // Authors
+                var authorsStr = Array.isArray(r.authors) ? r.authors.join(', ') : (r.authors || '');
+                if (authorsStr) {
+                    var authorsDiv = document.createElement('div');
+                    authorsDiv.className = 'result-authors';
+                    authorsDiv.textContent = authorsStr;
+                    card.appendChild(authorsDiv);
+                }
+
+                // Abstract snippet
+                if (r.abstract) {
+                    var abstractDiv = document.createElement('div');
+                    abstractDiv.className = 'result-abstract';
+                    abstractDiv.textContent = r.abstract.length > 200 ? r.abstract.substring(0, 200) + '...' : r.abstract;
+                    card.appendChild(abstractDiv);
+                }
+
+                // Bottom row: keywords + links
+                var bottom = document.createElement('div');
+                bottom.className = 'result-bottom';
+
+                var keywords = Array.isArray(r.keywords) ? r.keywords.slice(0, 6) : [];
+                keywords.forEach(function(k) {
+                    var tag = document.createElement('span');
+                    tag.className = 'keyword-tag';
+                    tag.textContent = k;
+                    bottom.appendChild(tag);
+                });
+
+                var linksDiv = document.createElement('div');
+                linksDiv.className = 'result-links';
+
+                if (r.code_url) {
+                    var codeLink = document.createElement('a');
+                    codeLink.className = 'result-link';
+                    codeLink.href = r.code_url;
+                    codeLink.target = '_blank';
+                    codeLink.rel = 'noopener';
+                    codeLink.title = 'Code repository';
+                    codeLink.appendChild(createIconSpan(ICON_GITHUB_SVG));
+                    codeLink.appendChild(document.createTextNode(' Code'));
+                    linksDiv.appendChild(codeLink);
+                }
+
+                if (r.pdf_url) {
+                    var pdfLink = document.createElement('a');
+                    pdfLink.className = 'result-link';
+                    pdfLink.href = r.pdf_url;
+                    pdfLink.target = '_blank';
+                    pdfLink.rel = 'noopener';
+                    pdfLink.title = 'PDF';
+                    pdfLink.appendChild(createIconSpan(ICON_PDF_SVG));
+                    pdfLink.appendChild(document.createTextNode(' PDF'));
+                    linksDiv.appendChild(pdfLink);
+                }
+
+                bottom.appendChild(linksDiv);
+                card.appendChild(bottom);
+
+                list.appendChild(card);
+            });
+        }
+
+        // Pagination
+        function prevPage() {
+            if (currentOffset >= PAGE_SIZE) {
+                doSearch(currentOffset - PAGE_SIZE);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        }
+
+        function nextPage() {
+            if (currentOffset + PAGE_SIZE < currentTotal) {
+                doSearch(currentOffset + PAGE_SIZE);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        }
+
+        // Paper detail panel
+        function openDetail(paperId) {
+            var panel = document.getElementById('detailPanel');
+            var overlay = document.getElementById('detailOverlay');
+            var content = document.getElementById('detailContent');
+            var main = document.getElementById('mainArea');
+
+            // Show loading state
+            content.textContent = '';
+            var loadWrap = document.createElement('div');
+            loadWrap.className = 'loading-spinner';
+            loadWrap.style.display = 'block';
+            var sp = document.createElement('div');
+            sp.className = 'spinner';
+            loadWrap.appendChild(sp);
+            var lt = document.createElement('div');
+            lt.className = 'loading-text';
+            lt.textContent = 'Loading paper details...';
+            loadWrap.appendChild(lt);
+            content.appendChild(loadWrap);
+
+            panel.classList.add('open');
+            overlay.classList.add('open');
+            main.classList.add('detail-open');
+
+            fetch(API_BASE + '/api/paper/' + encodeURIComponent(paperId))
+            .then(function(resp) {
+                if (!resp.ok) throw new Error('Failed to load paper (' + resp.status + ')');
+                return resp.json();
+            })
+            .then(function(paper) {
+                renderDetail(paper);
+            })
+            .catch(function(err) {
+                content.textContent = '';
+                var errDiv = document.createElement('div');
+                errDiv.style.cssText = 'padding:40px;text-align:center;color:#ef4444;';
+                errDiv.textContent = err.message;
+                content.appendChild(errDiv);
+            });
+        }
+
+        function closeDetail() {
+            document.getElementById('detailPanel').classList.remove('open');
+            document.getElementById('detailOverlay').classList.remove('open');
+            document.getElementById('mainArea').classList.remove('detail-open');
+        }
+
+        // Render detail panel using DOM methods
+        function renderDetail(p) {
+            var content = document.getElementById('detailContent');
+            content.textContent = '';
+
+            var authorsStr = Array.isArray(p.authors) ? p.authors.join(', ') : (p.authors || 'Unknown');
+            var tierLabel = p.tier === 0 ? 'Tier 0' : p.tier === 1 ? 'Tier 1' : p.tier === 2 ? 'Tier 2' : 'N/A';
+            var tierClass = p.tier === 0 ? 'venue-tier-0' : p.tier === 1 ? 'venue-tier-1' : 'venue-tier-2';
+
+            // Header
+            var header = document.createElement('div');
+            header.className = 'detail-header';
+            var titleH2 = document.createElement('h2');
+            titleH2.className = 'detail-title';
+            titleH2.textContent = p.title || 'Untitled';
+            header.appendChild(titleH2);
+            var closeBtn = document.createElement('button');
+            closeBtn.className = 'detail-close';
+            closeBtn.title = 'Close';
+            closeBtn.textContent = '\u00d7';
+            closeBtn.addEventListener('click', closeDetail);
+            header.appendChild(closeBtn);
+            content.appendChild(header);
+
+            // Meta grid
+            var metaGrid = document.createElement('div');
+            metaGrid.className = 'detail-meta-grid';
+
+            function addMeta(label, valueContent) {
+                var lbl = document.createElement('span');
+                lbl.className = 'detail-meta-label';
+                lbl.textContent = label;
+                metaGrid.appendChild(lbl);
+                var val = document.createElement('span');
+                val.className = 'detail-meta-value';
+                if (typeof valueContent === 'string') val.textContent = valueContent;
+                else val.appendChild(valueContent);
+                metaGrid.appendChild(val);
+            }
+
+            function addMetaLink(label, text, href) {
+                var lbl = document.createElement('span');
+                lbl.className = 'detail-meta-label';
+                lbl.textContent = label;
+                metaGrid.appendChild(lbl);
+                var val = document.createElement('span');
+                val.className = 'detail-meta-value';
+                var a = document.createElement('a');
+                a.href = href;
+                a.target = '_blank';
+                a.rel = 'noopener';
+                a.textContent = text;
+                val.appendChild(a);
+                metaGrid.appendChild(val);
+            }
+
+            addMeta('Authors', authorsStr);
+
+            if (p.venue) {
+                var venueBadge = document.createElement('span');
+                venueBadge.className = 'venue-badge ' + tierClass;
+                venueBadge.textContent = p.venue + ' (' + tierLabel + ')';
+                addMeta('Venue', venueBadge);
+            }
+
+            if (p.year) addMeta('Year', String(p.year));
+            if (p.doi) addMetaLink('DOI', p.doi, 'https://doi.org/' + p.doi);
+            if (p.arxiv_id) addMetaLink('arXiv', p.arxiv_id, 'https://arxiv.org/abs/' + p.arxiv_id);
+
+            addMeta('Citations', (p.citation_count || 0).toLocaleString());
+            if (p.reference_count != null) addMeta('References', p.reference_count.toLocaleString());
+            if (p.cited_by_count != null) addMeta('Cited by', p.cited_by_count.toLocaleString());
+            if (p.pagerank != null) addMeta('PageRank', p.pagerank.toFixed(6));
+
+            // ID in small text
+            var idLbl = document.createElement('span');
+            idLbl.className = 'detail-meta-label';
+            idLbl.textContent = 'ID';
+            metaGrid.appendChild(idLbl);
+            var idVal = document.createElement('span');
+            idVal.className = 'detail-meta-value';
+            idVal.style.cssText = 'font-size:0.78rem;color:#777;word-break:break-all;';
+            idVal.textContent = p.id;
+            metaGrid.appendChild(idVal);
+
+            content.appendChild(metaGrid);
+
+            // Abstract section
+            var abstractSection = document.createElement('div');
+            abstractSection.className = 'detail-section';
+            var abstractTitle = document.createElement('div');
+            abstractTitle.className = 'detail-section-title';
+            abstractTitle.textContent = 'Abstract';
+            abstractSection.appendChild(abstractTitle);
+
+            var abstractBody = document.createElement('div');
+            abstractBody.className = 'detail-abstract';
+
+            if (p.abstract_structure && typeof p.abstract_structure === 'object' && Object.keys(p.abstract_structure).length > 0) {
+                renderStructuredAbstract(abstractBody, p.abstract_structure);
+            } else {
+                var absP = document.createElement('p');
+                absP.textContent = p.abstract || 'No abstract available.';
+                abstractBody.appendChild(absP);
+            }
+
+            abstractSection.appendChild(abstractBody);
+            content.appendChild(abstractSection);
+
+            // Keywords section
+            var allKeywords = [];
+            if (Array.isArray(p.keywords)) allKeywords = allKeywords.concat(p.keywords);
+            if (p.keywords_structured && typeof p.keywords_structured === 'object') {
+                Object.keys(p.keywords_structured).forEach(function(category) {
+                    var kws = p.keywords_structured[category];
+                    if (Array.isArray(kws)) allKeywords = allKeywords.concat(kws);
+                });
+            }
+            var uniqueKeywords = allKeywords.filter(function(v, i, a) { return a.indexOf(v) === i; });
+
+            if (uniqueKeywords.length > 0) {
+                var kwSection = document.createElement('div');
+                kwSection.className = 'detail-section';
+                var kwTitle = document.createElement('div');
+                kwTitle.className = 'detail-section-title';
+                kwTitle.textContent = 'Keywords';
+                kwSection.appendChild(kwTitle);
+                var kwContainer = document.createElement('div');
+                kwContainer.className = 'detail-keywords';
+                uniqueKeywords.forEach(function(k) {
+                    var tag = document.createElement('span');
+                    tag.className = 'detail-keyword';
+                    tag.textContent = k;
+                    kwContainer.appendChild(tag);
+                });
+                kwSection.appendChild(kwContainer);
+                content.appendChild(kwSection);
+            }
+
+            // Code repositories
+            var repos = [];
+            if (p.code_url) repos.push(p.code_url);
+            if (Array.isArray(p.code_repositories)) {
+                p.code_repositories.forEach(function(r) {
+                    var url = typeof r === 'string' ? r : (r.url || r.repo_url || '');
+                    if (url && repos.indexOf(url) === -1) repos.push(url);
+                });
+            }
+
+            if (repos.length > 0) {
+                var repoSection = document.createElement('div');
+                repoSection.className = 'detail-section';
+                var repoTitle = document.createElement('div');
+                repoTitle.className = 'detail-section-title';
+                repoTitle.textContent = 'Code Repositories';
+                repoSection.appendChild(repoTitle);
+                var repoContainer = document.createElement('div');
+                repoContainer.className = 'detail-repos';
+                repos.forEach(function(url) {
+                    var link = document.createElement('a');
+                    link.className = 'detail-repo-link';
+                    link.href = url;
+                    link.target = '_blank';
+                    link.rel = 'noopener';
+                    link.appendChild(createIconSpan(ICON_GITHUB_SVG));
+                    var displayUrl = url.replace(/^https?:\/\/(www\.)?github\.com\//, '');
+                    link.appendChild(document.createTextNode(' ' + displayUrl));
+                    repoContainer.appendChild(link);
+                });
+                repoSection.appendChild(repoContainer);
+                content.appendChild(repoSection);
+            }
+
+            // Action buttons
+            var actionsDiv = document.createElement('div');
+            actionsDiv.className = 'detail-actions';
+
+            var graphBtn = document.createElement('a');
+            graphBtn.className = 'detail-action-btn btn-graph';
+            graphBtn.href = '/static/index.html?paper=' + encodeURIComponent(p.id);
+            graphBtn.target = '_blank';
+            graphBtn.textContent = 'View in Graph';
+            actionsDiv.appendChild(graphBtn);
+
+            if (p.pdf_url) {
+                var pdfBtn = document.createElement('a');
+                pdfBtn.className = 'detail-action-btn btn-pdf';
+                pdfBtn.href = p.pdf_url;
+                pdfBtn.target = '_blank';
+                pdfBtn.rel = 'noopener';
+                pdfBtn.textContent = 'View PDF';
+                actionsDiv.appendChild(pdfBtn);
+            }
+
+            if (repos.length > 0) {
+                var codeBtn = document.createElement('a');
+                codeBtn.className = 'detail-action-btn btn-code';
+                codeBtn.href = repos[0];
+                codeBtn.target = '_blank';
+                codeBtn.rel = 'noopener';
+                codeBtn.textContent = 'View Code';
+                actionsDiv.appendChild(codeBtn);
+            }
+
+            content.appendChild(actionsDiv);
+        }
+
+        // Render structured abstract with rhetorical labels using DOM methods
+        function renderStructuredAbstract(container, structure) {
+            var roleClassMap = {
+                task: 'rhetorical-task',
+                method: 'rhetorical-method',
+                result: 'rhetorical-result',
+                results: 'rhetorical-result',
+                conclusion: 'rhetorical-conclusion',
+                background: 'rhetorical-background',
+                objective: 'rhetorical-objective',
+                purpose: 'rhetorical-objective',
+                other: 'rhetorical-other'
+            };
+
+            var roleColorMap = {
+                task: '#3b82f6',
+                method: '#22c55e',
+                result: '#f97316',
+                results: '#f97316',
+                conclusion: '#a855f7',
+                background: '#6b7280',
+                objective: '#eab308',
+                purpose: '#eab308',
+                other: '#4b5563'
+            };
+
+            var sentences = [];
+
+            if (Array.isArray(structure)) {
+                sentences = structure;
+            } else if (typeof structure === 'object') {
+                Object.keys(structure).forEach(function(role) {
+                    var items = structure[role];
+                    if (Array.isArray(items)) {
+                        items.forEach(function(item) {
+                            if (typeof item === 'string') {
+                                sentences.push({ text: item, role: role });
+                            } else if (item && item.text) {
+                                sentences.push({ text: item.text, role: item.role || role });
+                            }
+                        });
+                    } else if (typeof items === 'string') {
+                        sentences.push({ text: items, role: role });
+                    }
+                });
+            }
+
+            if (sentences.length === 0) {
+                var fallback = document.createElement('p');
+                fallback.textContent = 'No structured abstract available.';
+                container.appendChild(fallback);
+                return;
+            }
+
+            var usedRoles = {};
+
+            sentences.forEach(function(s, i) {
+                if (i > 0) {
+                    var spacer = document.createElement('div');
+                    spacer.style.height = '6px';
+                    container.appendChild(spacer);
+                }
+
+                var role = (s.role || 'other').toLowerCase();
+                var cls = roleClassMap[role] || 'rhetorical-other';
+                usedRoles[role] = true;
+
+                var sentDiv = document.createElement('div');
+                sentDiv.className = 'rhetorical-sentence ' + cls;
+
+                var roleLabel = document.createElement('strong');
+                roleLabel.style.cssText = 'font-size:0.75rem;text-transform:uppercase;opacity:0.7;';
+                roleLabel.textContent = role;
+                sentDiv.appendChild(roleLabel);
+                sentDiv.appendChild(document.createTextNode(' ' + s.text));
+
+                container.appendChild(sentDiv);
+            });
+
+            // Legend
+            var legend = document.createElement('div');
+            legend.className = 'rhetorical-legend';
+            Object.keys(usedRoles).forEach(function(role) {
+                var item = document.createElement('span');
+                item.className = 'rhetorical-legend-item';
+                var dot = document.createElement('span');
+                dot.className = 'rhetorical-legend-dot';
+                dot.style.background = roleColorMap[role] || '#4b5563';
+                item.appendChild(dot);
+                item.appendChild(document.createTextNode(' ' + role));
+                legend.appendChild(item);
+            });
+            container.appendChild(legend);
+        }
+
+        // Event listeners
+        document.getElementById('searchBtn').addEventListener('click', function() {
+            doSearch(0);
+        });
+
+        document.getElementById('searchInput').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') doSearch(0);
+        });
+
+        document.getElementById('prevBtn').addEventListener('click', prevPage);
+        document.getElementById('nextBtn').addEventListener('click', nextPage);
+
+        document.getElementById('detailOverlay').addEventListener('click', closeDetail);
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeDetail();
+        });
+
+        // Focus search on page load
+        window.addEventListener('load', function() {
+            document.getElementById('searchInput').focus();
+        });
+    </script>
+</body>
+</html>
