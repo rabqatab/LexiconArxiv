@@ -147,12 +147,14 @@ def _build_cluster_metadata(labels: np.ndarray, metadata: list[dict]) -> list[di
         year_counter: Counter = Counter()
         for m in cluster_meta:
             ks = m.get("keywords_structured", {}) or {}
+            found_structured = False
             for category_keywords in ks.values():
                 if isinstance(category_keywords, list):
                     for kw in category_keywords:
                         keyword_counter[kw.lower()] += 1
-            # Fallback to flat keywords
-            if not keyword_counter:
+                        found_structured = True
+            # Fallback to flat keywords if this paper had no structured keywords
+            if not found_structured:
                 for kw in m.get("keywords", []) or []:
                     keyword_counter[kw.lower()] += 1
             year = m.get("year")
@@ -189,17 +191,25 @@ def store_cluster_results(storage: QdrantStorage, results: dict) -> int:
         batch_x = umap_x[i : i + batch_size]
         batch_y = umap_y[i : i + batch_size]
 
-        for pid, lbl, x, y in zip(batch_ids, batch_labels, batch_x, batch_y):
-            storage.client.set_payload(
-                collection_name=storage.collection_name,
-                payload={
-                    "cluster_id": int(lbl),
-                    "umap_x": float(x),
-                    "umap_y": float(y),
-                },
-                points=[pid],
+        # Batch update: group set_payload operations into one API call
+        operations = [
+            models.SetPayloadOperation(
+                set_payload=models.SetPayload(
+                    payload={
+                        "cluster_id": int(lbl),
+                        "umap_x": float(x),
+                        "umap_y": float(y),
+                    },
+                    points=[pid],
+                )
             )
-            updated += 1
+            for pid, lbl, x, y in zip(batch_ids, batch_labels, batch_x, batch_y)
+        ]
+        storage.client.batch_update_points(
+            collection_name=storage.collection_name,
+            update_operations=operations,
+        )
+        updated += len(batch_ids)
 
         if updated % 10000 == 0:
             logger.info(f"Stored {updated:,} cluster assignments...")

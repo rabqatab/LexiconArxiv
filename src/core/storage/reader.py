@@ -598,7 +598,7 @@ class PaperReader:
         ]
         if skip_embedded:
             must_not.append(
-                models.HasVectorCondition(has_vector="abstract-qwen3-8b"),
+                models.HasVectorCondition(has_vector="structured-abstract"),
             )
 
         results, next_offset = self.client.scroll(

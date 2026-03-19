@@ -206,21 +206,27 @@ class PaperEmbedder:
             return 0
 
         # Embed all texts in chunks of embed_batch_size
-        all_vectors: list[list[float]] = []
+        all_vectors: list[list[float] | None] = [None] * len(all_texts)
+        failed_chunks = 0
         for chunk_start in range(0, len(all_texts), embed_batch_size):
             chunk = all_texts[chunk_start : chunk_start + embed_batch_size]
             vectors = await self.embed_texts(chunk)
             if vectors is None:
                 logger.error(
-                    f"Failed to get embeddings for chunk starting at index {chunk_start}"
+                    f"Failed to embed chunk at index {chunk_start} ({len(chunk)} texts), skipping"
                 )
-                return 0
-            all_vectors.extend(vectors)
+                failed_chunks += 1
+                continue
+            for i, vec in enumerate(vectors):
+                all_vectors[chunk_start + i] = vec
+        if failed_chunks > 0:
+            logger.warning(f"{failed_chunks} chunk(s) failed, proceeding with partial results")
 
-        # Distribute vectors back to per-paper dicts
+        # Distribute vectors back to per-paper dicts (skip None from failed chunks)
         paper_vectors: list[dict] = [{} for _ in papers]
         for idx, (paper_idx, vector_name) in enumerate(text_map):
-            paper_vectors[paper_idx][vector_name] = all_vectors[idx]
+            if all_vectors[idx] is not None:
+                paper_vectors[paper_idx][vector_name] = all_vectors[idx]
 
         # Build PointVectors for update_vectors (preserves existing payloads)
         point_vectors = []

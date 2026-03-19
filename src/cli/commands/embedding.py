@@ -93,10 +93,11 @@ def register_commands(cli: click.Group):
         # Pre-flight: verify collection has vector config
         try:
             info = storage.client.get_collection(storage.collection_name)
-            vectors = info.config.params.vectors
-            if not vectors or "abstract-qwen3-8b" not in vectors:
+            vectors = info.config.params.vectors or {}
+            missing = [v for v in ALL_DENSE_VECTORS if v not in vectors]
+            if missing:
                 click.echo(
-                    "Error: Collection missing vector config. "
+                    f"Error: Collection missing vector configs: {missing}. "
                     "Run: uv run python -m src.cli.core_collect migrate-collection",
                     err=True,
                 )
