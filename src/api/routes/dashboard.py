@@ -1,6 +1,10 @@
 """Data health monitoring dashboard API routes."""
 
+import json
 import logging
+import time
+from datetime import datetime
+from pathlib import Path
 
 from fastapi import APIRouter
 
@@ -10,10 +14,34 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["dashboard"])
 
+_cache = {"data": None, "timestamp": 0}
+CACHE_TTL = 300  # 5 minutes
+
+PIPELINE_STATUS_FILE = Path("data/core/pipeline_status.json")
+
+
+def _read_pipeline_status() -> dict:
+    """Read the pipeline status file written by run_incremental_pipeline.sh."""
+    try:
+        if PIPELINE_STATUS_FILE.exists():
+            data = json.loads(PIPELINE_STATUS_FILE.read_text())
+            return {
+                "status": data.get("status", "unknown"),
+                "finished_at": data.get("finished_at"),
+                "duration_seconds": data.get("duration_seconds"),
+            }
+    except Exception as e:
+        logger.warning(f"Failed to read pipeline status: {e}")
+    return {"status": "unknown", "finished_at": None, "duration_seconds": None}
+
 
 @router.get("/dashboard")
-async def get_dashboard():
+async def get_dashboard(refresh: bool = False):
     """Get comprehensive data health metrics."""
+    now = time.time()
+    if not refresh and _cache["data"] and (now - _cache["timestamp"]) < CACHE_TTL:
+        return _cache["data"]
+
     storage = get_services().storage
     client = storage.client
     collection = storage.collection_name
@@ -124,7 +152,26 @@ async def get_dashboard():
     def pct(n, total_n):
         return round(n / total_n * 100, 1) if total_n > 0 else 0
 
-    return {
+    # Data validation warnings
+    warnings = []
+
+    current_year = datetime.now().year
+    for year in [current_year, current_year - 1]:
+        year_count = year_counts.get(str(year), 0)
+        if year_count == 0:
+            warnings.append(f"No papers found for year {year}")
+        elif year_count < 1000:
+            warnings.append(f"Only {year_count} papers for {year} (expected 10K+)")
+
+    if core > 0:
+        if with_abstract < core * 0.9:
+            warnings.append(f"Abstract coverage below 90% ({pct(with_abstract, core)}%)")
+        if with_keywords < core * 0.7:
+            warnings.append(f"Keyword coverage below 70% ({pct(with_keywords, core)}%)")
+        if with_dense_vec < core * 0.5:
+            warnings.append(f"Embedding coverage below 50% ({pct(with_dense_vec, core)}%)")
+
+    result = {
         "overview": {
             "total_points": total,
             "core_papers": core,
@@ -144,4 +191,11 @@ async def get_dashboard():
             "clusters": {"count": with_cluster, "pct": pct(with_cluster, core)},
         },
         "year_distribution": dict(sorted(year_counts.items())),
+        "pipeline": _read_pipeline_status(),
+        "warnings": warnings,
     }
+
+    _cache["data"] = result
+    _cache["timestamp"] = time.time()
+
+    return result

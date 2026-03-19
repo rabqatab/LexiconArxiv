@@ -170,6 +170,35 @@ async def list_tools() -> list[Tool]:
                 "required": ["paper_id"],
             },
         ),
+        Tool(
+            name="expand_search",
+            description=(
+                "Expand a search query beyond the local corpus by fetching results "
+                "from arXiv and/or OpenAlex. Returns external papers and indicates "
+                "which ones are already in the LexiconArxiv corpus."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Natural language search query",
+                    },
+                    "sources": {
+                        "type": "string",
+                        "enum": ["arxiv", "openalex", "both"],
+                        "description": "Which external sources to query (default: both)",
+                        "default": "both",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max results to return (default 20, max 50)",
+                        "default": 20,
+                    },
+                },
+                "required": ["query"],
+            },
+        ),
     ]
 
 
@@ -190,6 +219,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             return await _handle_get_corpus_stats(arguments)
         elif name == "get_similar_papers":
             return await _handle_get_similar_papers(arguments)
+        elif name == "expand_search":
+            return await _handle_expand_search(arguments)
         else:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]
     except Exception as e:
@@ -410,6 +441,40 @@ async def _handle_get_corpus_stats(arguments: dict) -> list[TextContent]:
         lines.append(f"- {venue}: {count}")
 
     lines.append("")
+
+    return [TextContent(type="text", text="\n".join(lines))]
+
+
+async def _handle_expand_search(arguments: dict) -> list[TextContent]:
+    service = _get_service()
+    query = arguments["query"]
+    sources = arguments.get("sources", "both")
+    limit = min(arguments.get("limit", 20), 50)
+
+    results = await service.expand_search(query=query, sources=sources, limit=limit)
+
+    if "error" in results:
+        return [TextContent(type="text", text=f"Error: {results['error']}")]
+
+    expanded = results.get("expanded_results", [])
+    stats = results.get("expansion_stats", {})
+
+    lines = [f"Expanded search for '{query}' ({sources}):\n"]
+    lines.append(
+        f"arXiv: {stats.get('arxiv_fetched', 0)} | "
+        f"OpenAlex: {stats.get('openalex_fetched', 0)} | "
+        f"Connected: {stats.get('connected', 0)} | "
+        f"External: {stats.get('external', 0)}\n"
+    )
+
+    for i, r in enumerate(expanded, 1):
+        conn = r.get("connection", "external").upper()
+        title = r.get("title", "Untitled")
+        source = r.get("source", "?")
+        year = r.get("year", "?")
+        lines.append(f"{i}. [{conn}] {title} ({source}, {year})")
+        for cp in r.get("connected_papers", []):
+            lines.append(f"   -> {cp.get('relation', '?')}: {cp.get('title', '?')}")
 
     return [TextContent(type="text", text="\n".join(lines))]
 

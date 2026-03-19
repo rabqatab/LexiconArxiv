@@ -153,3 +153,42 @@ def register_commands(cli: click.Group):
                 click.echo(f"\nEmbedding complete: {total_embedded:,} papers embedded")
 
         asyncio.run(run())
+
+    @cli.command()
+    @click.option("--collection", required=True, help="Collection name to delete")
+    @click.option("--confirm", is_flag=True, help="Confirm deletion")
+    def delete_old_collection(collection, confirm):
+        """Delete an old Qdrant collection (e.g., lexicon_arxiv, lexicon_arxiv_v2).
+
+        Refuses to delete the currently active collection. Use --confirm to
+        actually perform the deletion.
+
+        Examples:
+
+          uv run python -m src.cli.core_collect delete-old-collection --collection lexicon_arxiv_v2
+
+          uv run python -m src.cli.core_collect delete-old-collection --collection lexicon_arxiv_v2 --confirm
+        """
+        from qdrant_client import QdrantClient
+        from src.core.constants import get_qdrant_url, get_qdrant_collection
+
+        current = get_qdrant_collection()
+        if collection == current:
+            click.echo(f"Error: Cannot delete the active collection '{current}'")
+            sys.exit(1)
+
+        client = QdrantClient(url=get_qdrant_url())
+        try:
+            info = client.get_collection(collection)
+            count = info.points_count
+        except Exception:
+            click.echo(f"Collection '{collection}' does not exist")
+            return
+
+        if not confirm:
+            click.echo(f"Would delete collection '{collection}' ({count:,} points)")
+            click.echo("Run with --confirm to proceed")
+            return
+
+        client.delete_collection(collection)
+        click.echo(f"Deleted collection '{collection}' ({count:,} points)")

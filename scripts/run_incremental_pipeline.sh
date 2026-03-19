@@ -39,6 +39,11 @@
 
 set -e  # Exit on error
 
+# Pipeline status file for dashboard monitoring
+STATUS_FILE="data/core/pipeline_status.json"
+mkdir -p "$(dirname "$STATUS_FILE")"
+trap 'echo "{\"status\": \"failed\", \"finished_at\": \"$(date -Iseconds)\", \"error\": \"Pipeline failed at step\", \"days\": $DAYS}" > "$STATUS_FILE"' ERR
+
 # Parse arguments
 DAYS=1
 SKIP_GRAPH=false
@@ -266,6 +271,9 @@ echo "Incremental Pipeline Completed!"
 echo "Duration: ${MINUTES}m ${SECONDS}s"
 echo "Finished: $(date '+%Y-%m-%d %H:%M:%S')"
 echo "=============================================="
+
+# Write pipeline status file for dashboard
+echo "{\"status\": \"success\", \"finished_at\": \"$(date -Iseconds)\", \"duration_seconds\": $DURATION, \"days\": $DAYS}" > "$STATUS_FILE"
 
 # Show final stats
 echo ""
