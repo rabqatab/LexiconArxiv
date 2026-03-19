@@ -145,6 +145,31 @@ async def list_tools() -> list[Tool]:
                 "properties": {},
             },
         ),
+        Tool(
+            name="get_similar_papers",
+            description=(
+                "Get precomputed semantically similar papers for a given paper. "
+                "Returns typed similarity edges: same_method (papers using similar methods), "
+                "same_task (papers addressing similar tasks), same_result (papers with similar results), "
+                "method_transfer (papers whose methods relate to this paper's results), "
+                "and overall (holistic similarity). Optionally filter to a single edge type."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "paper_id": {
+                        "type": "string",
+                        "description": "Qdrant point UUID of the paper",
+                    },
+                    "edge_type": {
+                        "type": "string",
+                        "enum": ["same_method", "same_task", "same_result", "method_transfer", "overall"],
+                        "description": "Optional: filter to a single edge type",
+                    },
+                },
+                "required": ["paper_id"],
+            },
+        ),
     ]
 
 
@@ -163,6 +188,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             return await _handle_get_citations(arguments)
         elif name == "get_corpus_stats":
             return await _handle_get_corpus_stats(arguments)
+        elif name == "get_similar_papers":
+            return await _handle_get_similar_papers(arguments)
         else:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]
     except Exception as e:
@@ -300,6 +327,62 @@ async def _handle_get_citations(arguments: dict) -> list[TextContent]:
                 lines.append(f"\n... and {len(cited_by) - limit} more citing papers")
         else:
             lines.append("No citing papers found.")
+        lines.append("")
+
+    return [TextContent(type="text", text="\n".join(lines))]
+
+
+async def _handle_get_similar_papers(arguments: dict) -> list[TextContent]:
+    storage = _get_storage()
+    paper_id = arguments["paper_id"]
+    edge_type = arguments.get("edge_type")
+
+    points = storage.client.retrieve(
+        collection_name=storage.collection_name,
+        ids=[paper_id],
+        with_payload=["title", "similar_papers"],
+    )
+    if not points:
+        return [TextContent(type="text", text=f"Paper {paper_id} not found.")]
+
+    title = points[0].payload.get("title", "Untitled")
+    similar = points[0].payload.get("similar_papers", {})
+
+    if edge_type and edge_type in similar:
+        similar = {edge_type: similar[edge_type]}
+    elif edge_type:
+        similar = {}
+
+    if not similar:
+        return [TextContent(
+            type="text",
+            text=f"# Similar Papers for: {title}\n\nNo precomputed similarity edges found."
+            + (" Try without edge_type filter." if edge_type else ""),
+        )]
+
+    lines = [f"# Similar Papers for: {title}\n"]
+
+    edge_labels = {
+        "same_method": "Same Method",
+        "same_task": "Same Task",
+        "same_result": "Same Result",
+        "method_transfer": "Method Transfer",
+        "overall": "Overall Similarity",
+    }
+
+    for etype, neighbors in similar.items():
+        label = edge_labels.get(etype, etype)
+        lines.append(f"## {label} ({len(neighbors)} papers)\n")
+        for n in neighbors:
+            n_title = n.get("title", "Untitled")
+            n_venue = n.get("venue", "")
+            n_year = n.get("year", "")
+            n_score = n.get("score", 0.0)
+            venue_str = f"{n_venue} {n_year}".strip() if n_venue else str(n_year)
+            lines.append(
+                f"- **{n_title}** ({venue_str}) "
+                f"[score: {n_score}] ID: {n['id']}"
+            )
         lines.append("")
 
     return [TextContent(type="text", text="\n".join(lines))]

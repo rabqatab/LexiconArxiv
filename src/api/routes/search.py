@@ -94,6 +94,40 @@ async def get_paper(paper_id: str):
     return PaperDetailResponse(**paper)
 
 
+@router.get("/paper/{paper_id}/similar")
+async def get_similar_papers(paper_id: str, edge_type: str | None = None):
+    """Get precomputed similar papers for a given paper."""
+    services = get_services()
+    storage = services.storage
+
+    try:
+        points = storage.client.retrieve(
+            collection_name=storage.collection_name,
+            ids=[paper_id],
+            with_payload=["title", "similar_papers"],
+        )
+        if not points:
+            raise HTTPException(status_code=404, detail="Paper not found")
+
+        similar = points[0].payload.get("similar_papers", {})
+        title = points[0].payload.get("title", "")
+
+        if edge_type and edge_type in similar:
+            similar = {edge_type: similar[edge_type]}
+        elif edge_type:
+            similar = {}
+
+        return {
+            "paper_id": paper_id,
+            "title": title,
+            "similar_papers": similar,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/stats", response_model=CorpusStatsResponse)
 async def get_corpus_stats():
     """Get corpus statistics."""

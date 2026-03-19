@@ -9,7 +9,7 @@ Supports multiple sources: OpenAlex, ACL Anthology, and DBLP.
 import click
 
 from src.cli._logging import root_logger, console_handler, file_handler, logger
-from src.cli.commands import analytics, collection, crawlers, embedding, enrichment, resolution, graph, quality, keywords, labeling
+from src.cli.commands import analytics, collection, crawlers, embedding, enrichment, resolution, graph, quality, keywords, labeling, similarity
 
 
 @click.group()
@@ -34,6 +34,7 @@ graph.register_commands(cli)
 quality.register_commands(cli)
 keywords.register_commands(cli)
 labeling.register_commands(cli)
+similarity.register_commands(cli)
 
 
 def main() -> None:
