@@ -114,6 +114,35 @@ class PaperEmbedder:
             logger.error(f"Failed to check Ollama models: {e}")
             return False
 
+    @staticmethod
+    def _build_structured_text(structure: dict) -> str:
+        """Build section-prefixed text with multi-label deduplication.
+
+        Sentences that appear in multiple roles get all their labels:
+        "[TASK,APPROACH] We propose..." instead of duplicating the sentence.
+        """
+        # Map each unique sentence to its set of roles
+        sentence_roles: dict[str, list[str]] = {}
+        # Track order by first appearance
+        sentence_order: list[str] = []
+
+        for role in SECTION_ROLES:
+            for sent in structure.get(role, []):
+                if sent not in sentence_roles:
+                    sentence_roles[sent] = []
+                    sentence_order.append(sent)
+                if role not in sentence_roles[sent]:
+                    sentence_roles[sent].append(role)
+
+        # Build text: [ROLE1,ROLE2] sentence
+        parts = []
+        for sent in sentence_order:
+            roles = sentence_roles[sent]
+            label = ",".join(r.upper() for r in roles)
+            parts.append(f"[{label}] {sent}")
+
+        return " ".join(parts)
+
     async def embed_and_upsert_batch(
         self,
         papers: list[tuple[str, dict]],
@@ -153,14 +182,11 @@ class PaperEmbedder:
             all_texts.append(f"Retrieve academic papers: {abstract}")
             text_map.append((i, EMBEDDING_VECTOR_NAME))
 
-            # 2. Structured abstract vector
+            # 2. Structured abstract vector (multi-label aware)
             if structure:
-                parts = []
-                for role in SECTION_ROLES:
-                    sents = structure.get(role, [])
-                    if sents:
-                        parts.append(f"[{role.upper()}] {' '.join(sents)}")
-                structured = " ".join(parts) if parts else abstract
+                structured = self._build_structured_text(structure)
+                if not structured:
+                    structured = abstract
             else:
                 structured = abstract
             all_texts.append(f"Retrieve academic papers: {structured}")
