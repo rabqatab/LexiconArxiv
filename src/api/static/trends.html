@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LexiconArxiv Trends</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+        }
+
+        /* Header */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            background: rgba(30, 30, 50, 0.98);
+            border-bottom: 1px solid #333;
+            backdrop-filter: blur(10px);
+        }
+        .header-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .logo {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #22d3ee;
+            white-space: nowrap;
+            text-decoration: none;
+        }
+        .logo span {
+            color: #f97316;
+        }
+        .nav-links {
+            display: flex;
+            gap: 20px;
+            margin-left: auto;
+        }
+        .nav-link {
+            color: #888;
+            font-size: 0.85rem;
+            text-decoration: none;
+            white-space: nowrap;
+            transition: color 0.2s;
+        }
+        .nav-link:hover {
+            color: #22d3ee;
+        }
+        .nav-link.active {
+            color: #22d3ee;
+            font-weight: 600;
+        }
+
+        /* Main content */
+        .main {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 80px 24px 40px;
+        }
+
+        /* Section tabs */
+        .section-tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 24px;
+            background: rgba(42, 42, 74, 0.4);
+            border-radius: 10px;
+            padding: 4px;
+            border: 1px solid #333;
+        }
+        .section-tab {
+            flex: 1;
+            padding: 10px 16px;
+            background: transparent;
+            border: none;
+            border-radius: 8px;
+            color: #888;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+        .section-tab:hover {
+            color: #ccc;
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .section-tab.active {
+            background: rgba(34, 211, 238, 0.12);
+            color: #22d3ee;
+            font-weight: 600;
+        }
+
+        /* Section panels */
+        .section-panel {
+            display: none;
+        }
+        .section-panel.active {
+            display: block;
+        }
+
+        /* Section headings */
+        .section-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #eee;
+            margin-bottom: 16px;
+        }
+        .section-subtitle {
+            font-size: 0.85rem;
+            color: #888;
+            margin-bottom: 20px;
+        }
+
+        /* Rising Keywords */
+        .keyword-bar-container {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .keyword-bar-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .keyword-bar-label {
+            flex: 0 0 200px;
+            text-align: right;
+            font-size: 0.85rem;
+            color: #ccc;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .keyword-bar-track {
+            flex: 1;
+            height: 26px;
+            background: rgba(42, 42, 74, 0.4);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+        .keyword-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.6s ease;
+            display: flex;
+            align-items: center;
+            padding-left: 8px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.9);
+            min-width: 40px;
+        }
+        .keyword-bar-category {
+            flex: 0 0 70px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .keyword-bar-growth {
+            flex: 0 0 60px;
+            text-align: right;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #4ade80;
+        }
+
+        /* Category colors */
+        .cat-task { color: #60a5fa; }
+        .cat-method { color: #4ade80; }
+        .cat-model { color: #c084fc; }
+        .cat-domain { color: #f97316; }
+        .cat-dataset { color: #22d3ee; }
+        .cat-contribution_type { color: #fbbf24; }
+        .cat-modality { color: #f472b6; }
+
+        .bar-task { background: rgba(96, 165, 250, 0.7); }
+        .bar-method { background: rgba(74, 222, 128, 0.7); }
+        .bar-model { background: rgba(192, 132, 252, 0.7); }
+        .bar-domain { background: rgba(249, 115, 22, 0.7); }
+        .bar-dataset { background: rgba(34, 211, 238, 0.7); }
+        .bar-contribution_type { background: rgba(251, 191, 36, 0.7); }
+        .bar-modality { background: rgba(244, 114, 182, 0.7); }
+
+        /* Notable Papers */
+        .paper-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .paper-card {
+            background: rgba(42, 42, 74, 0.6);
+            border: 1px solid #333;
+            border-radius: 10px;
+            padding: 16px 20px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .paper-card:hover {
+            border-color: #444;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+        }
+        .paper-rank {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: rgba(34, 211, 238, 0.15);
+            color: #22d3ee;
+            font-size: 0.8rem;
+            font-weight: 700;
+            margin-right: 10px;
+            flex-shrink: 0;
+        }
+        .paper-header {
+            display: flex;
+            align-items: flex-start;
+        }
+        .paper-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #22d3ee;
+            line-height: 1.4;
+        }
+        .paper-meta {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 6px;
+            margin-left: 38px;
+            flex-wrap: wrap;
+        }
+        .paper-authors {
+            font-size: 0.82rem;
+            color: #aaa;
+            margin-left: 38px;
+            margin-top: 4px;
+        }
+        .meta-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .badge-score {
+            background: rgba(34, 211, 238, 0.12);
+            color: #22d3ee;
+            border: 1px solid rgba(34, 211, 238, 0.25);
+        }
+        .badge-citations {
+            background: rgba(249, 115, 22, 0.12);
+            color: #f97316;
+            border: 1px solid rgba(249, 115, 22, 0.25);
+        }
+        .badge-year {
+            background: rgba(156, 163, 175, 0.12);
+            color: #9ca3af;
+            border: 1px solid rgba(156, 163, 175, 0.25);
+        }
+        .badge-venue {
+            background: rgba(74, 222, 128, 0.12);
+            color: #4ade80;
+            border: 1px solid rgba(74, 222, 128, 0.25);
+        }
+        .badge-tier-0 {
+            background: rgba(34, 211, 238, 0.12);
+            color: #22d3ee;
+            border: 1px solid rgba(34, 211, 238, 0.25);
+        }
+        .badge-tier-1 {
+            background: rgba(249, 115, 22, 0.12);
+            color: #f97316;
+            border: 1px solid rgba(249, 115, 22, 0.25);
+        }
+        .badge-tier-2 {
+            background: rgba(156, 163, 175, 0.12);
+            color: #9ca3af;
+            border: 1px solid rgba(156, 163, 175, 0.25);
+        }
+
+        /* Topic Map */
+        .map-container {
+            position: relative;
+            width: 100%;
+            background: rgba(20, 20, 40, 0.8);
+            border: 1px solid #333;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .map-canvas {
+            display: block;
+            width: 100%;
+            cursor: crosshair;
+        }
+        .map-tooltip {
+            position: absolute;
+            background: rgba(30, 30, 50, 0.95);
+            border: 1px solid #555;
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 0.82rem;
+            color: #eee;
+            pointer-events: none;
+            display: none;
+            max-width: 300px;
+            z-index: 10;
+            line-height: 1.4;
+        }
+        .map-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 12px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.75rem;
+            color: #aaa;
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+        .legend-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .legend-item.dimmed {
+            opacity: 0.3;
+        }
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+        .empty-state h3 {
+            font-size: 1.1rem;
+            color: #888;
+            margin-bottom: 8px;
+        }
+        .empty-state p {
+            font-size: 0.9rem;
+        }
+        .empty-state code {
+            background: rgba(42, 42, 74, 0.6);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.82rem;
+        }
+
+        /* Loading spinner */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+            color: #888;
+            gap: 10px;
+        }
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #444;
+            border-top-color: #22d3ee;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header-inner {
+                flex-wrap: wrap;
+            }
+            .keyword-bar-label {
+                flex: 0 0 120px;
+                font-size: 0.78rem;
+            }
+            .keyword-bar-category {
+                display: none;
+            }
+            .paper-meta {
+                margin-left: 0;
+            }
+            .section-tab {
+                font-size: 0.78rem;
+                padding: 8px 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-inner">
+            <a class="logo" href="/">Lexicon<span>Arxiv</span></a>
+            <div class="nav-links">
+                <a class="nav-link" href="/search">Search</a>
+                <a class="nav-link active" href="/trends">Trends</a>
+                <a class="nav-link" href="/static/index.html">Graph Explorer</a>
+            </div>
+        </div>
+    </header>
+
+    <div class="main">
+        <div class="section-tabs">
+            <button class="section-tab active" data-section="rising">Rising Keywords</button>
+            <button class="section-tab" data-section="notable">Notable Papers</button>
+            <button class="section-tab" data-section="map">Topic Map</button>
+        </div>
+
+        <!-- Rising Keywords Section -->
+        <div id="section-rising" class="section-panel active">
+            <h2 class="section-title">Rising Keywords</h2>
+            <p class="section-subtitle">Fastest-growing research keywords by growth rate (recent 2 years vs prior 2 years)</p>
+            <div id="rising-content">
+                <div class="loading"><div class="spinner"></div> Loading rising keywords...</div>
+            </div>
+        </div>
+
+        <!-- Notable Papers Section -->
+        <div id="section-notable" class="section-panel">
+            <h2 class="section-title">Notable Papers</h2>
+            <p class="section-subtitle">Top papers ranked by composite score (citations, PageRank, recency, venue tier)</p>
+            <div id="notable-content">
+                <div class="loading"><div class="spinner"></div> Loading notable papers...</div>
+            </div>
+        </div>
+
+        <!-- Topic Map Section -->
+        <div id="section-map" class="section-panel">
+            <h2 class="section-title">Topic Map</h2>
+            <p class="section-subtitle">2D UMAP projection of paper embeddings, colored by discovered topic clusters</p>
+            <div id="map-content">
+                <div class="loading"><div class="spinner"></div> Loading topic map...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // ==================== Utility ====================
+    function escapeHtml(str) {
+        if (!str) return '';
+        var div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    function hexToRgba(hex, alpha) {
+        var r = parseInt(hex.slice(1, 3), 16);
+        var g = parseInt(hex.slice(3, 5), 16);
+        var b = parseInt(hex.slice(5, 7), 16);
+        return 'rgba(' + r + ', ' + g + ', ' + b + ', ' + alpha + ')';
+    }
+
+    function buildSafeElement(tag, attrs, children) {
+        var el = document.createElement(tag);
+        if (attrs) {
+            Object.keys(attrs).forEach(function(key) {
+                if (key === 'className') el.className = attrs[key];
+                else if (key === 'textContent') el.textContent = attrs[key];
+                else el.setAttribute(key, attrs[key]);
+            });
+        }
+        if (children) {
+            children.forEach(function(child) {
+                if (typeof child === 'string') el.appendChild(document.createTextNode(child));
+                else if (child) el.appendChild(child);
+            });
+        }
+        return el;
+    }
+
+    // ==================== Section Tab Navigation ====================
+    var tabs = document.querySelectorAll('.section-tab');
+    var panels = document.querySelectorAll('.section-panel');
+    var loaded = {};
+
+    tabs.forEach(function(tab) {
+        tab.addEventListener('click', function() {
+            var section = tab.dataset.section;
+            tabs.forEach(function(t) { t.classList.remove('active'); });
+            panels.forEach(function(p) { p.classList.remove('active'); });
+            tab.classList.add('active');
+            document.getElementById('section-' + section).classList.add('active');
+
+            // Lazy-load sections
+            if (section === 'rising' && !loaded.rising) loadRisingKeywords();
+            if (section === 'notable' && !loaded.notable) loadNotablePapers();
+            if (section === 'map' && !loaded.map) loadTopicMap();
+        });
+    });
+
+    // ==================== Category Helpers ====================
+    var CATEGORY_COLORS = {
+        task: '#60a5fa',
+        method: '#4ade80',
+        model: '#c084fc',
+        domain: '#f97316',
+        dataset: '#22d3ee',
+        contribution_type: '#fbbf24',
+        modality: '#f472b6'
+    };
+
+    function getCategoryClass(cat) {
+        return 'cat-' + (cat || 'task');
+    }
+
+    function getBarClass(cat) {
+        return 'bar-' + (cat || 'task');
+    }
+
+    // ==================== Rising Keywords ====================
+    async function loadRisingKeywords() {
+        loaded.rising = true;
+        var container = document.getElementById('rising-content');
+        try {
+            var res = await fetch('/api/trends/rising?top_k=20&min_count=5');
+            if (!res.ok) throw new Error('Failed to load');
+            var data = await res.json();
+
+            if (!data.rising || data.rising.length === 0) {
+                container.textContent = '';
+                var empty = buildSafeElement('div', {className: 'empty-state'}, [
+                    buildSafeElement('h3', {textContent: 'No Rising Keywords'}),
+                    buildSafeElement('p', {textContent: 'Run keyword extraction first to populate trend data.'})
+                ]);
+                container.appendChild(empty);
+                return;
+            }
+
+            // Filter out infinite growth rates for display and cap at reasonable max
+            var keywords = data.rising.filter(function(k) { return isFinite(k.growth_rate) && k.growth_rate > 0; });
+            if (keywords.length === 0) {
+                container.textContent = '';
+                var empty = buildSafeElement('div', {className: 'empty-state'}, [
+                    buildSafeElement('h3', {textContent: 'No Rising Keywords'}),
+                    buildSafeElement('p', {textContent: 'No keywords with measurable growth found.'})
+                ]);
+                container.appendChild(empty);
+                return;
+            }
+
+            var maxGrowth = Math.max.apply(null, keywords.map(function(k) { return k.growth_rate; }));
+
+            var barContainer = document.createElement('div');
+            barContainer.className = 'keyword-bar-container';
+
+            keywords.forEach(function(k) {
+                var pct = Math.max(5, (k.growth_rate / maxGrowth) * 100);
+                var growthDisplay = k.growth_rate >= 100 ? k.growth_rate.toFixed(0) + 'x' : k.growth_rate.toFixed(1) + 'x';
+
+                var row = document.createElement('div');
+                row.className = 'keyword-bar-row';
+
+                var label = document.createElement('div');
+                label.className = 'keyword-bar-label';
+                label.textContent = k.keyword;
+                label.title = k.keyword;
+
+                var catLabel = document.createElement('div');
+                catLabel.className = 'keyword-bar-category ' + getCategoryClass(k.category);
+                catLabel.textContent = k.category;
+
+                var track = document.createElement('div');
+                track.className = 'keyword-bar-track';
+
+                var fill = document.createElement('div');
+                fill.className = 'keyword-bar-fill ' + getBarClass(k.category);
+                fill.style.width = pct + '%';
+                fill.textContent = k.recent_count + ' papers';
+
+                track.appendChild(fill);
+
+                var growth = document.createElement('div');
+                growth.className = 'keyword-bar-growth';
+                growth.textContent = growthDisplay;
+
+                row.appendChild(label);
+                row.appendChild(catLabel);
+                row.appendChild(track);
+                row.appendChild(growth);
+                barContainer.appendChild(row);
+            });
+
+            container.textContent = '';
+            container.appendChild(barContainer);
+        } catch (e) {
+            container.textContent = '';
+            var empty = buildSafeElement('div', {className: 'empty-state'}, [
+                buildSafeElement('h3', {textContent: 'Error Loading Keywords'}),
+                buildSafeElement('p', {textContent: e.message})
+            ]);
+            container.appendChild(empty);
+        }
+    }
+
+    // ==================== Notable Papers ====================
+    async function loadNotablePapers() {
+        loaded.notable = true;
+        var container = document.getElementById('notable-content');
+        try {
+            var res = await fetch('/api/trends/notable?limit=20');
+            if (!res.ok) throw new Error('Failed to load');
+            var data = await res.json();
+
+            if (!data.papers || data.papers.length === 0) {
+                container.textContent = '';
+                var empty = buildSafeElement('div', {className: 'empty-state'}, [
+                    buildSafeElement('h3', {textContent: 'No Notable Papers'}),
+                    buildSafeElement('p', {textContent: 'The corpus may be empty or papers lack citation/PageRank data.'})
+                ]);
+                container.appendChild(empty);
+                return;
+            }
+
+            var list = document.createElement('div');
+            list.className = 'paper-list';
+
+            data.papers.forEach(function(p, i) {
+                var card = document.createElement('div');
+                card.className = 'paper-card';
+
+                // Header with rank + title
+                var header = document.createElement('div');
+                header.className = 'paper-header';
+
+                var rank = document.createElement('span');
+                rank.className = 'paper-rank';
+                rank.textContent = (i + 1).toString();
+
+                var title = document.createElement('span');
+                title.className = 'paper-title';
+                title.textContent = p.title || 'Untitled';
+
+                header.appendChild(rank);
+                header.appendChild(title);
+                card.appendChild(header);
+
+                // Authors
+                var authors = (p.authors || []).slice(0, 3).join(', ');
+                var moreAuthors = (p.authors || []).length > 3 ? ' et al.' : '';
+                if (authors) {
+                    var authorsEl = document.createElement('div');
+                    authorsEl.className = 'paper-authors';
+                    authorsEl.textContent = authors + moreAuthors;
+                    card.appendChild(authorsEl);
+                }
+
+                // Meta badges
+                var meta = document.createElement('div');
+                meta.className = 'paper-meta';
+
+                var scoreBadge = document.createElement('span');
+                scoreBadge.className = 'meta-badge badge-score';
+                scoreBadge.textContent = 'Score: ' + p.notable_score.toFixed(3);
+                meta.appendChild(scoreBadge);
+
+                var citBadge = document.createElement('span');
+                citBadge.className = 'meta-badge badge-citations';
+                citBadge.textContent = 'Citations: ' + p.citation_count.toLocaleString();
+                meta.appendChild(citBadge);
+
+                if (p.year) {
+                    var yearBadge = document.createElement('span');
+                    yearBadge.className = 'meta-badge badge-year';
+                    yearBadge.textContent = p.year.toString();
+                    meta.appendChild(yearBadge);
+                }
+
+                if (p.venue) {
+                    var venueBadge = document.createElement('span');
+                    venueBadge.className = 'meta-badge badge-venue';
+                    venueBadge.textContent = p.venue;
+                    meta.appendChild(venueBadge);
+                }
+
+                if (p.tier !== null && p.tier !== undefined) {
+                    var tierBadge = document.createElement('span');
+                    tierBadge.className = 'meta-badge badge-tier-' + p.tier;
+                    tierBadge.textContent = 'Tier ' + p.tier;
+                    meta.appendChild(tierBadge);
+                }
+
+                card.appendChild(meta);
+                list.appendChild(card);
+            });
+
+            container.textContent = '';
+            container.appendChild(list);
+        } catch (e) {
+            container.textContent = '';
+            var empty = buildSafeElement('div', {className: 'empty-state'}, [
+                buildSafeElement('h3', {textContent: 'Error Loading Papers'}),
+                buildSafeElement('p', {textContent: e.message})
+            ]);
+            container.appendChild(empty);
+        }
+    }
+
+    // ==================== Topic Map (Canvas) ====================
+    var mapData = null;
+    var mapCanvas = null;
+    var mapCtx = null;
+    var mapTransform = { scale: 1, offsetX: 0, offsetY: 0 };
+    var mapDragging = false;
+    var mapDragStart = { x: 0, y: 0 };
+    var mapFilterCluster = null; // null = show all
+    var mapTooltipEl = null;
+
+    // Distinct cluster colors (up to 20 clusters, then cycles)
+    var CLUSTER_COLORS = [
+        '#22d3ee', '#f97316', '#4ade80', '#c084fc', '#f472b6',
+        '#fbbf24', '#60a5fa', '#a78bfa', '#fb923c', '#34d399',
+        '#e879f9', '#38bdf8', '#facc15', '#f87171', '#2dd4bf',
+        '#818cf8', '#fb7185', '#a3e635', '#e2e8f0', '#94a3b8'
+    ];
+    var NOISE_COLOR = '#444';
+
+    function getClusterColor(clusterId) {
+        if (clusterId < 0) return NOISE_COLOR;
+        return CLUSTER_COLORS[clusterId % CLUSTER_COLORS.length];
+    }
+
+    async function loadTopicMap() {
+        loaded.map = true;
+        var container = document.getElementById('map-content');
+        try {
+            var res = await fetch('/api/trends/map?limit=10000');
+            if (!res.ok) throw new Error('Failed to load');
+            var data = await res.json();
+
+            if (!data.points || data.points.length === 0) {
+                container.textContent = '';
+                var empty = buildSafeElement('div', {className: 'empty-state'}, [
+                    buildSafeElement('h3', {textContent: 'No Topic Map Data'}),
+                    buildSafeElement('p', {textContent: 'Run clustering first: uv run python -m src.cli compute-topics'})
+                ]);
+                container.appendChild(empty);
+                return;
+            }
+
+            mapData = data;
+
+            // Build map UI using DOM methods
+            container.textContent = '';
+
+            var mapContainer = document.createElement('div');
+            mapContainer.className = 'map-container';
+
+            var canvas = document.createElement('canvas');
+            canvas.id = 'map-canvas';
+            canvas.className = 'map-canvas';
+            canvas.width = 1152;
+            canvas.height = 650;
+            mapContainer.appendChild(canvas);
+
+            var tooltip = document.createElement('div');
+            tooltip.id = 'map-tooltip';
+            tooltip.className = 'map-tooltip';
+            mapContainer.appendChild(tooltip);
+
+            container.appendChild(mapContainer);
+
+            var legend = document.createElement('div');
+            legend.id = 'map-legend';
+            legend.className = 'map-legend';
+            container.appendChild(legend);
+
+            mapCanvas = canvas;
+            mapCtx = mapCanvas.getContext('2d');
+            mapTooltipEl = tooltip;
+
+            // Resize canvas to actual pixel width
+            resizeMapCanvas();
+            window.addEventListener('resize', resizeMapCanvas);
+
+            // Build legend
+            buildMapLegend();
+
+            // Set up interaction
+            setupMapInteraction();
+
+            // Initial render
+            resetMapTransform();
+            renderMap();
+        } catch (e) {
+            container.textContent = '';
+            var empty = buildSafeElement('div', {className: 'empty-state'}, [
+                buildSafeElement('h3', {textContent: 'Error Loading Topic Map'}),
+                buildSafeElement('p', {textContent: e.message})
+            ]);
+            container.appendChild(empty);
+        }
+    }
+
+    function resizeMapCanvas() {
+        if (!mapCanvas) return;
+        var rect = mapCanvas.parentElement.getBoundingClientRect();
+        var dpr = window.devicePixelRatio || 1;
+        mapCanvas.width = rect.width * dpr;
+        mapCanvas.height = 650 * dpr;
+        mapCanvas.style.height = '650px';
+        mapCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        if (mapData) {
+            resetMapTransform();
+            renderMap();
+        }
+    }
+
+    function resetMapTransform() {
+        if (!mapData || !mapData.points.length) return;
+        var points = mapData.points;
+        var xs = points.map(function(p) { return p.x; });
+        var ys = points.map(function(p) { return p.y; });
+        var minX = Math.min.apply(null, xs), maxX = Math.max.apply(null, xs);
+        var minY = Math.min.apply(null, ys), maxY = Math.max.apply(null, ys);
+        var rangeX = maxX - minX || 1;
+        var rangeY = maxY - minY || 1;
+
+        var cw = mapCanvas.clientWidth;
+        var ch = 650;
+        var padding = 40;
+
+        var scaleX = (cw - 2 * padding) / rangeX;
+        var scaleY = (ch - 2 * padding) / rangeY;
+        var scale = Math.min(scaleX, scaleY);
+
+        mapTransform = {
+            scale: scale,
+            offsetX: padding - minX * scale + (cw - 2 * padding - rangeX * scale) / 2,
+            offsetY: padding - minY * scale + (ch - 2 * padding - rangeY * scale) / 2
+        };
+    }
+
+    function renderMap() {
+        if (!mapCtx || !mapData) return;
+        var cw = mapCanvas.clientWidth;
+        var ch = 650;
+        var scale = mapTransform.scale;
+        var offsetX = mapTransform.offsetX;
+        var offsetY = mapTransform.offsetY;
+
+        mapCtx.clearRect(0, 0, cw, ch);
+
+        // Separate noise and cluster points
+        var noisePoints = [];
+        var clusterPoints = [];
+        mapData.points.forEach(function(p) {
+            if (p.cluster_id < 0) noisePoints.push(p);
+            else clusterPoints.push(p);
+        });
+
+        // Draw noise points first (below clusters)
+        if (mapFilterCluster === null || mapFilterCluster === -1) {
+            var noiseAlpha = mapFilterCluster === -1 ? 1.0 : 0.4;
+            noisePoints.forEach(function(p) {
+                var px = p.x * scale + offsetX;
+                var py = p.y * scale + offsetY;
+                if (px < -10 || px > cw + 10 || py < -10 || py > ch + 10) return;
+                mapCtx.beginPath();
+                mapCtx.arc(px, py, 2, 0, Math.PI * 2);
+                mapCtx.fillStyle = hexToRgba(NOISE_COLOR, noiseAlpha);
+                mapCtx.fill();
+            });
+        }
+
+        // Draw cluster points
+        clusterPoints.forEach(function(p) {
+            var px = p.x * scale + offsetX;
+            var py = p.y * scale + offsetY;
+            if (px < -10 || px > cw + 10 || py < -10 || py > ch + 10) return;
+            var active = mapFilterCluster === null || mapFilterCluster === p.cluster_id;
+            mapCtx.beginPath();
+            mapCtx.arc(px, py, active ? 3.5 : 2, 0, Math.PI * 2);
+            var color = getClusterColor(p.cluster_id);
+            mapCtx.fillStyle = active ? color : hexToRgba(color, 0.15);
+            mapCtx.fill();
+        });
+    }
+
+    function buildMapLegend() {
+        if (!mapData) return;
+        var legendEl = document.getElementById('map-legend');
+        var clusterIdSet = {};
+        mapData.points.forEach(function(p) { clusterIdSet[p.cluster_id] = true; });
+        var clusterIds = Object.keys(clusterIdSet).map(Number).sort(function(a, b) { return a - b; });
+
+        legendEl.textContent = '';
+
+        clusterIds.forEach(function(cid) {
+            var count = mapData.points.filter(function(p) { return p.cluster_id === cid; }).length;
+            var labelText = cid < 0 ? 'Noise' : 'Cluster ' + cid;
+            var color = getClusterColor(cid);
+
+            var item = document.createElement('div');
+            item.className = 'legend-item';
+            item.dataset.cluster = cid;
+
+            var dot = document.createElement('span');
+            dot.className = 'legend-dot';
+            dot.style.background = color;
+            item.appendChild(dot);
+            item.appendChild(document.createTextNode(labelText + ' (' + count + ')'));
+
+            item.addEventListener('click', function() {
+                if (mapFilterCluster === cid) {
+                    mapFilterCluster = null;
+                    legendEl.querySelectorAll('.legend-item').forEach(function(i) { i.classList.remove('dimmed'); });
+                } else {
+                    mapFilterCluster = cid;
+                    legendEl.querySelectorAll('.legend-item').forEach(function(i) {
+                        var iCid = parseInt(i.dataset.cluster);
+                        i.classList.toggle('dimmed', iCid !== cid);
+                    });
+                }
+                renderMap();
+            });
+
+            legendEl.appendChild(item);
+        });
+    }
+
+    function setupMapInteraction() {
+        if (!mapCanvas) return;
+
+        // Pan
+        mapCanvas.addEventListener('mousedown', function(e) {
+            mapDragging = true;
+            mapDragStart = { x: e.clientX, y: e.clientY };
+            mapCanvas.style.cursor = 'grabbing';
+        });
+        window.addEventListener('mousemove', function(e) {
+            if (mapDragging) {
+                var dx = e.clientX - mapDragStart.x;
+                var dy = e.clientY - mapDragStart.y;
+                mapTransform.offsetX += dx;
+                mapTransform.offsetY += dy;
+                mapDragStart = { x: e.clientX, y: e.clientY };
+                renderMap();
+            }
+        });
+        window.addEventListener('mouseup', function() {
+            mapDragging = false;
+            if (mapCanvas) mapCanvas.style.cursor = 'crosshair';
+        });
+
+        // Zoom
+        mapCanvas.addEventListener('wheel', function(e) {
+            e.preventDefault();
+            var rect = mapCanvas.getBoundingClientRect();
+            var mx = e.clientX - rect.left;
+            var my = e.clientY - rect.top;
+            var zoomFactor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+
+            mapTransform.offsetX = mx - (mx - mapTransform.offsetX) * zoomFactor;
+            mapTransform.offsetY = my - (my - mapTransform.offsetY) * zoomFactor;
+            mapTransform.scale *= zoomFactor;
+            renderMap();
+        }, { passive: false });
+
+        // Tooltip on hover
+        mapCanvas.addEventListener('mousemove', function(e) {
+            if (mapDragging || !mapData) {
+                mapTooltipEl.style.display = 'none';
+                return;
+            }
+            var rect = mapCanvas.getBoundingClientRect();
+            var mx = e.clientX - rect.left;
+            var my = e.clientY - rect.top;
+            var scale = mapTransform.scale;
+            var offsetX = mapTransform.offsetX;
+            var offsetY = mapTransform.offsetY;
+
+            var closest = null;
+            var closestDist = 12; // px threshold
+            for (var i = 0; i < mapData.points.length; i++) {
+                var p = mapData.points[i];
+                var px = p.x * scale + offsetX;
+                var py = p.y * scale + offsetY;
+                var dist = Math.sqrt((px - mx) * (px - mx) + (py - my) * (py - my));
+                if (dist < closestDist) {
+                    closest = p;
+                    closestDist = dist;
+                }
+            }
+
+            if (closest) {
+                mapTooltipEl.style.display = 'block';
+                var ttX = Math.min(mx + 15, mapCanvas.clientWidth - 310);
+                var ttY = Math.min(my + 15, 610);
+                mapTooltipEl.style.left = ttX + 'px';
+                mapTooltipEl.style.top = ttY + 'px';
+
+                // Build tooltip content safely
+                mapTooltipEl.textContent = '';
+                var ttTitle = document.createElement('div');
+                ttTitle.style.color = '#22d3ee';
+                ttTitle.style.fontWeight = '600';
+                ttTitle.style.marginBottom = '4px';
+                ttTitle.textContent = closest.title || 'Untitled';
+                mapTooltipEl.appendChild(ttTitle);
+
+                var ttMeta = document.createElement('div');
+                ttMeta.style.color = '#aaa';
+                ttMeta.style.fontSize = '0.75rem';
+                var metaParts = [];
+                if (closest.year) metaParts.push('Year: ' + closest.year);
+                if (closest.venue) metaParts.push(closest.venue);
+                metaParts.push(closest.cluster_id >= 0 ? 'Cluster ' + closest.cluster_id : 'Noise');
+                ttMeta.textContent = metaParts.join(' | ');
+                mapTooltipEl.appendChild(ttMeta);
+            } else {
+                mapTooltipEl.style.display = 'none';
+            }
+        });
+
+        mapCanvas.addEventListener('mouseleave', function() {
+            mapTooltipEl.style.display = 'none';
+        });
+    }
+
+    // ==================== Initial Load ====================
+    loadRisingKeywords();
+    </script>
+</body>
+</html>

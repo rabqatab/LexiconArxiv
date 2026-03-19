@@ -18,7 +18,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 
 from src.api.dependencies import get_services
-from src.api.routes import graph, search
+from src.api.routes import graph, search, trends
 
 # Static files directory
 STATIC_DIR = Path(__file__).parent / "static"
@@ -88,6 +88,7 @@ app.add_middleware(
 # Include routers
 app.include_router(graph.router)
 app.include_router(search.router)
+app.include_router(trends.router)
 
 # Mount static files
 if STATIC_DIR.exists():
@@ -132,3 +133,12 @@ async def search_page():
     if search_path.exists():
         return FileResponse(search_path)
     return {"message": "Search UI not yet available", "api_docs": "/docs"}
+
+
+@app.get("/trends")
+async def trends_page():
+    """Serve the trends dashboard UI."""
+    trends_path = STATIC_DIR / "trends.html"
+    if trends_path.exists():
+        return FileResponse(trends_path)
+    return {"message": "Trends UI not yet available", "api_docs": "/docs"}
