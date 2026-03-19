@@ -573,29 +573,37 @@ class PaperReader:
         self,
         limit: int = 100,
         offset: str | None = None,
+        skip_embedded: bool = True,
     ) -> tuple[list[tuple[str, dict]], str | None]:
         """Get non-stub papers with abstracts for embedding.
 
+        Args:
+            skip_embedded: If True, exclude papers that already have dense vectors.
+
         Returns (list of (point_id, payload), next_offset).
         """
+        must_not = [
+            # Exclude stubs (is_stub is null on real papers, true on stubs)
+            models.FieldCondition(
+                key="is_stub",
+                match=models.MatchValue(value=True),
+            ),
+            models.IsNullCondition(
+                is_null=models.PayloadField(key="abstract"),
+            ),
+            models.FieldCondition(
+                key="abstract",
+                match=models.MatchValue(value=""),
+            ),
+        ]
+        if skip_embedded:
+            must_not.append(
+                models.HasVectorCondition(has_vector="abstract-qwen3-8b"),
+            )
+
         results, next_offset = self.client.scroll(
             collection_name=self.collection_name,
-            scroll_filter=models.Filter(
-                must_not=[
-                    # Exclude stubs (is_stub is null on real papers, true on stubs)
-                    models.FieldCondition(
-                        key="is_stub",
-                        match=models.MatchValue(value=True),
-                    ),
-                    models.IsNullCondition(
-                        is_null=models.PayloadField(key="abstract"),
-                    ),
-                    models.FieldCondition(
-                        key="abstract",
-                        match=models.MatchValue(value=""),
-                    ),
-                ],
-            ),
+            scroll_filter=models.Filter(must_not=must_not),
             limit=limit,
             offset=offset,
             with_payload=["title", "abstract"],

@@ -1,10 +1,7 @@
 """CLI commands for embedding pipeline."""
 
 import asyncio
-import json
 import sys
-from datetime import datetime, timezone
-from pathlib import Path
 
 import click
 
@@ -81,9 +78,6 @@ def register_commands(cli: click.Group):
         from src.core.embedding.embedder import PaperEmbedder
         from src.core.storage.base import QdrantStorage
 
-        CHECKPOINT_DIR = Path("data/core/checkpoints")
-        CHECKPOINT_FILE = CHECKPOINT_DIR / "embedding.json"
-
         storage = QdrantStorage()
 
         if dry_run:
@@ -106,19 +100,7 @@ def register_commands(cli: click.Group):
             click.echo(f"Error: Cannot connect to Qdrant: {e}", err=True)
             sys.exit(1)
 
-        # Load checkpoint
-        processed_ids: set[str] = set()
-        if resume and CHECKPOINT_FILE.exists():
-            try:
-                with open(CHECKPOINT_FILE) as f:
-                    data = json.load(f)
-                processed_ids = set(data.get("processed_point_ids", []))
-                click.echo(f"Resuming from checkpoint: {len(processed_ids):,} already embedded")
-            except Exception as e:
-                logger.warning(f"Failed to load checkpoint: {e}")
-
         async def run():
-            nonlocal processed_ids
             embedder = PaperEmbedder(max_concurrent=concurrency)
             async with embedder:
                 # Check model availability
@@ -134,37 +116,25 @@ def register_commands(cli: click.Group):
                 offset = None
 
                 while True:
+                    # skip_embedded=True uses HasVectorCondition to skip
+                    # papers that already have dense vectors (resume-safe)
                     papers, next_offset = storage.get_papers_for_embedding(
                         limit=batch_size,
                         offset=offset,
+                        skip_embedded=resume,
                     )
 
                     if not papers:
                         break
 
-                    # Filter out already-processed papers
-                    papers = [(pid, p) for pid, p in papers if pid not in processed_ids]
+                    count = await embedder.embed_and_upsert_batch(
+                        papers=papers,
+                        storage=storage,
+                    )
+                    total_embedded += count
 
-                    if papers:
-                        count = await embedder.embed_and_upsert_batch(
-                            papers=papers,
-                            storage=storage,
-                        )
-                        total_embedded += count
-
-                        # Update checkpoint
-                        for pid, _ in papers:
-                            processed_ids.add(pid)
-                        CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
-                        with open(CHECKPOINT_FILE, "w") as f:
-                            json.dump({
-                                "processed_point_ids": list(processed_ids),
-                                "total_embedded": total_embedded,
-                                "last_updated": datetime.now(timezone.utc).isoformat(),
-                            }, f)
-
-                        if total_embedded % 1000 == 0:
-                            click.echo(f"  Embedded {total_embedded:,} papers...")
+                    if total_embedded % 1000 == 0:
+                        click.echo(f"  Embedded {total_embedded:,} papers...")
 
                     if limit and total_embedded >= limit:
                         break
