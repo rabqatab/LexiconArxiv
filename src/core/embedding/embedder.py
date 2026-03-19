@@ -229,8 +229,11 @@ class PaperEmbedder:
                 paper_vectors[paper_idx][vector_name] = all_vectors[idx]
 
         # Build PointVectors for update_vectors (preserves existing payloads)
+        # Skip papers with no dense vectors (all chunks failed for them)
         point_vectors = []
         for (point_id, payload), vectors_dict in zip(papers, paper_vectors):
+            if not vectors_dict:
+                continue  # No dense vectors — skip this paper
             combined = dict(vectors_dict)
             # Add BM25 sparse vector
             combined["bm25"] = qdrant_models.Document(
@@ -243,6 +246,9 @@ class PaperEmbedder:
                     vector=combined,
                 )
             )
+
+        if not point_vectors:
+            return 0
 
         # Update vectors only -- payloads are untouched
         storage.client.update_vectors(
