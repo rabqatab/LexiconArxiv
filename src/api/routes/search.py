@@ -38,6 +38,7 @@ async def search_papers(request: SearchRequest):
         year_min=filters.year_min if filters else None,
         year_max=filters.year_max if filters else None,
         tiers=filters.tiers if filters else None,
+        section=request.section,
         limit=request.limit,
         offset=request.offset,
     )

@@ -66,6 +66,11 @@ async def list_tools() -> list[Tool]:
                         "type": "integer",
                         "description": "Maximum publication year (inclusive)",
                     },
+                    "section": {
+                        "type": "string",
+                        "enum": ["task", "method", "result", "approach", "background", "domain", "contribution"],
+                        "description": "Target a specific paper section for more precise matching (e.g. 'method' to find papers that USE a technique, 'result' for papers that ACHIEVE something)",
+                    },
                     "tiers": {
                         "type": "array",
                         "items": {"type": "integer"},
@@ -172,6 +177,7 @@ async def _handle_search_papers(arguments: dict) -> list[TextContent]:
     year_min = arguments.get("year_min")
     year_max = arguments.get("year_max")
     tiers = arguments.get("tiers")
+    section = arguments.get("section")
     limit = min(arguments.get("limit", 20), 50)
 
     results = await service.search(
@@ -180,6 +186,7 @@ async def _handle_search_papers(arguments: dict) -> list[TextContent]:
         year_min=year_min,
         year_max=year_max,
         tiers=tiers,
+        section=section,
         limit=limit,
     )
 

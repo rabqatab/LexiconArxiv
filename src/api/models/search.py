@@ -17,6 +17,7 @@ class SearchRequest(BaseModel):
 
     query: str = Field(..., min_length=1, max_length=500, description="Search query string")
     filters: SearchFilters | None = Field(None, description="Optional search filters")
+    section: str | None = Field(None, description="Target a specific paper section (task, method, result, approach, background, domain, contribution). Uses section-specific vector for more precise matching.")
     limit: int = Field(default=20, ge=1, le=100, description="Number of results to return")
     offset: int = Field(default=0, ge=0, description="Pagination offset")
 

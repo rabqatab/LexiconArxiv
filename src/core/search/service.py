@@ -127,21 +127,33 @@ class SearchService:
         year_min: int | None = None,
         year_max: int | None = None,
         tiers: list[int] | None = None,
+        section: str | None = None,
         limit: int = 20,
         offset: int = 0,
     ) -> dict:
-        """Execute hybrid search. Falls back to BM25-only if Ollama unavailable."""
+        """Execute hybrid search. Falls back to BM25-only if Ollama unavailable.
+
+        Args:
+            section: Optional section to target (task, method, result, etc.).
+                     Uses section-specific vector for dense search.
+        """
         start = time.time()
         qdrant_filter = self._build_filters(venues, year_min, year_max, tiers)
 
         query_vector = await self._embed_query(query)
         search_mode = "hybrid" if query_vector is not None else "bm25_only"
 
+        # Choose dense vector based on section target
+        if section and section in ("task", "domain", "background", "approach", "method", "result", "contribution"):
+            dense_name = f"section-{section}"
+        else:
+            dense_name = "structured-abstract"  # Primary: section-prefixed vector
+
         if search_mode == "hybrid":
             prefetch = [
                 models.Prefetch(
                     query=query_vector,
-                    using=self._dense_vector_name,
+                    using=dense_name,
                     filter=qdrant_filter,
                     limit=limit + offset,
                 ),
