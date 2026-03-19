@@ -273,13 +273,19 @@ class SearchService:
 - Serves Qwen3-Embedding-8B for both batch embedding and query-time embedding
 - Instruction-aware: prepends task instruction for retrieval quality
 
-### 4.6 MCP Server
+### 4.6 Semantic Similarity Graph
+
+**Responsibility**: Precomputed typed similarity edges complementing the citation graph
+
+While the citation graph captures explicit reference relationships, the semantic similarity graph captures implicit connections derived from section-level vector similarity. The `compute-similarity` CLI command produces five typed edge sets: `same_method`, `same_task`, `same_result`, `method_transfer`, and `overall`. These edges are exposed via `GET /api/paper/{id}/similar` and the `get_similar_papers` MCP tool.
+
+### 4.7 MCP Server
 
 **Responsibility**: Expose search and paper tools to AI agents via Model Context Protocol
 
-The MCP server wraps `SearchService` and provides four tools: `search_papers`, `get_paper`, `get_citations`, and `get_corpus_stats`. It communicates over stdio and is compatible with Claude Desktop, Claude Code, and other MCP clients.
+The MCP server wraps `SearchService` and provides five tools: `search_papers`, `get_paper`, `get_citations`, `get_similar_papers`, and `get_corpus_stats`. It communicates over stdio and is compatible with Claude Desktop, Claude Code, and other MCP clients.
 
-### 4.7 On-demand Retrieval
+### 4.8 On-demand Retrieval
 
 ```python
 class OnDemandRetriever:

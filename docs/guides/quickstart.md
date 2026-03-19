@@ -172,7 +172,10 @@ uv run uvicorn src.api.main:app --port 8000
 # 4. (Optional) Compute topic clusters for trends page
 scripts/analytics/run_clustering.sh
 
-# 5. (Optional) Start MCP server for AI agents
+# 5. (Optional) Compute semantic similarity graph (~25 min)
+scripts/analytics/run_similarity.sh
+
+# 6. (Optional) Start MCP server for AI agents
 uv run python -m src.mcp.server
 ```
 

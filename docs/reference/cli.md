@@ -662,6 +662,37 @@ uv run python -m src.cli.core_collect compute-topics --min-cluster-size 50 --min
 | `--min-samples` | Minimum samples for HDBSCAN |
 | `--dry-run` | Preview without computing |
 
+### compute-similarity
+
+Compute precomputed semantic similarity edges between papers using section-level vectors. Produces 5 edge types: `same_method`, `same_task`, `same_result`, `method_transfer`, and `overall`.
+
+```bash
+# Preview
+uv run python -m src.cli.core_collect compute-similarity --dry-run
+
+# Run with defaults
+uv run python -m src.cli.core_collect compute-similarity
+
+# Custom k neighbors and batch size
+uv run python -m src.cli.core_collect compute-similarity --k 20 --batch-size 128
+
+# Limit number of papers
+uv run python -m src.cli.core_collect compute-similarity --limit 5000
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--k` | Number of nearest neighbors per edge type |
+| `--batch-size` | Papers per batch |
+| `--limit` | Max papers to process |
+| `--dry-run` | Preview without computing |
+
+**Shell script wrapper:**
+```bash
+scripts/analytics/run_similarity.sh
+```
+
 ---
 
 ## Data Quality Commands

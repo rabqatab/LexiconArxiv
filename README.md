@@ -19,6 +19,7 @@ AI Research Insights Engine - Hybrid semantic search, on-demand retrieval, trend
 - **Keyword Extraction**: LLM-first (Gemini/Ollama) with regex + KeyBERT fallback + LLM judge for BM25 search
 - **Abstract Labeling**: LLM-based sentence classification into 7 rhetorical roles (task, domain, background, approach, method, result, contribution)
 - **Citation Graph**: Reference resolution and GraphRAG support
+- **Semantic Similarity Graph**: Precomputed typed similarity edges (same_method, same_task, same_result, method_transfer, overall) using section-level vectors
 - **Graph Visualization API**: REST API + D3.js UI for interactive citation graph exploration
 - **Stub Papers**: Store external references with automatic deduplication for complete citation graph
 
@@ -124,6 +125,9 @@ open http://localhost:8000/docs
 - `GET /api/trends/topics` - UMAP+HDBSCAN topic clusters
 - `GET /api/trends/map` - 2D topic map coordinates
 
+**Similarity Endpoints**:
+- `GET /api/paper/{id}/similar` - Precomputed similar papers by section type
+
 **Graph Endpoints**:
 - `GET /graph/health` - Health check
 - `GET /graph/stats` - Graph statistics
@@ -143,10 +147,11 @@ open http://localhost:8000/docs
 uv run python -m src.mcp.server
 ```
 
-Exposes four tools for AI agents via the Model Context Protocol:
+Exposes five tools for AI agents via the Model Context Protocol:
 - `search_papers` - Hybrid search with venue/year/tier filters
 - `get_paper` - Lookup by UUID, DOI, or arXiv ID
 - `get_citations` - Citation relationships (refs, cited_by, both)
+- `get_similar_papers` - Find semantically similar papers by section type
 - `get_corpus_stats` - Corpus summary statistics
 
 ## Data Sources
@@ -382,6 +387,8 @@ LexiconArxiv uses **payload-only storage** in Qdrant, decoupling metadata collec
 Collection → Enrichment → Resolution → Graph → Keywords → Labeling   (payload-only, no vectors)
                                                                 ↓
                                           Migration → Embedding → BM25 Index   (Qwen3-8B 1024d + server-side BM25)
+                                                                ↓
+                                                       Similarity Graph   (section-level typed edges)
                                                                 ↓
                                                     Hybrid Search / MCP / Trends
 ```
