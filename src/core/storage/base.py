@@ -358,9 +358,10 @@ class QdrantStorage:
         self,
         limit: int = 100,
         offset: str | None = None,
+        skip_embedded: bool = True,
     ) -> tuple[list[tuple[str, dict]], str | None]:
         """Get non-stub papers with abstracts for embedding."""
-        return self.readers.get_papers_for_embedding(limit, offset)
+        return self.readers.get_papers_for_embedding(limit, offset, skip_embedded)
 
     def count_papers_for_embedding(self) -> int:
         """Count non-stub papers with non-empty abstracts."""
