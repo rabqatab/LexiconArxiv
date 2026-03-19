@@ -1,7 +1,8 @@
-"""Tests for analytics modules: notable paper scoring and keyword trends."""
+"""Tests for analytics modules: notable paper scoring, keyword trends, and clustering."""
 
 import math
 
+import numpy as np
 import pytest
 from qdrant_client import QdrantClient, models
 
@@ -15,6 +16,10 @@ from src.core.analytics.keyword_trends import (
     CURRENT_YEAR as KW_CURRENT_YEAR,
     compute_keyword_trends,
     get_rising_keywords,
+)
+from src.core.analytics.clustering import (
+    _build_cluster_metadata,
+    compute_clusters,
 )
 from src.core.storage.base import QdrantStorage
 
@@ -453,3 +458,174 @@ class TestKeywordTrends:
         assert kw_map["rag"]["count_older"] == 0
         assert kw_map["rag"]["count_recent"] > 0
         assert math.isinf(kw_map["rag"]["growth_rate"])
+
+
+class TestBuildClusterMetadata:
+    """Tests for _build_cluster_metadata with synthetic data."""
+
+    def test_basic_cluster_metadata(self):
+        labels = np.array([0, 0, 1, 1, 1, -1])
+        metadata = [
+            {"year": 2023, "keywords_structured": {"method": ["transformer", "llm"]}},
+            {"year": 2024, "keywords_structured": {"method": ["transformer"]}},
+            {"year": 2022, "keywords_structured": {"task": ["image classification"]}},
+            {"year": 2023, "keywords_structured": {"task": ["image classification", "object detection"]}},
+            {"year": 2023, "keywords_structured": {"task": ["image classification"]}},
+            {"year": 2024, "keywords_structured": {"method": ["noise"]}},  # noise point
+        ]
+        clusters = _build_cluster_metadata(labels, metadata)
+
+        assert len(clusters) == 2
+
+        c0 = next(c for c in clusters if c["cluster_id"] == 0)
+        assert c0["size"] == 2
+        assert "transformer" in c0["top_keywords"]
+        assert "2023" in c0["year_distribution"]
+        assert "2024" in c0["year_distribution"]
+
+        c1 = next(c for c in clusters if c["cluster_id"] == 1)
+        assert c1["size"] == 3
+        assert "image classification" in c1["top_keywords"]
+
+    def test_label_from_top_keywords(self):
+        labels = np.array([0, 0, 0])
+        metadata = [
+            {"keywords_structured": {"method": ["aaa", "bbb"]}},
+            {"keywords_structured": {"method": ["aaa", "ccc"]}},
+            {"keywords_structured": {"method": ["aaa"]}},
+        ]
+        clusters = _build_cluster_metadata(labels, metadata)
+
+        assert len(clusters) == 1
+        # "aaa" appears 3 times so should be first in label
+        assert clusters[0]["label"].startswith("aaa")
+
+    def test_fallback_to_flat_keywords(self):
+        labels = np.array([0, 0])
+        metadata = [
+            {"keywords": ["flat_kw1", "flat_kw2"]},
+            {"keywords": ["flat_kw1"]},
+        ]
+        clusters = _build_cluster_metadata(labels, metadata)
+
+        assert len(clusters) == 1
+        assert "flat_kw1" in clusters[0]["top_keywords"]
+
+    def test_no_clusters_when_all_noise(self):
+        labels = np.array([-1, -1, -1])
+        metadata = [{"year": 2023}] * 3
+        clusters = _build_cluster_metadata(labels, metadata)
+
+        assert clusters == []
+
+    def test_empty_metadata(self):
+        labels = np.array([0, 0])
+        metadata = [{}, {}]
+        clusters = _build_cluster_metadata(labels, metadata)
+
+        assert len(clusters) == 1
+        assert clusters[0]["size"] == 2
+        assert clusters[0]["label"] == "Cluster 0"
+        assert clusters[0]["top_keywords"] == []
+
+    def test_year_distribution(self):
+        labels = np.array([0, 0, 0, 0])
+        metadata = [
+            {"year": 2022},
+            {"year": 2022},
+            {"year": 2023},
+            {"year": 2024},
+        ]
+        clusters = _build_cluster_metadata(labels, metadata)
+
+        year_dist = clusters[0]["year_distribution"]
+        assert year_dist["2022"] == 2
+        assert year_dist["2023"] == 1
+        assert year_dist["2024"] == 1
+
+
+class TestComputeClusters:
+    """Tests for compute_clusters with too few vectors."""
+
+    CLUSTER_TEST_COLLECTION = "_test_clustering"
+
+    def setup_method(self):
+        from src.core.constants import EMBEDDING_VECTOR_NAME, EMBEDDING_VECTOR_SIZE
+
+        self.client = QdrantClient(url="http://localhost:6333")
+        try:
+            self.client.delete_collection(self.CLUSTER_TEST_COLLECTION)
+        except Exception:
+            pass
+        # Create collection with vector config so scroll with_vectors works
+        self.client.create_collection(
+            collection_name=self.CLUSTER_TEST_COLLECTION,
+            vectors_config={
+                EMBEDDING_VECTOR_NAME: models.VectorParams(
+                    size=EMBEDDING_VECTOR_SIZE,
+                    distance=models.Distance.COSINE,
+                ),
+            },
+        )
+
+    def teardown_method(self):
+        try:
+            self.client.delete_collection(self.CLUSTER_TEST_COLLECTION)
+        except Exception:
+            pass
+
+    def test_too_few_vectors_returns_error(self):
+        """compute_clusters returns error when collection is empty."""
+        storage = QdrantStorage(collection_name=self.CLUSTER_TEST_COLLECTION)
+        result = compute_clusters(
+            storage=storage,
+            hdbscan_min_cluster_size=50,
+        )
+
+        assert "error" in result
+        assert result["count"] == 0
+
+    def test_too_few_vectors_with_some_papers(self):
+        """compute_clusters returns error when too few papers have vectors."""
+        vec_collection = "_test_clustering_vec"
+        try:
+            self.client.delete_collection(vec_collection)
+        except Exception:
+            pass
+
+        # Create collection with vector config so scroll with_vectors works
+        from src.core.constants import EMBEDDING_VECTOR_NAME, EMBEDDING_VECTOR_SIZE
+
+        self.client.create_collection(
+            collection_name=vec_collection,
+            vectors_config={
+                EMBEDDING_VECTOR_NAME: models.VectorParams(
+                    size=EMBEDDING_VECTOR_SIZE,
+                    distance=models.Distance.COSINE,
+                ),
+            },
+        )
+
+        # Insert a few papers with actual vectors (but too few for clustering)
+        dim = EMBEDDING_VECTOR_SIZE
+        points = [
+            models.PointStruct(
+                id=f"cccc0001-0000-0000-0000-{i:012d}",
+                vector={EMBEDDING_VECTOR_NAME: [float(i)] * dim},
+                payload={"title": f"Paper {i}", "year": 2023},
+            )
+            for i in range(5)
+        ]
+        self.client.upsert(collection_name=vec_collection, points=points)
+
+        try:
+            storage = QdrantStorage(collection_name=vec_collection)
+            result = compute_clusters(
+                storage=storage,
+                hdbscan_min_cluster_size=50,
+            )
+
+            assert "error" in result
+            assert result["count"] == 5
+        finally:
+            self.client.delete_collection(vec_collection)
