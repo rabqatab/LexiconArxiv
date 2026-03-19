@@ -4,6 +4,13 @@ from httpx import Response
 from qdrant_client import QdrantClient, models
 
 from src.core.embedding.embedder import PaperEmbedder
+from src.core.constants import (
+    ALL_DENSE_VECTORS,
+    EMBEDDING_VECTOR_NAME,
+    STRUCTURED_VECTOR_NAME,
+    SECTION_ROLES,
+    SECTION_VECTOR_PREFIX,
+)
 
 
 class TestPaperEmbedder:
@@ -92,11 +99,14 @@ class TestEmbedAndUpsert:
             self.qdrant.delete_collection(self.collection)
         except Exception:
             pass
+        # Create collection with ALL dense vector configs
+        vectors_config = {
+            name: models.VectorParams(size=4, distance=models.Distance.COSINE)
+            for name in ALL_DENSE_VECTORS
+        }
         self.qdrant.create_collection(
             collection_name=self.collection,
-            vectors_config={
-                "abstract-qwen3-8b": models.VectorParams(size=4, distance=models.Distance.COSINE),
-            },
+            vectors_config=vectors_config,
             sparse_vectors_config={
                 "bm25": models.SparseVectorParams(modifier=models.Modifier.IDF),
             },
@@ -108,12 +118,23 @@ class TestEmbedAndUpsert:
                 models.PointStruct(
                     id="aaaa0001-0000-0000-0000-000000000000",
                     vector={},
-                    payload={"title": "Paper 1", "abstract": "Machine learning paper"},
+                    payload={
+                        "title": "Paper 1",
+                        "abstract": "Machine learning paper",
+                    },
                 ),
                 models.PointStruct(
                     id="aaaa0002-0000-0000-0000-000000000000",
                     vector={},
-                    payload={"title": "Paper 2", "abstract": "Natural language processing"},
+                    payload={
+                        "title": "Paper 2",
+                        "abstract": "Natural language processing",
+                        "abstract_structure": {
+                            "task": ["Classify text documents."],
+                            "method": ["We use transformers for classification."],
+                            "result": ["Our model achieves 95% accuracy."],
+                        },
+                    },
                 ),
             ],
         )
@@ -128,48 +149,106 @@ class TestEmbedAndUpsert:
     async def test_embeds_and_updates_vectors(self):
         from src.core.storage.base import QdrantStorage
 
-        # Mock only the Ollama embed call; Qdrant uses a real connection
+        # Paper 1: no structure -> 2 texts (abstract + structured-abstract fallback)
+        # Paper 2: has structure -> 2 + 3 section texts = 5 texts
+        # Total: 7 texts
+        num_texts = 7
+
         async with respx.mock(assert_all_mocked=False) as respx_mock:
-            # Mock Ollama returning 8d vectors (will be truncated to 4 by target_dim)
-            fake_embeddings = [[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
-                               [0.5, 0.6, 0.7, 0.8, 0.1, 0.2, 0.3, 0.4]]
+            fake_embeddings = [[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]] * num_texts
             respx_mock.post("http://localhost:11434/api/embed").mock(
                 return_value=Response(200, json={"embeddings": fake_embeddings}),
             )
-            # Allow all Qdrant traffic to pass through to real server
             respx_mock.route(host="localhost", port=6333).pass_through()
 
             storage = QdrantStorage(collection_name=self.collection)
             embedder = PaperEmbedder(
                 ollama_base_url="http://localhost:11434",
-                target_dim=4,  # Match test collection — truncated from 8d mock
+                target_dim=4,
             )
 
             papers = [
-                ("aaaa0001-0000-0000-0000-000000000000", {"abstract": "Machine learning paper"}),
-                ("aaaa0002-0000-0000-0000-000000000000", {"abstract": "Natural language processing"}),
+                (
+                    "aaaa0001-0000-0000-0000-000000000000",
+                    {"abstract": "Machine learning paper"},
+                ),
+                (
+                    "aaaa0002-0000-0000-0000-000000000000",
+                    {
+                        "abstract": "Natural language processing",
+                        "abstract_structure": {
+                            "task": ["Classify text documents."],
+                            "method": ["We use transformers for classification."],
+                            "result": ["Our model achieves 95% accuracy."],
+                        },
+                    },
+                ),
             ]
 
             async with embedder:
                 count = await embedder.embed_and_upsert_batch(
                     papers=papers,
                     storage=storage,
-                    dense_vector_name="abstract-qwen3-8b",
                 )
 
         assert count == 2
 
-        # Verify vectors were stored (via update_vectors, not upsert)
-        point = self.qdrant.retrieve(
+        # Verify vectors were stored for paper 1 (no structure)
+        point1 = self.qdrant.retrieve(
             collection_name=self.collection,
             ids=["aaaa0001-0000-0000-0000-000000000000"],
             with_vectors=True,
             with_payload=True,
         )[0]
-        assert "abstract-qwen3-8b" in point.vector
-        assert len(point.vector["abstract-qwen3-8b"]) == 4  # Truncated from 8d mock
-        # CRITICAL: Verify payloads were preserved (not wiped)
-        assert point.payload["title"] == "Paper 1"
+        assert EMBEDDING_VECTOR_NAME in point1.vector
+        assert len(point1.vector[EMBEDDING_VECTOR_NAME]) == 4
+        assert STRUCTURED_VECTOR_NAME in point1.vector
+        # Paper 1 has no abstract_structure, so no section vectors
+        assert point1.payload["title"] == "Paper 1"
+
+        # Verify vectors for paper 2 (with structure)
+        point2 = self.qdrant.retrieve(
+            collection_name=self.collection,
+            ids=["aaaa0002-0000-0000-0000-000000000000"],
+            with_vectors=True,
+            with_payload=True,
+        )[0]
+        assert EMBEDDING_VECTOR_NAME in point2.vector
+        assert STRUCTURED_VECTOR_NAME in point2.vector
+        # Paper 2 has task, method, result sections
+        assert f"{SECTION_VECTOR_PREFIX}task" in point2.vector
+        assert f"{SECTION_VECTOR_PREFIX}method" in point2.vector
+        assert f"{SECTION_VECTOR_PREFIX}result" in point2.vector
+        assert point2.payload["title"] == "Paper 2"
+
+    @pytest.mark.asyncio
+    async def test_embed_returns_zero_on_ollama_failure(self):
+        from src.core.storage.base import QdrantStorage
+
+        async with respx.mock(assert_all_mocked=False) as respx_mock:
+            respx_mock.post("http://localhost:11434/api/embed").mock(
+                return_value=Response(500, text="Server Error"),
+            )
+            respx_mock.route(host="localhost", port=6333).pass_through()
+
+            storage = QdrantStorage(collection_name=self.collection)
+            embedder = PaperEmbedder(
+                ollama_base_url="http://localhost:11434",
+                target_dim=4,
+                max_retries=1,
+            )
+
+            papers = [
+                ("aaaa0001-0000-0000-0000-000000000000", {"abstract": "Test"}),
+            ]
+
+            async with embedder:
+                count = await embedder.embed_and_upsert_batch(
+                    papers=papers,
+                    storage=storage,
+                )
+
+        assert count == 0
 
 
 @pytest.mark.integration
@@ -187,13 +266,13 @@ class TestEmbeddingIntegration:
             self.client.delete_collection(self.collection)
         except Exception:
             pass
+        vectors_config = {
+            name: models.VectorParams(size=1024, distance=models.Distance.COSINE)
+            for name in ALL_DENSE_VECTORS
+        }
         self.client.create_collection(
             collection_name=self.collection,
-            vectors_config={
-                "abstract-qwen3-8b": models.VectorParams(
-                    size=1024, distance=models.Distance.COSINE
-                ),
-            },
+            vectors_config=vectors_config,
             sparse_vectors_config={
                 "bm25": models.SparseVectorParams(modifier=models.Modifier.IDF),
             },

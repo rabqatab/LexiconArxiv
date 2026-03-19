@@ -12,6 +12,9 @@ from src.core.constants import (
     DEFAULT_EMBEDDING_MODEL,
     EMBEDDING_VECTOR_NAME,
     EMBEDDING_VECTOR_SIZE,
+    SECTION_ROLES,
+    SECTION_VECTOR_PREFIX,
+    STRUCTURED_VECTOR_NAME,
     get_ollama_base_url,
 )
 
@@ -115,47 +118,101 @@ class PaperEmbedder:
         self,
         papers: list[tuple[str, dict]],
         storage: "QdrantStorage",
-        dense_vector_name: str = EMBEDDING_VECTOR_NAME,
+        embed_batch_size: int = 64,
     ) -> int:
-        """Embed abstracts and update vectors in Qdrant (preserves payloads).
+        """Embed abstracts (full, structured, per-section) and update vectors in Qdrant.
 
-        Uses client.update_vectors() — NOT upsert — to attach vectors
+        Uses client.update_vectors() -- NOT upsert -- to attach vectors
         to existing points without touching their payloads.
 
+        For each paper, generates up to 9 dense vectors:
+          1. abstract-qwen3-8b: full abstract embedding
+          2. structured-abstract: section-prefixed concatenation
+          3-9. section-{role}: per-section embeddings (only if abstract_structure exists)
+
+        Plus 1 BM25 sparse vector per paper.
+
         Args:
-            papers: List of (point_id, payload) tuples. payload must have "abstract".
+            papers: List of (point_id, payload) tuples. payload must have "abstract",
+                    optionally "abstract_structure".
             storage: QdrantStorage instance.
-            dense_vector_name: Name of the dense vector in Qdrant.
+            embed_batch_size: Max texts per Ollama embed call.
 
         Returns:
             Number of points successfully embedded and updated.
         """
-        # Prepend instruction prefix for Qwen3 retrieval quality
-        instruction = "Retrieve academic papers: "
-        abstracts = [instruction + (p[1].get("abstract") or "") for p in papers]
+        # Collect ALL texts to embed in one big list
+        all_texts: list[str] = []
+        text_map: list[tuple[int, str]] = []  # (paper_index, vector_name)
 
-        # Get dense embeddings from Ollama
-        vectors = await self.embed_texts(abstracts)
-        if vectors is None:
-            logger.error("Failed to get embeddings for batch")
+        for i, (point_id, payload) in enumerate(papers):
+            abstract = payload.get("abstract") or ""
+            structure = payload.get("abstract_structure") or {}
+
+            # 1. Full abstract vector
+            all_texts.append(f"Retrieve academic papers: {abstract}")
+            text_map.append((i, EMBEDDING_VECTOR_NAME))
+
+            # 2. Structured abstract vector
+            if structure:
+                parts = []
+                for role in SECTION_ROLES:
+                    sents = structure.get(role, [])
+                    if sents:
+                        parts.append(f"[{role.upper()}] {' '.join(sents)}")
+                structured = " ".join(parts) if parts else abstract
+            else:
+                structured = abstract
+            all_texts.append(f"Retrieve academic papers: {structured}")
+            text_map.append((i, STRUCTURED_VECTOR_NAME))
+
+            # 3. Per-section vectors (only if abstract_structure exists)
+            if structure:
+                for role in SECTION_ROLES:
+                    sents = structure.get(role, [])
+                    if sents:
+                        all_texts.append(
+                            f"Retrieve academic papers {role}: {' '.join(sents)}"
+                        )
+                        text_map.append((i, f"{SECTION_VECTOR_PREFIX}{role}"))
+
+        if not all_texts:
             return 0
 
-        # Build PointVectors for update_vectors (preserves existing payloads)
-        point_vectors = [
-            qdrant_models.PointVectors(
-                id=point_id,
-                vector={
-                    dense_vector_name: dense_vector,
-                    "bm25": qdrant_models.Document(
-                        text=payload.get("abstract") or "",
-                        model="qdrant/bm25",
-                    ),
-                },
-            )
-            for (point_id, payload), dense_vector in zip(papers, vectors)
-        ]
+        # Embed all texts in chunks of embed_batch_size
+        all_vectors: list[list[float]] = []
+        for chunk_start in range(0, len(all_texts), embed_batch_size):
+            chunk = all_texts[chunk_start : chunk_start + embed_batch_size]
+            vectors = await self.embed_texts(chunk)
+            if vectors is None:
+                logger.error(
+                    f"Failed to get embeddings for chunk starting at index {chunk_start}"
+                )
+                return 0
+            all_vectors.extend(vectors)
 
-        # Update vectors only — payloads are untouched
+        # Distribute vectors back to per-paper dicts
+        paper_vectors: list[dict] = [{} for _ in papers]
+        for idx, (paper_idx, vector_name) in enumerate(text_map):
+            paper_vectors[paper_idx][vector_name] = all_vectors[idx]
+
+        # Build PointVectors for update_vectors (preserves existing payloads)
+        point_vectors = []
+        for (point_id, payload), vectors_dict in zip(papers, paper_vectors):
+            combined = dict(vectors_dict)
+            # Add BM25 sparse vector
+            combined["bm25"] = qdrant_models.Document(
+                text=payload.get("abstract") or "",
+                model="qdrant/bm25",
+            )
+            point_vectors.append(
+                qdrant_models.PointVectors(
+                    id=point_id,
+                    vector=combined,
+                )
+            )
+
+        # Update vectors only -- payloads are untouched
         storage.client.update_vectors(
             collection_name=storage.collection_name,
             points=point_vectors,

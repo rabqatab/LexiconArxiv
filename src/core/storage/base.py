@@ -91,27 +91,33 @@ class QdrantStorage:
 
     def ensure_collection_with_vectors(
         self,
-        dense_vector_name: str = "abstract-qwen3-8b",
         dense_vector_size: int = 1024,
     ) -> bool:
-        """Create collection with dense + BM25 sparse vector configs.
+        """Create collection with all dense vectors + BM25 sparse vector config.
+
+        Creates 9 dense vectors (abstract, structured-abstract, and 7 section vectors)
+        plus 1 BM25 sparse vector.
 
         Returns:
             True if created, False if already exists.
         """
+        from src.core.constants import ALL_DENSE_VECTORS
+
         try:
             self.client.get_collection(self.collection_name)
             logger.info(f"Collection '{self.collection_name}' already exists")
             return False
         except (UnexpectedResponse, Exception):
+            vectors_config = {
+                name: models.VectorParams(
+                    size=dense_vector_size,
+                    distance=models.Distance.COSINE,
+                )
+                for name in ALL_DENSE_VECTORS
+            }
             self.client.create_collection(
                 collection_name=self.collection_name,
-                vectors_config={
-                    dense_vector_name: models.VectorParams(
-                        size=dense_vector_size,
-                        distance=models.Distance.COSINE,
-                    ),
-                },
+                vectors_config=vectors_config,
                 sparse_vectors_config={
                     "bm25": models.SparseVectorParams(
                         modifier=models.Modifier.IDF,
@@ -119,8 +125,9 @@ class QdrantStorage:
                 },
             )
             logger.info(
-                f"Created collection '{self.collection_name}' with dense "
-                f"vector '{dense_vector_name}' ({dense_vector_size}d) and BM25 sparse vector"
+                f"Created collection '{self.collection_name}' with "
+                f"{len(ALL_DENSE_VECTORS)} dense vectors ({dense_vector_size}d) "
+                f"and BM25 sparse vector"
             )
             return True
 

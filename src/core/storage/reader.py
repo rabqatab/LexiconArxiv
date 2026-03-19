@@ -606,7 +606,7 @@ class PaperReader:
             scroll_filter=models.Filter(must_not=must_not),
             limit=limit,
             offset=offset,
-            with_payload=["title", "abstract"],
+            with_payload=["title", "abstract", "abstract_structure"],
         )
         return [
             (str(point.id), point.payload)

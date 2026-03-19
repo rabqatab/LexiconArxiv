@@ -6,7 +6,7 @@ import time
 from qdrant_client import QdrantClient, models
 
 from src.core.constants import (
-    EMBEDDING_VECTOR_NAME,
+    ALL_DENSE_VECTORS,
     EMBEDDING_VECTOR_SIZE,
     get_qdrant_url,
 )
@@ -33,7 +33,6 @@ class CollectionMigrator:
     def migrate(
         self,
         delete_old: bool = False,
-        dense_vector_name: str = EMBEDDING_VECTOR_NAME,
         dense_vector_size: int = EMBEDDING_VECTOR_SIZE,
     ) -> dict:
         """Run the full migration. Returns dict with migration stats."""
@@ -44,16 +43,18 @@ class CollectionMigrator:
         snapshot = self.client.create_snapshot(self.old_collection)
         logger.info(f"Snapshot created: {snapshot.name}")
 
-        # 2. Create new collection with vector configs
+        # 2. Create new collection with ALL dense vector configs + BM25 sparse
         logger.info(f"Creating new collection '{self.new_collection}'...")
+        vectors_config = {
+            name: models.VectorParams(
+                size=dense_vector_size,
+                distance=models.Distance.COSINE,
+            )
+            for name in ALL_DENSE_VECTORS
+        }
         self.client.create_collection(
             collection_name=self.new_collection,
-            vectors_config={
-                dense_vector_name: models.VectorParams(
-                    size=dense_vector_size,
-                    distance=models.Distance.COSINE,
-                ),
-            },
+            vectors_config=vectors_config,
             sparse_vectors_config={
                 "bm25": models.SparseVectorParams(
                     modifier=models.Modifier.IDF,
@@ -61,7 +62,7 @@ class CollectionMigrator:
             },
         )
 
-        # 3. Scroll and re-insert all points
+        # 3. Scroll and re-insert all points (preserving existing vectors)
         points_migrated = 0
         offset = None
 
@@ -71,20 +72,22 @@ class CollectionMigrator:
                 limit=SCROLL_BATCH_SIZE,
                 offset=offset,
                 with_payload=True,
-                with_vectors=False,
+                with_vectors=True,  # Preserve existing vectors during migration
             )
 
             if not results:
                 break
 
-            points = [
-                models.PointStruct(
-                    id=point.id,
-                    vector={},
-                    payload=point.payload,
+            points = []
+            for point in results:
+                vec = point.vector if point.vector else {}
+                points.append(
+                    models.PointStruct(
+                        id=point.id,
+                        vector=vec,
+                        payload=point.payload,
+                    )
                 )
-                for point in results
-            ]
 
             self.client.upsert(
                 collection_name=self.new_collection,

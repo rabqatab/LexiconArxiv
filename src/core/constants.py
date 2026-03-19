@@ -64,6 +64,17 @@ EMBEDDING_VECTOR_NAME = "abstract-qwen3-8b"
 EMBEDDING_VECTOR_SIZE = 1024
 EMBEDDING_FULL_SIZE = 4096  # Ollama returns full dim, truncate client-side
 
+# Section-level embedding vectors
+SECTION_ROLES = ["task", "domain", "background", "approach", "method", "result", "contribution"]
+SECTION_VECTOR_PREFIX = "section-"
+STRUCTURED_VECTOR_NAME = "structured-abstract"
+
+# All dense vector names (for collection creation)
+ALL_DENSE_VECTORS = (
+    [EMBEDDING_VECTOR_NAME, STRUCTURED_VECTOR_NAME]
+    + [f"{SECTION_VECTOR_PREFIX}{role}" for role in SECTION_ROLES]
+)
+
 
 # =============================================================================
 # Helper Functions

@@ -57,13 +57,17 @@ def register_commands(cli: click.Group):
             click.echo(f"  Update QDRANT_COLLECTION={stats['new_collection']} in .env to use new collection.")
 
     @cli.command()
-    @click.option("--batch-size", type=int, default=32, help="Abstracts per Ollama request")
+    @click.option("--batch-size", type=int, default=8, help="Papers per batch (each generates ~9 texts)")
+    @click.option("--embed-batch-size", type=int, default=64, help="Max texts per Ollama embed call")
     @click.option("--concurrency", "-p", type=int, default=4, help="Parallel Ollama requests")
     @click.option("--limit", "-n", type=int, default=None, help="Max papers to embed")
     @click.option("--resume/--no-resume", default=True, help="Resume from checkpoint")
     @click.option("--dry-run", is_flag=True, help="Count papers to embed without doing it")
-    def embed_papers(batch_size, concurrency, limit, resume, dry_run):
-        """Embed paper abstracts with Qwen3-8B and BM25 sparse vectors.
+    def embed_papers(batch_size, embed_batch_size, concurrency, limit, resume, dry_run):
+        """Embed paper abstracts with section-level + structured-abstract vectors.
+
+        Generates up to 9 dense vectors per paper (abstract, structured-abstract,
+        and 7 section-level vectors) plus BM25 sparse vectors.
 
         Examples:
 
@@ -77,6 +81,7 @@ def register_commands(cli: click.Group):
         """
         from src.core.embedding.embedder import PaperEmbedder
         from src.core.storage.base import QdrantStorage
+        from src.core.constants import ALL_DENSE_VECTORS
 
         storage = QdrantStorage()
 
@@ -130,6 +135,7 @@ def register_commands(cli: click.Group):
                     count = await embedder.embed_and_upsert_batch(
                         papers=papers,
                         storage=storage,
+                        embed_batch_size=embed_batch_size,
                     )
                     total_embedded += count
 
