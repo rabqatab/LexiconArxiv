@@ -28,6 +28,8 @@ dependencies = [
     "slowapi>=0.1.9",
     "mcp>=1.26.0",
     "cachetools>=7.0.5",
+    "umap-learn>=0.5.11",
+    "scikit-learn>=1.8.0",
 ]
 
 [project.optional-dependencies]
