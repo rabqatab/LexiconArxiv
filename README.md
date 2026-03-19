@@ -1,9 +1,15 @@
 # LexiconArxiv
 
-AI Research Insights Engine - Core Corpus collection and semantic search for top-tier AI/ML/NLP research papers.
+AI Research Insights Engine - Hybrid semantic search, on-demand retrieval, trends analytics, and MCP integration for top-tier AI/ML/NLP research papers.
 
 ## Features
 
+- **Hybrid Search**: Dense vector (Qwen3-Embedding-8B) + server-side BM25 via Qdrant Reciprocal Rank Fusion
+- **Search Web UI**: Interactive search interface at `/search` with faceted filtering
+- **MCP Server**: AI agent integration via Model Context Protocol (`search_papers`, `get_paper`, `get_citations`, `get_corpus_stats` tools)
+- **On-demand Retrieval**: User-triggered arXiv + OpenAlex expansion with core/connected/external labeling
+- **Trends & Analytics**: Notable paper scoring, keyword trends, rising keywords, UMAP+HDBSCAN topic clustering, and 2D topic map
+- **Embedding Pipeline**: Qwen3-Embedding-8B embeddings (1024d via Matryoshka Representation Learning), server-side BM25 index
 - **Multi-source Collection**: Collect papers from 6+ academic sources
 - **27+ Main Venues**: Tier 0/1/2 conferences and journals
 - **90+ Workshops**: ACL-affiliated workshop papers
@@ -73,30 +79,75 @@ uv run python -m src.cli.core_collect collect-dblp --all --acm-only
 uv run python -m src.cli.core_collect status
 ```
 
-### Graph Visualization API
+### Embedding & Migration
 
 ```bash
-# Start the API server (pre-builds citation index on startup)
+# Migrate collection to add vector config (creates lexicon_arxiv_v2)
+uv run python -m src.cli.core_collect migrate-collection
+
+# Update .env to use the new collection
+# QDRANT_COLLECTION=lexicon_arxiv_v2
+
+# Run embedding pipeline (Qwen3-Embedding-8B, 1024d)
+scripts/embedding/run_embedding.sh
+```
+
+### API & Search
+
+```bash
+# Start the API server
 uv run uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
 
-# Open the visualization UI
+# Search UI
+open http://localhost:8000/search
+
+# Trends dashboard
+open http://localhost:8000/trends
+
+# Graph visualization
 open http://localhost:8000
 
 # API documentation (Swagger UI)
 open http://localhost:8000/docs
 ```
 
-**API Endpoints**:
+**Search & Retrieval Endpoints**:
+- `POST /api/search` - Hybrid search (dense + BM25 fusion) with venue/year/tier filters
+- `POST /api/search/expand` - On-demand expansion via arXiv + OpenAlex
+- `GET /api/paper/{paper_id}` - Full paper detail
+- `GET /api/stats` - Corpus statistics
+
+**Trends & Analytics Endpoints**:
+- `GET /api/trends/notable` - Top papers ranked by notable score
+- `GET /api/trends/keywords` - Keyword frequency time-series
+- `GET /api/trends/rising` - Fastest-growing keywords
+- `GET /api/trends/topics` - UMAP+HDBSCAN topic clusters
+- `GET /api/trends/map` - 2D topic map coordinates
+
+**Graph Endpoints**:
 - `GET /graph/health` - Health check
 - `GET /graph/stats` - Graph statistics
 - `GET /graph/paper/{paper_id}` - Paper details
 - `GET /graph/subgraph/{paper_id}?hops=1&direction=both` - Citation subgraph (D3.js format)
 
 **Visualization Features**:
-- Interactive force-directed graph with D3.js
+- Interactive force-directed citation graph with D3.js
 - Color-coded edges (cyan=citing, orange=cited, gray=other)
 - Click nodes to explore neighborhoods
 - Adjustable hops (1-3) and direction
+
+### MCP Server (AI Agent Integration)
+
+```bash
+# Start the MCP server (stdio transport)
+uv run python -m src.mcp.server
+```
+
+Exposes four tools for AI agents via the Model Context Protocol:
+- `search_papers` - Hybrid search with venue/year/tier filters
+- `get_paper` - Lookup by UUID, DOI, or arXiv ID
+- `get_citations` - Citation relationships (refs, cited_by, both)
+- `get_corpus_stats` - Corpus summary statistics
 
 ## Data Sources
 
@@ -198,6 +249,7 @@ uv run python -m src.cli.core_collect label-abstracts --force --limit 50   # Re-
 ## Documentation
 
 - [Crawling Guide](docs/guides/crawling.md) - Detailed collection guide
+- [BM25 & Hybrid Search Guide](docs/guides/bm25_hybrid_search.md) - Keyword extraction and hybrid search setup
 - [Data Collection Design](docs/pipelines/data_collection.md) - Architecture and strategy
 - [Keyword Extraction](docs/pipelines/keyword_extraction.md) - LLM-first keyword pipeline
 - [Abstract Labeling](docs/pipelines/abstract_labeling.md) - Sentence-level rhetorical classification
@@ -209,17 +261,37 @@ uv run python -m src.cli.core_collect label-abstracts --force --limit 50   # Re-
 ```
 lexiconarxiv/
 ├── src/
-│   ├── api/                     # Graph Visualization API
+│   ├── api/                     # REST API (FastAPI)
 │   │   ├── main.py              # FastAPI app with lifespan
-│   │   ├── dependencies.py      # GraphServices (storage, index, builder)
-│   │   ├── routes/graph.py      # /graph/* endpoints
-│   │   ├── models/responses.py  # Pydantic response models
-│   │   └── static/index.html    # D3.js visualization UI
+│   │   ├── dependencies.py      # Service container (storage, search, graph)
+│   │   ├── routes/
+│   │   │   ├── graph.py         # /graph/* citation graph endpoints
+│   │   │   ├── search.py        # /api/search, /api/paper, /api/stats
+│   │   │   └── trends.py        # /api/trends/* analytics endpoints
+│   │   ├── models/              # Pydantic request/response models
+│   │   └── static/
+│   │       ├── index.html       # D3.js citation graph UI
+│   │       ├── search.html      # Search web UI
+│   │       └── trends.html      # Trends dashboard
+│   ├── mcp/                     # MCP Server (AI agent integration)
+│   │   ├── server.py            # Tool definitions + handlers (stdio transport)
+│   │   └── formatters.py        # Output formatters for tool results
 │   ├── cli/                     # CLI tools
 │   │   ├── core_collect.py      # Main CLI entry point
 │   │   └── commands/            # CLI command modules
 │   ├── core/                    # Core modules
 │   │   ├── storage/             # Qdrant storage package
+│   │   ├── search/              # Search & on-demand retrieval
+│   │   │   ├── service.py       # SearchService (hybrid search orchestrator)
+│   │   │   ├── on_demand.py     # On-demand arXiv + OpenAlex expansion
+│   │   │   ├── arxiv_client.py  # arXiv API client
+│   │   │   └── openalex_client.py  # OpenAlex search client
+│   │   ├── embedding/           # Embedding pipeline
+│   │   │   ├── embedder.py      # Qwen3-Embedding-8B batch embedder
+│   │   │   └── migration.py     # Collection migration (payload → vectors)
+│   │   ├── analytics/           # Trends & analytics
+│   │   │   ├── notable.py       # Notable paper scoring
+│   │   │   └── keyword_trends.py  # Keyword trends + rising detection
 │   │   ├── checkpoint.py        # Resume support
 │   │   ├── checkpoint_mixin.py  # Reusable checkpoint mixin
 │   │   ├── config.py            # Venue configurations
@@ -265,12 +337,25 @@ lexiconarxiv/
 │   │       └── ollama.py        # Ollama REST API labeling
 │   └── models/
 │       └── paper.py             # Paper data model
+├── scripts/
+│   └── embedding/               # Embedding pipeline scripts
+│       ├── run_embedding.sh     # Run batch embedding
+│       └── migrate_collection.sh  # Migrate Qdrant collection
 ├── docs/                        # Documentation
 ├── tests/                       # Test suite
 └── data/core/checkpoints/       # Collection state
 ```
 
-## Recent Updates (Feb 2026)
+## Recent Updates (Mar 2026) — v0.11.0
+
+- **Hybrid Search**: Dense Qwen3-Embedding-8B + server-side BM25 via Qdrant Reciprocal Rank Fusion (RRF)
+- **Search Web UI**: Interactive search at `/search` with faceted filters (venue, year, tier)
+- **MCP Server**: AI agent integration via Model Context Protocol with 4 tools (search_papers, get_paper, get_citations, get_corpus_stats)
+- **On-demand Retrieval**: Expand search results in real-time via arXiv + OpenAlex with core/connected/external labeling
+- **Trends & Analytics**: Notable paper scoring, keyword time-series, rising keyword detection, UMAP+HDBSCAN topic clustering with 2D map
+- **Embedding Pipeline**: Qwen3-Embedding-8B with Matryoshka Representation Learning (1024d), batch processing with collection migration
+
+### Previous Updates (Feb 2026)
 
 - **Code Repository Enrichment**: 3-tier strategy (PWC/HuggingFace, GROBID PDF extraction, GitHub API search) with URL classification heuristics
 - **Abstract Labeling**: Sentence-level rhetorical classification (7 roles) using Gemini/Ollama with structured JSON output
@@ -295,8 +380,10 @@ LexiconArxiv uses **payload-only storage** in Qdrant, decoupling metadata collec
 
 ```
 Collection → Enrichment → Resolution → Graph → Keywords → Labeling   (payload-only, no vectors)
-                                        ↓
-                              Add Embeddings   (named vectors, any dimension)
+                                                                ↓
+                                          Migration → Embedding → BM25 Index   (Qwen3-8B 1024d + server-side BM25)
+                                                                ↓
+                                                    Hybrid Search / MCP / Trends
 ```
 
 ### Benefits
