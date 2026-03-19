@@ -10,6 +10,7 @@ from functools import lru_cache
 from src.core.citation_graph.builder import CitationGraphBuilder
 from src.core.citation_graph.reverse_index import ReverseCitationIndex
 from src.core.search.service import SearchService
+from src.core.search.suggest import KeywordSuggestor
 from src.core.storage import QdrantStorage
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,7 @@ class GraphServices:
         self._index: ReverseCitationIndex | None = None
         self._builder: CitationGraphBuilder | None = None
         self._search_service: SearchService | None = None
+        self._suggestor: KeywordSuggestor | None = None
 
     @property
     def storage(self) -> QdrantStorage:
@@ -92,6 +94,18 @@ class GraphServices:
             await self._search_service.shutdown_on_demand()
             await self._search_service.__aexit__(None, None, None)
             self._search_service = None
+
+    def init_suggestor(self) -> None:
+        """Build the keyword suggestion trie from Qdrant keywords."""
+        self._suggestor = KeywordSuggestor()
+        self._suggestor.build(self.storage)
+
+    @property
+    def suggestor(self) -> KeywordSuggestor:
+        """Get the keyword suggestor."""
+        if self._suggestor is None:
+            raise RuntimeError("Suggestor not initialized. Call init_suggestor() first.")
+        return self._suggestor
 
     @property
     def search_service(self) -> SearchService:

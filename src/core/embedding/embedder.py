@@ -175,11 +175,12 @@ class PaperEmbedder:
         text_map: list[tuple[int, str]] = []  # (paper_index, vector_name)
 
         for i, (point_id, payload) in enumerate(papers):
+            title = payload.get("title") or ""
             abstract = payload.get("abstract") or ""
             structure = payload.get("abstract_structure") or {}
 
             # 1. Full abstract vector
-            all_texts.append(f"Retrieve academic papers: {abstract}")
+            all_texts.append(f"Retrieve academic papers: {title}. {abstract}")
             text_map.append((i, EMBEDDING_VECTOR_NAME))
 
             # 2. Structured abstract vector (multi-label aware)
@@ -189,7 +190,7 @@ class PaperEmbedder:
                     structured = abstract
             else:
                 structured = abstract
-            all_texts.append(f"Retrieve academic papers: {structured}")
+            all_texts.append(f"Retrieve academic papers: {title}. {structured}")
             text_map.append((i, STRUCTURED_VECTOR_NAME))
 
             # 3. Per-section vectors (only if abstract_structure exists)
@@ -236,8 +237,10 @@ class PaperEmbedder:
                 continue  # No dense vectors — skip this paper
             combined = dict(vectors_dict)
             # Add BM25 sparse vector
+            title = payload.get("title") or ""
+            abstract = payload.get("abstract") or ""
             combined["bm25"] = qdrant_models.Document(
-                text=payload.get("abstract") or "",
+                text=f"{title} {abstract}",
                 model="qdrant/bm25",
             )
             point_vectors.append(

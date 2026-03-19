@@ -198,6 +198,7 @@ class SearchService:
                 "citation_count": p.get("citation_count", 0),
                 "pagerank": p.get("pagerank"),
                 "keywords": p.get("keywords", []),
+                "abstract_structure": p.get("abstract_structure"),
                 "code_url": p.get("code_url"),
                 "pdf_url": p.get("pdf_url"),
                 "score": round(point.score, 4) if point.score else 0.0,

@@ -60,6 +60,13 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to init search service: {e}")
         logger.warning("Search API will be unavailable")
 
+    # Build keyword suggestion trie
+    try:
+        services.init_suggestor()
+    except Exception as e:
+        logger.error(f"Failed to build keyword suggestor: {e}")
+        logger.warning("Keyword suggestions will be unavailable")
+
     yield
 
     await services.shutdown_search_service()

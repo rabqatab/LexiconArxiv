@@ -36,6 +36,7 @@ class SearchResultItem(BaseModel):
     citation_count: int = Field(0, description="Global citation count")
     pagerank: float | None = Field(None, description="PageRank score")
     keywords: list[str] = Field(default_factory=list, description="Extracted keywords")
+    abstract_structure: dict | None = Field(None, description="Structured abstract sections")
     code_url: str | None = Field(None, description="Code repository URL")
     pdf_url: str | None = Field(None, description="PDF URL")
     score: float = Field(0.0, description="Search relevance score")

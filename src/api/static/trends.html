@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LexiconArxiv Trends</title>
+    <title>LexiconArxiv — Trends</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>">
     <style>
         * {
             margin: 0;
@@ -70,7 +71,7 @@
         .main {
             max-width: 1200px;
             margin: 0 auto;
-            padding: 80px 24px 40px;
+            padding: 60px 24px 40px;
         }
 
         /* Section tabs */
@@ -422,16 +423,13 @@
     </style>
 </head>
 <body>
-    <header class="header">
-        <div class="header-inner">
-            <a class="logo" href="/">Lexicon<span>Arxiv</span></a>
-            <div class="nav-links">
-                <a class="nav-link" href="/search">Search</a>
-                <a class="nav-link active" href="/trends">Trends</a>
-                <a class="nav-link" href="/static/index.html">Graph Explorer</a>
-            </div>
-        </div>
-    </header>
+    <nav style="background:#16162a; padding:10px 20px; display:flex; gap:20px; align-items:center; border-bottom:1px solid #333; position:fixed; top:0; left:0; right:0; z-index:1000;">
+        <span style="color:#22d3ee; font-weight:bold; font-size:1.1em;">LexiconArxiv</span>
+        <a href="/search" style="color:#ccc; text-decoration:none;">Search</a>
+        <a href="/trends" style="color:#22d3ee; text-decoration:none;">Trends</a>
+        <a href="/" style="color:#ccc; text-decoration:none;">Graph</a>
+        <a href="/dashboard" style="color:#ccc; text-decoration:none;">Dashboard</a>
+    </nav>
 
     <div class="main">
         <div class="section-tabs">

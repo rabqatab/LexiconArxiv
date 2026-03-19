@@ -2,7 +2,7 @@
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from src.api.dependencies import get_services
 from src.api.models.on_demand import (
@@ -16,6 +16,7 @@ from src.api.models.search import (
     SearchRequest,
     SearchResponse,
     SearchResultItem,
+    SuggestResponse,
     PaperDetailResponse,
     CorpusStatsResponse,
 )
@@ -79,6 +80,17 @@ async def expand_search(request: ExpandRequest):
         query_time_ms=results["query_time_ms"],
         cached=results.get("cached", False),
     )
+
+
+@router.get("/search/suggest", response_model=SuggestResponse)
+async def suggest_keywords(
+    q: str = Query(min_length=1, max_length=100),
+    limit: int = Query(default=10, ge=1, le=50),
+):
+    """Autocomplete keyword suggestions."""
+    services = get_services()
+    suggestions = services.suggestor.suggest(q, limit)
+    return SuggestResponse(suggestions=suggestions)
 
 
 @router.get("/paper/{paper_id}", response_model=PaperDetailResponse)
