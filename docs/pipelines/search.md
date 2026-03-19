@@ -609,31 +609,40 @@ class SearchCache:
   - BM25 text fields: title, abstract, keywords
   - Quantization: scalar (50% memory savings)
 
-### 8.3 Keyword-Enhanced BM25
+### 8.3 Hybrid Search Flow (Dense + BM25 -> RRF)
 
-Using keyword field for exact paper retrieval:
+The core search uses Qdrant's server-side BM25 via `qdrant/bm25` Document inference (not client-side sparse encoding). At query time:
+
+1. **Embed query** via Ollama `/api/embed` with instruction prefix `"Retrieve academic papers: "`
+2. **Prefetch** two result sets in parallel:
+   - Dense: query the `abstract-qwen3-8b` named vector (1024d, Qwen3-Embedding-8B)
+   - Sparse: query the `bm25` named vector via `Document(text=query, model="qdrant/bm25")`
+3. **Fuse** with Reciprocal Rank Fusion (`models.Fusion.RRF`)
+4. **BM25-only fallback**: If Ollama is unreachable, the search falls back transparently to BM25-only mode (no dense prefetch)
 
 ```python
-# Example: "HyDE paper" query
-# keywords field contains ["HyDE", "dense retrieval", ...]
-
-# BM25 search searches title + abstract + keywords
-results = qdrant.search(
-    collection_name="lexicon_arxiv",
-    query_text="HyDE",  # BM25: matches title, abstract, keywords
-    query_vector=embed("HyDE"),  # Dense: semantic similarity
-    fusion="rrf",  # Reciprocal Rank Fusion
+# Hybrid search (simplified)
+prefetch = [
+    Prefetch(query=query_vector, using="abstract-qwen3-8b", limit=N),
+    Prefetch(query=Document(text=query, model="qdrant/bm25"), using="bm25", limit=N),
+]
+results = client.query_points(
+    collection_name="lexicon_arxiv_v2",
+    prefetch=prefetch,
+    query=FusionQuery(fusion=Fusion.RRF),
 )
 ```
 
-Keyword extraction methods:
+### 8.4 Keyword-Enhanced BM25
+
+The BM25 index covers abstract text, which includes extracted keywords when present. Keyword extraction methods:
 - **LLM extraction** (primary): Structured keyword extraction via Gemini or Ollama
 - **Regex patterns** (fallback): Extract explicit acronyms from title/abstract (e.g., "BERT:", "(RAG)")
 - **KeyBERT** (fallback): Extract semantic keywords from abstracts
 
 See [Keyword Extraction Design](./keyword_extraction.md) for details.
 
-### 8.4 Query Timeout
+### 8.5 Query Timeout
 
 ```python
 TIMEOUTS = {
@@ -657,7 +666,28 @@ async def search_with_fallback(tasks, timeout):
 
 ---
 
-## 9. Search Modes Summary
+## 9. On-demand Expansion
+
+On-demand expansion is **user-triggered** (not automatic). When the user clicks "Expand" in the web UI or calls the `/api/search/expand` endpoint, the system queries arXiv and/or OpenAlex for additional papers beyond the core corpus.
+
+### 9.1 Expansion Flow
+
+1. User issues a core search query, receives results from the local corpus
+2. User triggers expansion for the same query
+3. The system queries arXiv and OpenAlex in parallel
+4. Results are deduplicated against the core corpus (DOI / arXiv ID match)
+5. Each external paper is labeled with a connection type:
+   - **core**: Already exists in the corpus (filtered out)
+   - **connected**: Cited by or cites a core paper (detected via stub index)
+   - **external**: No known relationship to the corpus
+
+### 9.2 Search Web UI
+
+A search interface is available at `/search` (served as a static page by the FastAPI app). It supports keyword search with venue/year/tier filters and provides an "Expand" button for on-demand retrieval.
+
+---
+
+## 10. Search Modes Summary
 
 | Mode | Core Search | On-demand | Core Boost | Use Case |
 |------|-------------|-----------|------------|----------|
@@ -671,6 +701,7 @@ async def search_with_fallback(tasks, timeout):
 ## Related Documents
 
 - [Architecture Overview](../architecture/overview.md)
+- [Embedding Pipeline](./embedding.md)
 - [Keyword Extraction](./keyword_extraction.md)
 - [Citation Graph](./citation_graph.md)
 - [Data Collection](./data_collection.md)

@@ -63,16 +63,17 @@ This document defines the technical architecture of the AI Research Insights Eng
 │ └────────────┘ │  │ └────────────┘ │  │ └────────────┘ │
 │ ┌────────────┐ │  │ ┌────────────┐ │  │ ┌────────────┐ │
 │ │  Qdrant    │ │  │ │  OpenAlex  │ │  │ │  Citation  │ │
-│ │(Core+BM25) │ │  │ │  (narrow)  │ │  │ │  Graph     │ │
+│ │(Dense+BM25)│ │  │ │  (narrow)  │ │  │ │  Graph     │ │
 │ └────────────┘ │  │ └────────────┘ │  │ └────────────┘ │
 │ ┌────────────┐ │  │                │  │ ┌────────────┐ │
 │ │ Citation   │ │  │                │  │ │  Embedding │ │
 │ │  Graph     │ │  │                │  │ │  Pipeline  │ │
 │ └────────────┘ │  │                │  │ └────────────┘ │
 │                │  │                │  │ ┌────────────┐ │
-│                │  │                │  │ │  Keyword   │ │
-│                │  │                │  │ │ Extraction │ │
-│                │  │                │  │ └────────────┘ │
+│ ┌────────────┐ │  │                │  │ │  Keyword   │ │
+│ │  Ollama    │ │  │                │  │ │ Extraction │ │
+│ │ (Qwen3-8B)│ │  │                │  │ └────────────┘ │
+│ └────────────┘ │  │                │  │                │
 └────────────────┘  └────────────────┘  └────────────────┘
 ```
 
@@ -233,7 +234,27 @@ class GraphService:
         pass
 ```
 
-### 4.4 Core Corpus Layer
+### 4.4 Search Service
+
+**Responsibility**: Orchestrate query embedding and Qdrant hybrid search
+
+```python
+class SearchService:
+    """Orchestrates hybrid search: embed query + Qdrant prefetch + RRF fusion."""
+    async def search(self, query, venues, year_min, year_max, tiers, limit) -> dict:
+        # 1. Embed query via Ollama (instruction-aware)
+        # 2. Prefetch: dense (Qwen3-8B) + sparse (BM25)
+        # 3. Fuse with RRF
+        # 4. Falls back to BM25-only if Ollama unavailable
+```
+
+**Hybrid search flow**:
+1. Embed the query via Ollama `/api/embed` with instruction prefix `"Retrieve academic papers: "`
+2. Issue two Qdrant `Prefetch` legs in parallel: dense vector search on the `abstract-qwen3-8b` named vector, and BM25 sparse search via `qdrant/bm25` Document inference
+3. Fuse results with Reciprocal Rank Fusion (RRF)
+4. If Ollama is unreachable, fall back to BM25-only search transparently
+
+### 4.5 Core Corpus Layer
 
 #### PostgreSQL (Metadata + Graph Store)
 - Core paper records (tier 0/1/2)
@@ -242,12 +263,23 @@ class GraphService:
 - Authors and venues
 
 #### Qdrant (Hybrid Index)
-- Vector search (768-dim embeddings)
-- BM25 keyword search
-- Payload filtering (tier, field, year, keywords)
-- Core-first boosting
+- Dense vector search (1024-dim Qwen3-Embedding-8B via MRL from 4096d)
+- BM25 sparse search (server-side via `qdrant/bm25` Document inference)
+- Named vectors: `abstract-qwen3-8b` (dense), `bm25` (sparse)
+- Payload filtering (tier, venue, year, keywords)
+- Collection migrated from payload-only to named-vector schema
 
-### 4.5 On-demand Retrieval
+#### Ollama (Embedding Server)
+- Serves Qwen3-Embedding-8B for both batch embedding and query-time embedding
+- Instruction-aware: prepends task instruction for retrieval quality
+
+### 4.6 MCP Server
+
+**Responsibility**: Expose search and paper tools to AI agents via Model Context Protocol
+
+The MCP server wraps `SearchService` and provides four tools: `search_papers`, `get_paper`, `get_citations`, and `get_corpus_stats`. It communicates over stdio and is compatible with Claude Desktop, Claude Code, and other MCP clients.
+
+### 4.7 On-demand Retrieval
 
 ```python
 class OnDemandRetriever:
@@ -402,11 +434,13 @@ User Query: "Recent LLM evaluation benchmarks"
 - **Language**: Python 3.12+
 - **Framework**: FastAPI
 - **Async**: asyncio, httpx
+- **Rate Limiting**: slowapi (per-IP)
 - **Task Queue**: Celery + Redis
+- **MCP**: mcp SDK (stdio transport for AI agent integration)
 
 ### 7.2 Data Stores
 - **RDBMS**: PostgreSQL 15+
-- **Vector DB**: Qdrant (hybrid search: vector + BM25)
+- **Vector DB**: Qdrant (hybrid search: dense + BM25, named vectors)
 - **Cache**: Redis
 
 ### 7.3 Infrastructure
@@ -416,8 +450,10 @@ User Query: "Recent LLM evaluation benchmarks"
 - **Monitoring**: Prometheus + Grafana
 
 ### 7.4 ML/NLP
-- **Embeddings**: sentence-transformers (all-MiniLM-L6-v2 or SPECTER2)
+- **Embeddings**: Qwen3-Embedding-8B via Ollama (1024d via MRL from 4096d, instruction-aware)
+- **BM25**: Server-side sparse vectors via Qdrant `qdrant/bm25` Document inference
 - **Keyword Extraction**: LLM-first (Gemini/Ollama) with KeyBERT fallback
+- **Clustering**: UMAP + HDBSCAN (for trend analysis)
 - **NL Processing**: spaCy
 
 ---
@@ -448,4 +484,5 @@ User Query: "Recent LLM evaluation benchmarks"
 - [Data Model](./data_model.md)
 - [API Specification](./api.md)
 - [Search Pipeline](../pipelines/search.md)
+- [Embedding Pipeline](../pipelines/embedding.md)
 - [Data Collection](../pipelines/data_collection.md)
