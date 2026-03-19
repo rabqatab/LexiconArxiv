@@ -75,8 +75,8 @@ async def get_corpus_stats():
         with_abstracts = storage.client.count(
             storage.collection_name,
             count_filter=models.Filter(
-                must=[models.FieldCondition(key="is_stub", match=models.MatchValue(value=False))],
                 must_not=[
+                    models.FieldCondition(key="is_stub", match=models.MatchValue(value=True)),
                     models.IsNullCondition(is_null=models.PayloadField(key="abstract")),
                     models.FieldCondition(key="abstract", match=models.MatchValue(value="")),
                 ],

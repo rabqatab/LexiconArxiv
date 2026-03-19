@@ -581,13 +581,12 @@ class PaperReader:
         results, next_offset = self.client.scroll(
             collection_name=self.collection_name,
             scroll_filter=models.Filter(
-                must=[
+                must_not=[
+                    # Exclude stubs (is_stub is null on real papers, true on stubs)
                     models.FieldCondition(
                         key="is_stub",
-                        match=models.MatchValue(value=False),
+                        match=models.MatchValue(value=True),
                     ),
-                ],
-                must_not=[
                     models.IsNullCondition(
                         is_null=models.PayloadField(key="abstract"),
                     ),

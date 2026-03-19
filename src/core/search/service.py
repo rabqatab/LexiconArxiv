@@ -81,9 +81,11 @@ class SearchService:
         tiers: list[int] | None = None,
     ) -> models.Filter | None:
         """Build Qdrant filter from search parameters."""
-        must = [
+        must = []
+        must_not = [
+            # Exclude stubs (is_stub is null on real papers, true on stubs)
             models.FieldCondition(
-                key="is_stub", match=models.MatchValue(value=False)
+                key="is_stub", match=models.MatchValue(value=True)
             ),
         ]
         if venues:
@@ -110,7 +112,7 @@ class SearchService:
                     key="tier", match=models.MatchAny(any=tiers)
                 )
             )
-        return models.Filter(must=must)
+        return models.Filter(must=must if must else None, must_not=must_not)
 
     async def search(
         self,

@@ -367,13 +367,11 @@ class QdrantStorage:
         return self.client.count(
             self.collection_name,
             count_filter=models.Filter(
-                must=[
+                must_not=[
                     models.FieldCondition(
                         key="is_stub",
-                        match=models.MatchValue(value=False),
+                        match=models.MatchValue(value=True),
                     ),
-                ],
-                must_not=[
                     models.IsNullCondition(
                         is_null=models.PayloadField(key="abstract"),
                     ),
