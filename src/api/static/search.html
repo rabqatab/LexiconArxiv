@@ -397,6 +397,134 @@
             font-size: 0.9rem;
         }
 
+        /* Expand button + expanded results */
+        .expand-section {
+            margin-top: 24px;
+            padding-top: 20px;
+            border-top: 1px solid #333;
+        }
+        .expand-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            background: rgba(249, 115, 22, 0.15);
+            color: #f97316;
+            border: 1px solid rgba(249, 115, 22, 0.3);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .expand-btn:hover:not(:disabled) {
+            background: rgba(249, 115, 22, 0.25);
+        }
+        .expand-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .expand-spinner {
+            display: none;
+            text-align: center;
+            padding: 30px 0;
+        }
+        .expand-spinner .spinner {
+            width: 28px;
+            height: 28px;
+        }
+        .expand-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 20px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .expand-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #f97316;
+        }
+        .expand-stats {
+            font-size: 0.82rem;
+            color: #888;
+        }
+        .expand-cache-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            background: rgba(139, 92, 246, 0.15);
+            color: #a78bfa;
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            margin-left: 8px;
+        }
+        .expanded-results-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .connection-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 0.72rem;
+            font-weight: 600;
+        }
+        .connection-core {
+            background: rgba(34, 211, 238, 0.15);
+            color: #22d3ee;
+            border: 1px solid rgba(34, 211, 238, 0.3);
+        }
+        .connection-connected {
+            background: rgba(34, 197, 94, 0.15);
+            color: #22c55e;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+        .connection-external {
+            background: rgba(156, 163, 175, 0.12);
+            color: #9ca3af;
+            border: 1px solid rgba(156, 163, 175, 0.25);
+        }
+        .connected-papers-list {
+            margin-top: 8px;
+            padding-left: 16px;
+            border-left: 2px solid rgba(34, 197, 94, 0.3);
+        }
+        .connected-paper-item {
+            font-size: 0.8rem;
+            color: #aaa;
+            padding: 3px 0;
+        }
+        .connected-paper-item .cp-relation {
+            color: #22c55e;
+            font-weight: 600;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            margin-right: 6px;
+        }
+        .source-badge {
+            display: inline-block;
+            padding: 1px 8px;
+            border-radius: 10px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            margin-left: 6px;
+        }
+        .source-arxiv {
+            background: rgba(239, 68, 68, 0.12);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.25);
+        }
+        .source-openalex {
+            background: rgba(59, 130, 246, 0.12);
+            color: #3b82f6;
+            border: 1px solid rgba(59, 130, 246, 0.25);
+        }
+
         /* Welcome state */
         .welcome {
             text-align: center;
@@ -756,6 +884,15 @@
 
         <div class="results-list" id="resultsList"></div>
 
+        <div class="expand-section" id="expandSection" style="display:none;">
+            <button class="expand-btn" id="expandBtn">Expand to arXiv &amp; OpenAlex</button>
+            <div class="expand-spinner" id="expandSpinner">
+                <div class="spinner"></div>
+                <div class="loading-text">Expanding search to external sources...</div>
+            </div>
+            <div id="expandedResultsArea"></div>
+        </div>
+
         <div class="no-results" id="noResults" style="display:none;">
             <h3>No results found</h3>
             <p>Try adjusting your query or filters.</p>
@@ -773,6 +910,7 @@
         var currentOffset = 0;
         var currentTotal = 0;
         var lastQuery = '';
+        var onDemandAvailable = false;
 
         // SVG icon markup
         var ICON_GITHUB_SVG = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>';
@@ -875,6 +1013,15 @@
             spinner.style.display = 'block';
             btn.disabled = true;
 
+            // Reset expand section
+            var expandSection = document.getElementById('expandSection');
+            expandSection.style.display = 'none';
+            document.getElementById('expandedResultsArea').textContent = '';
+            document.getElementById('expandSpinner').style.display = 'none';
+            var expandBtn = document.getElementById('expandBtn');
+            expandBtn.disabled = false;
+            expandBtn.textContent = 'Expand to arXiv & OpenAlex';
+
             var body = {
                 query: query,
                 filters: buildFilters(),
@@ -908,6 +1055,12 @@
                 renderSearchInfo(data);
                 renderResults(data.results);
                 infoBar.style.display = 'block';
+
+                // Show expand button if on-demand is available
+                onDemandAvailable = data.on_demand_available;
+                if (onDemandAvailable) {
+                    document.getElementById('expandSection').style.display = 'block';
+                }
             })
             .catch(function(err) {
                 noResults.querySelector('h3').textContent = 'Search Error';
@@ -1432,6 +1585,219 @@
             container.appendChild(legend);
         }
 
+        // Expand search to arXiv + OpenAlex
+        function doExpand() {
+            if (!lastQuery) return;
+
+            var expandBtn = document.getElementById('expandBtn');
+            var expandSpinner = document.getElementById('expandSpinner');
+            var expandedArea = document.getElementById('expandedResultsArea');
+
+            expandBtn.disabled = true;
+            expandBtn.textContent = 'Expanding...';
+            expandSpinner.style.display = 'block';
+            expandedArea.textContent = '';
+
+            var body = {
+                query: lastQuery,
+                sources: 'both',
+                limit: 20
+            };
+
+            fetch(API_BASE + '/api/search/expand', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            })
+            .then(function(resp) {
+                if (!resp.ok) {
+                    return resp.json().catch(function() { return {}; }).then(function(err) {
+                        throw new Error(err.detail || 'Expansion failed (' + resp.status + ')');
+                    });
+                }
+                return resp.json();
+            })
+            .then(function(data) {
+                renderExpandedResults(data);
+            })
+            .catch(function(err) {
+                expandedArea.textContent = '';
+                var errDiv = document.createElement('div');
+                errDiv.style.cssText = 'padding:20px;text-align:center;color:#ef4444;font-size:0.9rem;';
+                errDiv.textContent = 'Expansion error: ' + err.message;
+                expandedArea.appendChild(errDiv);
+            })
+            .finally(function() {
+                expandSpinner.style.display = 'none';
+                expandBtn.style.display = 'none';
+            });
+        }
+
+        // Render expanded results
+        function renderExpandedResults(data) {
+            var area = document.getElementById('expandedResultsArea');
+            area.textContent = '';
+
+            // Header with stats
+            var header = document.createElement('div');
+            header.className = 'expand-header';
+
+            var titleSpan = document.createElement('span');
+            titleSpan.className = 'expand-title';
+            titleSpan.textContent = 'Expanded Results (arXiv + OpenAlex)';
+
+            if (data.cached) {
+                var cacheBadge = document.createElement('span');
+                cacheBadge.className = 'expand-cache-badge';
+                cacheBadge.textContent = 'cached';
+                titleSpan.appendChild(cacheBadge);
+            }
+
+            header.appendChild(titleSpan);
+
+            var stats = data.expansion_stats;
+            var statsSpan = document.createElement('span');
+            statsSpan.className = 'expand-stats';
+            statsSpan.textContent = 'Fetched ' + stats.arxiv_fetched + ' from arXiv, ' +
+                stats.openalex_fetched + ' from OpenAlex. ' +
+                stats.connected + ' connected, ' + stats.external + ' external.';
+            header.appendChild(statsSpan);
+
+            area.appendChild(header);
+
+            if (data.expanded_results.length === 0) {
+                var noRes = document.createElement('div');
+                noRes.style.cssText = 'padding:20px;text-align:center;color:#666;font-size:0.9rem;';
+                noRes.textContent = 'No external results found.';
+                area.appendChild(noRes);
+                return;
+            }
+
+            var list = document.createElement('div');
+            list.className = 'expanded-results-list';
+
+            data.expanded_results.forEach(function(r) {
+                var card = document.createElement('div');
+                card.className = 'result-card';
+
+                // Title
+                var titleEl = document.createElement('span');
+                titleEl.className = 'result-title';
+                titleEl.style.cursor = 'default';
+                titleEl.textContent = r.title || 'Untitled';
+
+                // If there's a URL, make title a link
+                if (r.url) {
+                    var titleLink = document.createElement('a');
+                    titleLink.className = 'result-title';
+                    titleLink.href = r.url;
+                    titleLink.target = '_blank';
+                    titleLink.rel = 'noopener';
+                    titleLink.textContent = r.title || 'Untitled';
+                    card.appendChild(titleLink);
+                } else {
+                    card.appendChild(titleEl);
+                }
+
+                // Meta row
+                var meta = document.createElement('div');
+                meta.className = 'result-meta';
+
+                // Connection badge
+                var connBadge = document.createElement('span');
+                connBadge.className = 'connection-badge connection-' + r.connection;
+                connBadge.textContent = r.connection.charAt(0).toUpperCase() + r.connection.slice(1);
+                meta.appendChild(connBadge);
+
+                // Source badge
+                var srcBadge = document.createElement('span');
+                srcBadge.className = 'source-badge source-' + r.source;
+                srcBadge.textContent = r.source;
+                meta.appendChild(srcBadge);
+
+                // Venue + year
+                var venueText = '';
+                if (r.venue) venueText = r.venue + (r.year ? ' ' + r.year : '');
+                else if (r.year) venueText = String(r.year);
+                if (venueText) {
+                    var vb = document.createElement('span');
+                    vb.className = 'venue-badge venue-tier-2';
+                    vb.textContent = venueText;
+                    meta.appendChild(vb);
+                }
+
+                card.appendChild(meta);
+
+                // Authors
+                var authorsStr = Array.isArray(r.authors) ? r.authors.join(', ') : (r.authors || '');
+                if (authorsStr) {
+                    var authorsDiv = document.createElement('div');
+                    authorsDiv.className = 'result-authors';
+                    authorsDiv.textContent = authorsStr;
+                    card.appendChild(authorsDiv);
+                }
+
+                // Abstract snippet
+                if (r.abstract) {
+                    var abstractDiv = document.createElement('div');
+                    abstractDiv.className = 'result-abstract';
+                    abstractDiv.textContent = r.abstract.length > 200 ? r.abstract.substring(0, 200) + '...' : r.abstract;
+                    card.appendChild(abstractDiv);
+                }
+
+                // Connected papers
+                if (r.connected_papers && r.connected_papers.length > 0) {
+                    var cpList = document.createElement('div');
+                    cpList.className = 'connected-papers-list';
+                    r.connected_papers.forEach(function(cp) {
+                        var cpItem = document.createElement('div');
+                        cpItem.className = 'connected-paper-item';
+                        var relSpan = document.createElement('span');
+                        relSpan.className = 'cp-relation';
+                        relSpan.textContent = cp.relation;
+                        cpItem.appendChild(relSpan);
+                        cpItem.appendChild(document.createTextNode(cp.title));
+                        cpList.appendChild(cpItem);
+                    });
+                    card.appendChild(cpList);
+                }
+
+                // Bottom row with links
+                var bottom = document.createElement('div');
+                bottom.className = 'result-bottom';
+                var linksDiv = document.createElement('div');
+                linksDiv.className = 'result-links';
+
+                if (r.url) {
+                    var urlLink = document.createElement('a');
+                    urlLink.className = 'result-link';
+                    urlLink.href = r.url;
+                    urlLink.target = '_blank';
+                    urlLink.rel = 'noopener';
+                    urlLink.appendChild(createIconSpan(ICON_PDF_SVG));
+                    urlLink.appendChild(document.createTextNode(' View'));
+                    linksDiv.appendChild(urlLink);
+                }
+
+                if (r.doi) {
+                    var doiLink = document.createElement('a');
+                    doiLink.className = 'result-link';
+                    doiLink.href = 'https://doi.org/' + r.doi;
+                    doiLink.target = '_blank';
+                    doiLink.rel = 'noopener';
+                    doiLink.textContent = 'DOI';
+                    linksDiv.appendChild(doiLink);
+                }
+
+                bottom.appendChild(linksDiv);
+                card.appendChild(bottom);
+
+                list.appendChild(card);
+            });
+
+            area.appendChild(list);
+        }
+
         // Event listeners
         document.getElementById('searchBtn').addEventListener('click', function() {
             doSearch(0);
@@ -1443,6 +1809,8 @@
 
         document.getElementById('prevBtn').addEventListener('click', prevPage);
         document.getElementById('nextBtn').addEventListener('click', nextPage);
+
+        document.getElementById('expandBtn').addEventListener('click', doExpand);
 
         document.getElementById('detailOverlay').addEventListener('click', closeDetail);
 

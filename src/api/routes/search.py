@@ -5,6 +5,13 @@ import logging
 from fastapi import APIRouter, HTTPException
 
 from src.api.dependencies import get_services
+from src.api.models.on_demand import (
+    ExpandRequest,
+    ExpandResponse,
+    ExpandedResultItem,
+    ExpansionStats,
+    ConnectedPaper,
+)
 from src.api.models.search import (
     SearchRequest,
     SearchResponse,
@@ -41,6 +48,35 @@ async def search_papers(request: SearchRequest):
         query_time_ms=results["query_time_ms"],
         search_mode=results["search_mode"],
         on_demand_available=results["on_demand_available"],
+    )
+
+
+@router.post("/search/expand", response_model=ExpandResponse)
+async def expand_search(request: ExpandRequest):
+    """Expand search to arXiv and OpenAlex."""
+    services = get_services()
+    search = services.search_service
+
+    results = await search.expand_search(
+        query=request.query,
+        sources=request.sources,
+        limit=request.limit,
+    )
+
+    if "error" in results:
+        raise HTTPException(status_code=503, detail=results["error"])
+
+    return ExpandResponse(
+        expanded_results=[
+            ExpandedResultItem(
+                **{k: v for k, v in r.items() if k != "connected_papers" and k != "pdf_url"},
+                connected_papers=[ConnectedPaper(**cp) for cp in r.get("connected_papers", [])],
+            )
+            for r in results["expanded_results"]
+        ],
+        expansion_stats=ExpansionStats(**results["expansion_stats"]),
+        query_time_ms=results["query_time_ms"],
+        cached=results.get("cached", False),
     )
 
 

@@ -83,10 +83,13 @@ class GraphServices:
             logger.info("Search service ready (hybrid mode)")
         else:
             logger.warning("Ollama unavailable — search will use BM25-only mode")
+        await self._search_service.init_on_demand()
+        logger.info("On-demand search initialized (arXiv + OpenAlex)")
 
     async def shutdown_search_service(self) -> None:
         """Cleanup search service on shutdown."""
         if self._search_service:
+            await self._search_service.shutdown_on_demand()
             await self._search_service.__aexit__(None, None, None)
             self._search_service = None
 

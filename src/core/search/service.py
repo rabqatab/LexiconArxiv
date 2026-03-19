@@ -12,6 +12,7 @@ from src.core.constants import (
     EMBEDDING_VECTOR_SIZE,
     get_ollama_base_url,
 )
+from src.core.search.on_demand import OnDemandSearch
 from src.core.storage.base import QdrantStorage
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,11 @@ class SearchService:
         self._query_timeout = query_timeout
         self._max_retries = max_retries
         self._client: httpx.AsyncClient | None = None
+        self._on_demand: OnDemandSearch | None = None
+
+    @property
+    def on_demand(self) -> OnDemandSearch | None:
+        return self._on_demand
 
     @property
     def storage(self) -> QdrantStorage:
@@ -197,7 +203,7 @@ class SearchService:
             "total": total,
             "query_time_ms": elapsed_ms,
             "search_mode": search_mode,
-            "on_demand_available": False,
+            "on_demand_available": self._on_demand is not None,
         }
 
     async def get_paper(self, paper_id: str) -> dict | None:
@@ -238,6 +244,28 @@ class SearchService:
         except Exception as e:
             logger.error(f"Failed to get paper {paper_id}: {e}")
             return None
+
+    async def init_on_demand(self) -> None:
+        """Initialize on-demand search (arXiv + OpenAlex clients)."""
+        self._on_demand = OnDemandSearch(storage=self._storage)
+        await self._on_demand.__aenter__()
+
+    async def shutdown_on_demand(self) -> None:
+        """Cleanup on-demand search clients."""
+        if self._on_demand:
+            await self._on_demand.__aexit__(None, None, None)
+            self._on_demand = None
+
+    async def expand_search(
+        self,
+        query: str,
+        sources: str = "both",
+        limit: int = 20,
+    ) -> dict:
+        """Expand search to arXiv + OpenAlex."""
+        if self._on_demand is None:
+            return {"error": "On-demand search not available"}
+        return await self._on_demand.expand(query=query, sources=sources, limit=limit)
 
     async def check_ollama_available(self) -> bool:
         """Check if Ollama is running and has the embedding model."""
