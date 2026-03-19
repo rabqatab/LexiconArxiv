@@ -18,7 +18,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 
 from src.api.dependencies import get_services
-from src.api.routes import graph, search, trends
+from src.api.routes import dashboard, graph, search, trends
 
 # Static files directory
 STATIC_DIR = Path(__file__).parent / "static"
@@ -86,6 +86,7 @@ app.add_middleware(
 )
 
 # Include routers
+app.include_router(dashboard.router)
 app.include_router(graph.router)
 app.include_router(search.router)
 app.include_router(trends.router)
@@ -142,3 +143,12 @@ async def trends_page():
     if trends_path.exists():
         return FileResponse(trends_path)
     return {"message": "Trends UI not yet available", "api_docs": "/docs"}
+
+
+@app.get("/dashboard")
+async def dashboard_page():
+    """Serve the data health monitoring dashboard."""
+    dashboard_path = STATIC_DIR / "dashboard.html"
+    if dashboard_path.exists():
+        return FileResponse(dashboard_path)
+    return {"message": "Dashboard UI not yet available", "api_docs": "/docs"}

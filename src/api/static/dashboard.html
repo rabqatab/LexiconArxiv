@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LexiconArxiv - Data Health Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+        }
+
+        /* Header */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            background: rgba(30, 30, 50, 0.98);
+            border-bottom: 1px solid #333;
+            backdrop-filter: blur(10px);
+        }
+        .header-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .logo {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #22d3ee;
+            white-space: nowrap;
+            text-decoration: none;
+        }
+        .logo span {
+            color: #f97316;
+        }
+        .nav-links {
+            display: flex;
+            gap: 16px;
+            margin-left: auto;
+        }
+        .nav-link {
+            color: #888;
+            font-size: 0.85rem;
+            text-decoration: none;
+            white-space: nowrap;
+            transition: color 0.2s;
+        }
+        .nav-link:hover {
+            color: #22d3ee;
+        }
+        .nav-link.active {
+            color: #22d3ee;
+        }
+        .page-title {
+            font-size: 1rem;
+            color: #aaa;
+            font-weight: 400;
+        }
+
+        /* Main content */
+        .main {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 80px 24px 40px;
+        }
+
+        .dashboard-header {
+            margin-bottom: 32px;
+        }
+        .dashboard-header h1 {
+            font-size: 1.5rem;
+            color: #eee;
+            margin-bottom: 4px;
+        }
+        .dashboard-header p {
+            color: #888;
+            font-size: 0.9rem;
+        }
+        .refresh-info {
+            color: #666;
+            font-size: 0.8rem;
+            margin-top: 4px;
+        }
+
+        /* Loading state */
+        .loading {
+            text-align: center;
+            padding: 80px 0;
+            color: #888;
+        }
+        .loading .spinner {
+            display: inline-block;
+            width: 32px;
+            height: 32px;
+            border: 3px solid #333;
+            border-top-color: #22d3ee;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 12px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error-msg {
+            text-align: center;
+            padding: 40px;
+            color: #ef4444;
+            background: rgba(239, 68, 68, 0.1);
+            border-radius: 12px;
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        /* Section titles */
+        .section-title {
+            font-size: 1.1rem;
+            color: #ccc;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #333;
+        }
+
+        /* Overview cards */
+        .overview-cards {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 36px;
+        }
+        .card {
+            background: #2a2a4a;
+            border-radius: 12px;
+            padding: 24px;
+            border: 1px solid #333;
+        }
+        .card-label {
+            font-size: 0.8rem;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 8px;
+        }
+        .card-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #22d3ee;
+        }
+        .card-value.orange {
+            color: #f97316;
+        }
+        .card-value.muted {
+            color: #888;
+        }
+
+        /* Progress bar sections */
+        .metrics-section {
+            margin-bottom: 36px;
+        }
+        .metric-row {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 12px;
+        }
+        .metric-label {
+            width: 200px;
+            font-size: 0.9rem;
+            color: #ccc;
+            flex-shrink: 0;
+        }
+        .metric-bar-container {
+            flex: 1;
+            height: 24px;
+            background: #1e1e3a;
+            border-radius: 6px;
+            overflow: hidden;
+            position: relative;
+        }
+        .metric-bar {
+            height: 100%;
+            border-radius: 6px;
+            transition: width 0.6s ease;
+            min-width: 2px;
+        }
+        .metric-bar.green { background: #22c55e; }
+        .metric-bar.yellow { background: #eab308; }
+        .metric-bar.red { background: #ef4444; }
+        .metric-stats {
+            width: 180px;
+            text-align: right;
+            font-size: 0.85rem;
+            color: #aaa;
+            flex-shrink: 0;
+        }
+        .metric-pct {
+            font-weight: 600;
+            margin-right: 8px;
+        }
+        .metric-pct.green { color: #22c55e; }
+        .metric-pct.yellow { color: #eab308; }
+        .metric-pct.red { color: #ef4444; }
+
+        /* Year distribution */
+        .year-chart {
+            margin-bottom: 36px;
+        }
+        .year-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 6px;
+        }
+        .year-label {
+            width: 50px;
+            text-align: right;
+            font-size: 0.85rem;
+            color: #aaa;
+            flex-shrink: 0;
+        }
+        .year-bar-container {
+            flex: 1;
+            height: 20px;
+            background: #1e1e3a;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .year-bar {
+            height: 100%;
+            border-radius: 4px;
+            background: #22d3ee;
+            transition: width 0.6s ease;
+            min-width: 2px;
+        }
+        .year-count {
+            width: 80px;
+            font-size: 0.8rem;
+            color: #888;
+            flex-shrink: 0;
+        }
+
+        /* Pipeline status table */
+        .pipeline-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 40px;
+        }
+        .pipeline-table th {
+            text-align: left;
+            padding: 10px 16px;
+            font-size: 0.8rem;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid #333;
+        }
+        .pipeline-table td {
+            padding: 10px 16px;
+            font-size: 0.9rem;
+            border-bottom: 1px solid #2a2a3a;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+        .status-badge.complete {
+            background: rgba(34, 197, 94, 0.15);
+            color: #22c55e;
+        }
+        .status-badge.partial {
+            background: rgba(234, 179, 8, 0.15);
+            color: #eab308;
+        }
+        .status-badge.attention {
+            background: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .overview-cards {
+                grid-template-columns: 1fr;
+            }
+            .metric-row {
+                flex-wrap: wrap;
+            }
+            .metric-label {
+                width: 100%;
+            }
+            .metric-stats {
+                width: 100%;
+                text-align: left;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<header class="header">
+    <div class="header-inner">
+        <a href="/" class="logo">Lexicon<span>Arxiv</span></a>
+        <span class="page-title">Data Health Dashboard</span>
+        <nav class="nav-links">
+            <a href="/search" class="nav-link">Search</a>
+            <a href="/trends" class="nav-link">Trends</a>
+            <a href="/dashboard" class="nav-link active">Dashboard</a>
+            <a href="/docs" class="nav-link">API Docs</a>
+        </nav>
+    </div>
+</header>
+
+<main class="main">
+    <div class="dashboard-header">
+        <h1>Data Health Monitor</h1>
+        <p>Pipeline completeness and search readiness at a glance</p>
+        <div class="refresh-info" id="refreshInfo">Auto-refreshes every 5 minutes</div>
+    </div>
+
+    <div id="content">
+        <div class="loading">
+            <div class="spinner"></div>
+            <div>Loading dashboard metrics...</div>
+        </div>
+    </div>
+</main>
+
+<script>
+    const REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
+
+    function formatNumber(n) {
+        if (n < 0) return 'N/A';
+        return n.toLocaleString();
+    }
+
+    function getColor(pct) {
+        if (pct >= 95) return 'green';
+        if (pct >= 80) return 'yellow';
+        return 'red';
+    }
+
+    function getStatus(pct) {
+        if (pct >= 95) return { label: 'Complete', cls: 'complete' };
+        if (pct >= 50) return { label: 'Partial', cls: 'partial' };
+        return { label: 'Needs Attention', cls: 'attention' };
+    }
+
+    function sanitize(html) {
+        return DOMPurify.sanitize(html);
+    }
+
+    function buildMetricRow(label, pct, count, total) {
+        var color = getColor(pct);
+        var barWidth = Math.max(pct, 0.5);
+        return '<div class="metric-row">'
+            + '<div class="metric-label">' + sanitize(label) + '</div>'
+            + '<div class="metric-bar-container">'
+            + '<div class="metric-bar ' + color + '" style="width: ' + barWidth + '%"></div>'
+            + '</div>'
+            + '<div class="metric-stats">'
+            + '<span class="metric-pct ' + color + '">' + pct + '%</span>'
+            + formatNumber(count) + ' / ' + formatNumber(total)
+            + '</div>'
+            + '</div>';
+    }
+
+    function buildYearRow(year, count, maxCount) {
+        var pct = (count / maxCount) * 100;
+        var opacity = 0.4 + (pct / 100) * 0.6;
+        return '<div class="year-row">'
+            + '<div class="year-label">' + sanitize(String(year)) + '</div>'
+            + '<div class="year-bar-container">'
+            + '<div class="year-bar" style="width: ' + pct + '%; opacity: ' + opacity + '"></div>'
+            + '</div>'
+            + '<div class="year-count">' + formatNumber(count) + '</div>'
+            + '</div>';
+    }
+
+    function buildPipelineRow(stage, pct, count) {
+        var color = getColor(pct);
+        var status = getStatus(pct);
+        return '<tr>'
+            + '<td>' + sanitize(stage) + '</td>'
+            + '<td><span class="metric-pct ' + color + '">' + pct + '%</span></td>'
+            + '<td>' + formatNumber(count) + '</td>'
+            + '<td><span class="status-badge ' + status.cls + '">' + sanitize(status.label) + '</span></td>'
+            + '</tr>';
+    }
+
+    function renderDashboard(data) {
+        var o = data.overview;
+        var e = data.enrichment;
+        var s = data.search_readiness;
+        var years = data.year_distribution;
+
+        var enrichmentItems = [
+            { label: 'Abstracts', m: e.abstracts },
+            { label: 'DOIs', m: e.dois },
+            { label: 'Resolved References', m: e.resolved_references },
+            { label: 'Keywords', m: e.keywords },
+            { label: 'Abstract Structure (Labeling)', m: e.abstract_structure },
+            { label: 'Cited By', m: e.cited_by }
+        ];
+
+        var searchItems = [
+            { label: 'Dense Vectors (Embedding)', m: s.dense_vectors },
+            { label: 'Similarity Edges', m: s.similarity_edges },
+            { label: 'Topic Clusters', m: s.clusters }
+        ];
+
+        var pipelineStages = [
+            { stage: 'Collect', m: e.abstracts },
+            { stage: 'Enrich (Abstracts)', m: e.abstracts },
+            { stage: 'Enrich (DOIs)', m: e.dois },
+            { stage: 'Resolve References', m: e.resolved_references },
+            { stage: 'Keywords', m: e.keywords },
+            { stage: 'Labeling (Structure)', m: e.abstract_structure },
+            { stage: 'Cited By (Graph)', m: e.cited_by },
+            { stage: 'Embedding', m: s.dense_vectors },
+            { stage: 'Similarity', m: s.similarity_edges },
+            { stage: 'Clustering', m: s.clusters }
+        ];
+
+        // Build enrichment rows
+        var enrichmentHtml = '';
+        for (var i = 0; i < enrichmentItems.length; i++) {
+            var item = enrichmentItems[i];
+            enrichmentHtml += buildMetricRow(item.label, item.m.pct, item.m.count, o.core_papers);
+        }
+
+        // Build search rows
+        var searchHtml = '';
+        for (var i = 0; i < searchItems.length; i++) {
+            var item = searchItems[i];
+            searchHtml += buildMetricRow(item.label, item.m.pct, item.m.count, o.core_papers);
+        }
+
+        // Build year chart
+        var yearEntries = Object.entries(years).sort(function(a, b) { return a[0].localeCompare(b[0]); });
+        var maxYearCount = 1;
+        for (var i = 0; i < yearEntries.length; i++) {
+            if (yearEntries[i][1] > maxYearCount) maxYearCount = yearEntries[i][1];
+        }
+        var yearHtml = '';
+        if (yearEntries.length === 0) {
+            yearHtml = '<div style="color:#666; padding:16px;">No year data available</div>';
+        } else {
+            for (var i = 0; i < yearEntries.length; i++) {
+                yearHtml += buildYearRow(yearEntries[i][0], yearEntries[i][1], maxYearCount);
+            }
+        }
+
+        // Build pipeline table rows
+        var pipelineHtml = '';
+        for (var i = 0; i < pipelineStages.length; i++) {
+            var ps = pipelineStages[i];
+            pipelineHtml += buildPipelineRow(ps.stage, ps.m.pct, ps.m.count);
+        }
+
+        var fullHtml = ''
+            // Overview Cards
+            + '<div class="overview-cards">'
+            + '<div class="card"><div class="card-label">Total Points</div><div class="card-value">' + formatNumber(o.total_points) + '</div></div>'
+            + '<div class="card"><div class="card-label">Core Papers</div><div class="card-value orange">' + formatNumber(o.core_papers) + '</div></div>'
+            + '<div class="card"><div class="card-label">Stub Papers</div><div class="card-value muted">' + formatNumber(o.stub_papers) + '</div></div>'
+            + '</div>'
+            // Enrichment Health
+            + '<div class="metrics-section">'
+            + '<h2 class="section-title">Enrichment Health</h2>'
+            + enrichmentHtml
+            + '</div>'
+            // Search Readiness
+            + '<div class="metrics-section">'
+            + '<h2 class="section-title">Search Readiness</h2>'
+            + searchHtml
+            + '</div>'
+            // Year Distribution
+            + '<div class="year-chart">'
+            + '<h2 class="section-title">Papers by Year</h2>'
+            + yearHtml
+            + '</div>'
+            // Pipeline Status
+            + '<div class="metrics-section">'
+            + '<h2 class="section-title">Pipeline Stage Status</h2>'
+            + '<table class="pipeline-table">'
+            + '<thead><tr><th>Stage</th><th>Completion</th><th>Count</th><th>Status</th></tr></thead>'
+            + '<tbody>' + pipelineHtml + '</tbody>'
+            + '</table>'
+            + '</div>';
+
+        document.getElementById('content').innerHTML = DOMPurify.sanitize(fullHtml);
+    }
+
+    async function loadDashboard() {
+        var contentEl = document.getElementById('content');
+        var refreshEl = document.getElementById('refreshInfo');
+
+        try {
+            var resp = await fetch('/api/dashboard');
+            if (!resp.ok) throw new Error('HTTP ' + resp.status + ': ' + resp.statusText);
+            var data = await resp.json();
+            renderDashboard(data);
+            var now = new Date().toLocaleTimeString();
+            refreshEl.textContent = 'Last updated: ' + now + ' - Auto-refreshes every 5 minutes';
+        } catch (err) {
+            contentEl.textContent = '';
+            var errDiv = document.createElement('div');
+            errDiv.className = 'error-msg';
+            errDiv.textContent = 'Failed to load dashboard: ' + err.message + '. Make sure the API server is running and Qdrant is accessible.';
+            contentEl.appendChild(errDiv);
+        }
+    }
+
+    // Initial load
+    loadDashboard();
+
+    // Auto-refresh
+    setInterval(loadDashboard, REFRESH_INTERVAL);
+</script>
+
+</body>
+</html>
