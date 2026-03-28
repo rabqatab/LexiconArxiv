@@ -141,6 +141,15 @@ class CoreCorpusCollector:
                 body = response.text.lower()
                 used_key = key_params.get("api_key")
 
+                # Non-retryable: premium feature required
+                if "plan upgrade required" in body or "premium" in body:
+                    logger.error(f"OpenAlex premium feature required: {response.text[:200]}")
+                    raise httpx.HTTPStatusError(
+                        f"OpenAlex premium feature required (not retryable)",
+                        request=response.request,
+                        response=response,
+                    )
+
                 if "insufficient credits" in body or "quota" in body:
                     # Actual quota exhaustion — rotate to next key
                     if used_key:
@@ -534,9 +543,14 @@ class CoreCorpusCollector:
             else:
                 source_filter = f"primary_location.source.id:{'|'.join(source_urls)}"
 
+            # from_updated_date requires OpenAlex Premium plan.
+            # Fallback: filter by publication_year and rely on checkpoint dedup.
+            from datetime import datetime, timedelta
+            cutoff = datetime.now() - timedelta(days=days_back)
+            since_year = cutoff.year
             filters = [
                 source_filter,
-                f"from_updated_date:{since_date}",
+                f"publication_year:{since_year}-{datetime.now().year}",
             ]
 
             cursor = "*"
