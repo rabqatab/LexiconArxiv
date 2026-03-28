@@ -122,13 +122,16 @@ class CoreCorpusCollector:
         """Make an OpenAlex API call with 429 retry and key rotation.
 
         Distinguishes between:
-        - Transient 429 (per-second throttle): back off and retry same key
+        - Transient 429 (per-second throttle): back off and retry SAME key
         - Quota 429 ("Insufficient credits"): mark key exhausted, rotate to next
         """
         response: httpx.Response | None = None
+        # Get key params once; only rotate on quota exhaustion
+        key_params = self._key_manager.get_next_params()
+
         for attempt in range(max_retries):
             request_params = dict(params)
-            request_params.update(self._key_manager.get_next_params())
+            request_params.update(key_params)
             query_string = urlencode(request_params, doseq=True)
             url = f"{OPENALEX_BASE_URL}/{endpoint}?{query_string}"
 
@@ -136,10 +139,10 @@ class CoreCorpusCollector:
 
             if response.status_code == 429:
                 body = response.text.lower()
-                used_key = request_params.get("api_key")
+                used_key = key_params.get("api_key")
 
-                # Only rotate key on actual quota exhaustion, not transient throttle
                 if "insufficient credits" in body or "quota" in body:
+                    # Actual quota exhaustion — rotate to next key
                     if used_key:
                         self._key_manager.mark_exhausted(used_key)
                     remaining = self._key_manager.active_key_count
@@ -147,7 +150,9 @@ class CoreCorpusCollector:
                         logger.error("All API keys quota-exhausted and no email fallback.")
                         response.raise_for_status()
                     logger.warning(f"OpenAlex key quota exhausted, rotating. {remaining} key(s) remaining.")
+                    key_params = self._key_manager.get_next_params()  # Get new key
 
+                # Transient throttle — wait and retry with same key
                 wait = min(2 ** attempt, 30)
                 logger.warning(f"OpenAlex 429 (attempt {attempt + 1}/{max_retries}), retrying in {wait}s...")
                 await asyncio.sleep(wait)
