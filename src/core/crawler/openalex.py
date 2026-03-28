@@ -118,6 +118,57 @@ class CoreCorpusCollector:
         query_string = urlencode(params, doseq=True)
         return f"{OPENALEX_BASE_URL}/{endpoint}?{query_string}"
 
+    async def _api_get(self, endpoint: str, params: dict[str, Any], max_retries: int = 5) -> dict:
+        """Make an OpenAlex API call with 429 retry and key rotation.
+
+        On 429:
+        1. Extract the API key from the request params
+        2. Mark it as exhausted in the key manager
+        3. Rebuild URL with the next key (via get_next_params)
+        4. Retry after a short backoff
+
+        On other errors: raise immediately.
+        """
+        response: httpx.Response | None = None
+        for attempt in range(max_retries):
+            # Build URL with current key
+            request_params = dict(params)
+            request_params.update(self._key_manager.get_next_params())
+            query_string = urlencode(request_params, doseq=True)
+            url = f"{OPENALEX_BASE_URL}/{endpoint}?{query_string}"
+
+            response = await self.client.get(url)
+
+            if response.status_code == 429:
+                # Extract the key that was used and mark it exhausted
+                used_key = request_params.get("api_key")
+                if used_key:
+                    self._key_manager.mark_exhausted(used_key)
+
+                # Check if we have any keys left
+                remaining = self._key_manager.active_key_count
+                if remaining == 0 and not self._key_manager._email:
+                    logger.error("All API keys exhausted and no email fallback. Aborting.")
+                    response.raise_for_status()
+
+                wait = 2 ** attempt
+                logger.warning(
+                    f"OpenAlex 429 rate limit (attempt {attempt + 1}/{max_retries}). "
+                    f"Rotating key, retrying in {wait}s... ({remaining} keys remaining)"
+                )
+                await asyncio.sleep(wait)
+                continue
+
+            response.raise_for_status()
+            return response.json()
+
+        # All retries exhausted
+        raise httpx.HTTPStatusError(
+            "OpenAlex rate limit: all retries exhausted",
+            request=response.request,
+            response=response,
+        )
+
     async def collect_venue(
         self,
         venue: VenueConfig,
@@ -162,7 +213,7 @@ class CoreCorpusCollector:
             source_filter = f"primary_location.source.id:{source_urls[0]}"
         else:
             # OpenAlex supports OR with pipe: id1|id2|id3
-            source_filter = f"primary_location.source.id:{"|".join(source_urls)}"
+            source_filter = f"primary_location.source.id:{'|'.join(source_urls)}"
 
         # Build date filters - prefer explicit dates over year
         if since_date:
@@ -210,10 +261,7 @@ class CoreCorpusCollector:
                     "cursor": cursor,
                 }
 
-                url = self._build_url("works", params)
-                response = await self.client.get(url)
-                response.raise_for_status()
-                data = response.json()
+                data = await self._api_get("works", params)
 
                 checkpoint.total_api_calls += 1
 
@@ -402,7 +450,7 @@ class CoreCorpusCollector:
         if len(source_urls) == 1:
             source_filter = f"primary_location.source.id:{source_urls[0]}"
         else:
-            source_filter = f"primary_location.source.id:{"|".join(source_urls)}"
+            source_filter = f"primary_location.source.id:{'|'.join(source_urls)}"
 
         filters = [
             source_filter,
@@ -416,10 +464,7 @@ class CoreCorpusCollector:
             "per-page": 1,  # We only need the count
         }
 
-        url = self._build_url("works", params)
-        response = await self.client.get(url)
-        response.raise_for_status()
-        data = response.json()
+        data = await self._api_get("works", params)
 
         return data.get("meta", {}).get("count", 0)
 
@@ -489,7 +534,7 @@ class CoreCorpusCollector:
             if len(source_urls) == 1:
                 source_filter = f"primary_location.source.id:{source_urls[0]}"
             else:
-                source_filter = f"primary_location.source.id:{"|".join(source_urls)}"
+                source_filter = f"primary_location.source.id:{'|'.join(source_urls)}"
 
             filters = [
                 source_filter,
@@ -506,10 +551,7 @@ class CoreCorpusCollector:
                     "cursor": cursor,
                 }
 
-                url = self._build_url("works", params)
-                response = await self.client.get(url)
-                response.raise_for_status()
-                data = response.json()
+                data = await self._api_get("works", params)
 
                 results = data.get("results", [])
                 if not results:
