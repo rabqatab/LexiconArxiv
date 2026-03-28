@@ -545,8 +545,7 @@ class CoreCorpusCollector:
 
             # from_updated_date requires OpenAlex Premium plan.
             # Fallback: filter by publication_year and rely on checkpoint dedup.
-            from datetime import datetime, timedelta
-            cutoff = datetime.now() - timedelta(days=days_back)
+            cutoff = datetime.now(timezone.utc) - timedelta(days=days_back)
             since_year = cutoff.year
             filters = [
                 source_filter,
