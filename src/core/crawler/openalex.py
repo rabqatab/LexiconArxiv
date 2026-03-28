@@ -118,20 +118,15 @@ class CoreCorpusCollector:
         query_string = urlencode(params, doseq=True)
         return f"{OPENALEX_BASE_URL}/{endpoint}?{query_string}"
 
-    async def _api_get(self, endpoint: str, params: dict[str, Any], max_retries: int = 5) -> dict:
+    async def _api_get(self, endpoint: str, params: dict[str, Any], max_retries: int = 8) -> dict:
         """Make an OpenAlex API call with 429 retry and key rotation.
 
-        On 429:
-        1. Extract the API key from the request params
-        2. Mark it as exhausted in the key manager
-        3. Rebuild URL with the next key (via get_next_params)
-        4. Retry after a short backoff
-
-        On other errors: raise immediately.
+        Distinguishes between:
+        - Transient 429 (per-second throttle): back off and retry same key
+        - Quota 429 ("Insufficient credits"): mark key exhausted, rotate to next
         """
         response: httpx.Response | None = None
         for attempt in range(max_retries):
-            # Build URL with current key
             request_params = dict(params)
             request_params.update(self._key_manager.get_next_params())
             query_string = urlencode(request_params, doseq=True)
@@ -140,29 +135,27 @@ class CoreCorpusCollector:
             response = await self.client.get(url)
 
             if response.status_code == 429:
-                # Extract the key that was used and mark it exhausted
+                body = response.text.lower()
                 used_key = request_params.get("api_key")
-                if used_key:
-                    self._key_manager.mark_exhausted(used_key)
 
-                # Check if we have any keys left
-                remaining = self._key_manager.active_key_count
-                if remaining == 0 and not self._key_manager._email:
-                    logger.error("All API keys exhausted and no email fallback. Aborting.")
-                    response.raise_for_status()
+                # Only rotate key on actual quota exhaustion, not transient throttle
+                if "insufficient credits" in body or "quota" in body:
+                    if used_key:
+                        self._key_manager.mark_exhausted(used_key)
+                    remaining = self._key_manager.active_key_count
+                    if remaining == 0 and not self._key_manager._email:
+                        logger.error("All API keys quota-exhausted and no email fallback.")
+                        response.raise_for_status()
+                    logger.warning(f"OpenAlex key quota exhausted, rotating. {remaining} key(s) remaining.")
 
-                wait = 2 ** attempt
-                logger.warning(
-                    f"OpenAlex 429 rate limit (attempt {attempt + 1}/{max_retries}). "
-                    f"Rotating key, retrying in {wait}s... ({remaining} keys remaining)"
-                )
+                wait = min(2 ** attempt, 30)
+                logger.warning(f"OpenAlex 429 (attempt {attempt + 1}/{max_retries}), retrying in {wait}s...")
                 await asyncio.sleep(wait)
                 continue
 
             response.raise_for_status()
             return response.json()
 
-        # All retries exhausted
         raise httpx.HTTPStatusError(
             "OpenAlex rate limit: all retries exhausted",
             request=response.request,
