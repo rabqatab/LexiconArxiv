@@ -6,6 +6,8 @@ Uses the official openreview-py Python client.
 
 import asyncio
 import logging
+
+import httpx
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, AsyncIterator
 
