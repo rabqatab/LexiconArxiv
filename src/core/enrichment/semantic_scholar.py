@@ -7,14 +7,16 @@ API Documentation: https://api.semanticscholar.org/api-docs/
 
 Authentication:
     Set one of these environment variables for higher rate limits:
-    - S2_API_KEY: Semantic Scholar API key
-    - SEMANTIC_SCHOLAR_API_KEY: Alternative env var name
+    - S2_API_KEYS: Comma-separated API keys for multi-key rotation
+    - S2_API_KEY: Single Semantic Scholar API key
+    - SEMANTIC_SCHOLAR_API_KEY: Alternative env var name (single key)
 
     Get a free API key at: https://www.semanticscholar.org/product/api#api-key
 
 Rate Limits:
     - Without API key: 100 requests per 5 minutes (~0.33 req/sec)
-    - With API key: 1 request per second (cumulative across all endpoints)
+    - With API key: 1 request per second per key (cumulative across all endpoints)
+    - With N keys: N concurrent requests, each key limited to 1 req/sec
 """
 
 import asyncio
@@ -27,7 +29,7 @@ from typing import Any
 
 import httpx
 
-from src.core.constants import S2_BASE_URL, get_s2_api_key
+from src.core.constants import S2_BASE_URL, get_s2_api_key, get_s2_api_keys
 from src.core.storage import QdrantStorage
 
 logger = logging.getLogger(__name__)
@@ -65,6 +67,7 @@ class SemanticScholarEnricher:
         self,
         storage: QdrantStorage | None = None,
         api_key: str | None = None,
+        api_keys: list[str] | None = None,
         checkpoint_dir: Path | str | None = None,
         batch_size: int = 100,
         delay: float | None = None,  # Auto-set based on API key
@@ -74,28 +77,41 @@ class SemanticScholarEnricher:
 
         Args:
             storage: QdrantStorage instance.
-            api_key: S2 API key for higher rate limits.
+            api_key: S2 API key for higher rate limits (backward compat, single key).
                      If not provided, checks S2_API_KEY or SEMANTIC_SCHOLAR_API_KEY env vars.
                      Get one at: https://www.semanticscholar.org/product/api#api-key
+            api_keys: List of S2 API keys for multi-key rotation. Takes precedence
+                      over api_key. Each key allows 1 req/sec, so N keys = N concurrent.
             checkpoint_dir: Directory for checkpoint files.
             batch_size: Papers per batch.
             delay: Delay between requests in seconds.
-                   If None, auto-set: 0.1s with key, 3.0s without.
+                   If None, auto-set: 1.1s with key, 3.0s without.
             max_concurrent: Max concurrent requests.
-                            If None, auto-set: 5 with key, 1 without.
+                            If None, auto-set: len(keys) with keys, 1 without.
         """
         self.storage = storage or QdrantStorage()
-        self.api_key = api_key or get_s2_api_key()
+
+        # Resolve API keys: api_keys > api_key > env
+        if api_keys:
+            self.api_keys = api_keys
+        elif api_key:
+            self.api_keys = [api_key]
+        else:
+            self.api_keys = get_s2_api_keys()
+
+        # Backward compat: expose first key as self.api_key
+        self.api_key = self.api_keys[0] if self.api_keys else None
 
         # Auto-adjust rate limits based on API key presence
-        if self.api_key:
+        if self.api_keys:
             self.delay = delay if delay is not None else self.DEFAULT_DELAY_WITH_KEY
-            self.max_concurrent = max_concurrent if max_concurrent is not None else self.DEFAULT_CONCURRENT_WITH_KEY
+            self.max_concurrent = max_concurrent if max_concurrent is not None else len(self.api_keys)
         else:
             self.delay = delay if delay is not None else self.DEFAULT_DELAY_NO_KEY
             self.max_concurrent = max_concurrent if max_concurrent is not None else self.DEFAULT_CONCURRENT_NO_KEY
 
         self.batch_size = batch_size
+        self._key_index = 0  # Round-robin counter
 
         self.checkpoint_dir = Path(checkpoint_dir or "data/core/checkpoints")
         self._checkpoint_file_doi = self.checkpoint_dir / "s2_doi_enrichment.json"
@@ -109,19 +125,17 @@ class SemanticScholarEnricher:
             "User-Agent": "LexiconArxiv/1.0 (Academic paper indexing; https://github.com/your-repo)"
         }
 
-        if self.api_key:
-            headers["x-api-key"] = self.api_key
-            # Mask API key for logging (show first 4 and last 4 chars)
-            masked_key = f"{self.api_key[:4]}...{self.api_key[-4:]}" if len(self.api_key) > 8 else "***"
+        if self.api_keys:
             logger.info(
-                f"Using Semantic Scholar API key ({masked_key}). "
-                f"Rate: {1/self.delay:.1f} req/sec, {self.max_concurrent} concurrent"
+                f"Using {len(self.api_keys)} Semantic Scholar API key(s). "
+                f"Rate: {len(self.api_keys)} req/sec effective, "
+                f"{self.max_concurrent} concurrent"
             )
         else:
             logger.warning(
                 f"No S2 API key set. Using conservative rate limits: "
                 f"{1/self.delay:.2f} req/sec, {self.max_concurrent} concurrent. "
-                f"Set S2_API_KEY env var for faster processing."
+                f"Set S2_API_KEYS env var for faster processing."
             )
 
         self._client = httpx.AsyncClient(timeout=30.0, headers=headers)
@@ -132,6 +146,14 @@ class SemanticScholarEnricher:
         """Exit async context."""
         if self._client:
             await self._client.aclose()
+
+    def _get_next_key(self) -> str | None:
+        """Round-robin through API keys."""
+        if not self.api_keys:
+            return None
+        key = self.api_keys[self._key_index % len(self.api_keys)]
+        self._key_index += 1
+        return key
 
     async def fetch_by_doi(self, doi: str) -> dict[str, Any] | None:
         """Fetch paper data from S2 by DOI.
@@ -155,7 +177,9 @@ class SemanticScholarEnricher:
         params = {"fields": "paperId,title,references.paperId,references.title,references.externalIds"}
 
         try:
-            response = await self._client.get(url, params=params)
+            key = self._get_next_key()
+            req_headers = {"x-api-key": key} if key else {}
+            response = await self._client.get(url, params=params, headers=req_headers)
 
             if response.status_code == 404:
                 return None
@@ -218,7 +242,9 @@ class SemanticScholarEnricher:
         }
 
         try:
-            response = await self._client.get(url, params=params)
+            key = self._get_next_key()
+            req_headers = {"x-api-key": key} if key else {}
+            response = await self._client.get(url, params=params, headers=req_headers)
 
             if response.status_code == 429:
                 retry_after = int(response.headers.get("Retry-After", 60))

@@ -33,6 +33,7 @@ from src.core.constants import (
     get_openalex_api_key,
     get_crossref_email,
     get_s2_api_key,
+    get_s2_api_keys,
     get_qdrant_url,
     get_qdrant_collection,
 )
@@ -95,6 +96,7 @@ __all__ = [
     "get_openalex_api_key",
     "get_crossref_email",
     "get_s2_api_key",
+    "get_s2_api_keys",
     "get_qdrant_url",
     "get_qdrant_collection",
     # Config

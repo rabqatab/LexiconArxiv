@@ -40,6 +40,7 @@ CROSSREF_EMAIL_ENV = "CROSSREF_EMAIL"
 
 # Semantic Scholar
 S2_API_KEY_ENV = "S2_API_KEY"
+S2_API_KEYS_ENV = "S2_API_KEYS"
 SEMANTIC_SCHOLAR_API_KEY_ENV = "SEMANTIC_SCHOLAR_API_KEY"
 
 # Qdrant
@@ -121,10 +122,29 @@ def get_crossref_email() -> str | None:
 
 def get_s2_api_key() -> str | None:
     """Get Semantic Scholar API key from environment.
-    
+
     Checks both S2_API_KEY and SEMANTIC_SCHOLAR_API_KEY.
     """
     return os.getenv(S2_API_KEY_ENV) or os.getenv(SEMANTIC_SCHOLAR_API_KEY_ENV)
+
+
+def get_s2_api_keys() -> list[str]:
+    """Get S2 API keys from environment.
+
+    Reads S2_API_KEYS (comma-separated) first, falls back to S2_API_KEY (single).
+
+    Returns:
+        List of API key strings (may be empty).
+    """
+    multi = os.getenv(S2_API_KEYS_ENV)
+    if multi:
+        keys = [k.strip() for k in multi.split(",") if k.strip()]
+        if keys:
+            return keys
+    single = get_s2_api_key()
+    if single:
+        return [single]
+    return []
 
 
 def get_qdrant_url() -> str:
