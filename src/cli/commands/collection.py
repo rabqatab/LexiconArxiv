@@ -355,7 +355,7 @@ def register_commands(cli: click.Group):
                 async with ACLAnthologyCollector(storage=storage) as collector:
                     count = 0
                     for venue in get_acl_venues():
-                        async for batch in collector.collect_venue(venue, since_year=since_year, to_year=current_year):
+                        async for batch in collector.collect_venue(venue, since_year=since_year, to_year=current_year, force=True):
                             count += len(batch)
                     results["acl"] = count
                     click.echo(f"  ACL Anthology: {count} new papers")
@@ -366,7 +366,7 @@ def register_commands(cli: click.Group):
                 async with DBLPCollector(storage=storage) as collector:
                     count = 0
                     for venue in get_dblp_venues():
-                        async for batch in collector.collect_venue(venue, since_year=since_year, to_year=current_year):
+                        async for batch in collector.collect_venue(venue, since_year=since_year, to_year=current_year, force=True):
                             count += len(batch)
                     results["dblp"] = count
                     click.echo(f"  DBLP: {count} new papers")
@@ -377,7 +377,7 @@ def register_commands(cli: click.Group):
                 async with OpenReviewCollector(storage=storage) as collector:
                     count = 0
                     for venue in get_openreview_venues():
-                        async for batch in collector.collect_venue(venue, since_year=since_year, to_year=current_year):
+                        async for batch in collector.collect_venue(venue, since_year=since_year, to_year=current_year, force=True):
                             count += len(batch)
                     results["openreview"] = count
                     click.echo(f"  OpenReview: {count} new papers")
@@ -388,7 +388,7 @@ def register_commands(cli: click.Group):
                 async with AAOJSCollector(storage=storage) as collector:
                     count = 0
                     for venue in get_aaai_venues():
-                        async for batch in collector.collect_venue(venue, since_year=since_year, to_year=current_year):
+                        async for batch in collector.collect_venue(venue, since_year=since_year, to_year=current_year, force=True):
                             count += len(batch)
                     results["aaai"] = count
                     click.echo(f"  AAAI OJS: {count} new papers")

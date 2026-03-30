@@ -439,6 +439,7 @@ class AAOJSCollector(BaseCrawler):
         save_to_storage: bool = True,
         since_date: str | None = None,
         to_date: str | None = None,
+        force: bool = False,
     ) -> AsyncIterator[list[RawPaper]]:
         """Collect papers from a specific AAAI OJS venue.
 
@@ -449,6 +450,7 @@ class AAOJSCollector(BaseCrawler):
             save_to_storage: Whether to save papers to Qdrant.
             since_date: Start date in YYYY-MM-DD or YYYY-MM format.
             to_date: End date in YYYY-MM-DD or YYYY-MM format.
+            force: If True, skip the is_complete check (for incremental runs).
 
         Yields:
             Batches of collected papers.
@@ -471,7 +473,7 @@ class AAOJSCollector(BaseCrawler):
         checkpoint_key = f"aaai_{venue_lower}"
 
         # Check if already complete
-        if self.checkpoint_manager.is_venue_complete(checkpoint, checkpoint_key):
+        if not force and self.checkpoint_manager.is_venue_complete(checkpoint, checkpoint_key):
             logger.info(f"Venue {venue} already complete, skipping")
             return
 

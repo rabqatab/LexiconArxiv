@@ -184,6 +184,7 @@ class CoreCorpusCollector:
         save_to_storage: bool = True,
         since_date: str | None = None,
         to_date: str | None = None,
+        force: bool = False,
     ) -> AsyncIterator[list[RawPaper]]:
         """Collect papers from a venue.
 
@@ -194,6 +195,7 @@ class CoreCorpusCollector:
             save_to_storage: Whether to save papers to Qdrant.
             since_date: Start date in YYYY-MM-DD or YYYY-MM format (overrides since_year).
             to_date: End date in YYYY-MM-DD or YYYY-MM format (overrides to_year).
+            force: If True, skip the is_complete check (for incremental runs).
 
         Yields:
             Batches of collected papers.
@@ -207,7 +209,7 @@ class CoreCorpusCollector:
         checkpoint = self.checkpoint_manager.load()
 
         # Check if already complete
-        if self.checkpoint_manager.is_venue_complete(checkpoint, venue.name):
+        if not force and self.checkpoint_manager.is_venue_complete(checkpoint, venue.name):
             logger.info(f"Venue {venue.name} already complete, skipping")
             return
 

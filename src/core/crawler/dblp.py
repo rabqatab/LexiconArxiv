@@ -337,6 +337,7 @@ class DBLPCollector(BaseCrawler):
         save_to_storage: bool = True,
         since_date: str | None = None,
         to_date: str | None = None,
+        force: bool = False,
     ) -> AsyncIterator[list[RawPaper]]:
         """Collect papers from a specific DBLP venue.
 
@@ -347,6 +348,7 @@ class DBLPCollector(BaseCrawler):
             save_to_storage: Whether to save papers to Qdrant.
             since_date: Start date in YYYY-MM-DD or YYYY-MM format (only year used - DBLP API limitation).
             to_date: End date in YYYY-MM-DD or YYYY-MM format (only year used - DBLP API limitation).
+            force: If True, skip the is_complete check (for incremental runs).
 
         Yields:
             Batches of collected papers.
@@ -371,7 +373,7 @@ class DBLPCollector(BaseCrawler):
         checkpoint_key = f"dblp_{venue_lower}"
 
         # Check if already complete
-        if self.checkpoint_manager.is_venue_complete(checkpoint, checkpoint_key):
+        if not force and self.checkpoint_manager.is_venue_complete(checkpoint, checkpoint_key):
             logger.info(f"Venue {venue} already complete, skipping")
             return
 
