@@ -12,6 +12,9 @@ Tracked enhancement backlog. Items are grouped by priority and area.
 - [ ] **Corpus gap dashboard** — Dashboard section showing: top 100 most-cited stubs (= most-cited papers NOT in corpus), venues most referenced but not collected, stubs that could be promoted.
 - [ ] **Stub → core promotion** — When incremental collection adds a paper matching an existing stub, preserve the stub's `cited_by` data on the promoted paper. Verify dedup handles this correctly.
 
+### Pipeline Performance
+- [ ] **S2 enricher scroll optimization** — The Semantic Scholar enricher scrolls ALL 152K papers to find ~9K missing refs (client-side filtering). Should add a Qdrant filter for `IsEmptyCondition(referenced_works)` to only fetch papers actually needing S2 enrichment. Current behavior wastes ~90% of scroll time on papers that already have refs. Same issue likely affects other enrichers.
+
 ### Advanced Retrieval Pipeline
 - [ ] **Multi-vector prefetch** — Search 3+ section vectors per query (structured-abstract + section-method + section-task), fuse with RRF. Currently only 1 dense vector used per search.
 - [ ] **Query intent detection** — Auto-detect target section from query ("papers using X" → method, "papers about X" → task). Keyword heuristics first, optional LLM.
