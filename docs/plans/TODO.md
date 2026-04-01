@@ -62,6 +62,16 @@ Tracked enhancement backlog. Items are grouped by priority and area.
 - [ ] **GRF (Generative Relevance Feedback)** — More sophisticated than HyDE. +17-24% nDCG@10 but higher latency.
 - [ ] **ColBERT late interaction** — Overkill at 145K scale when cross-encoder reranking is available.
 
+### Future External API Integrations (MCP candidates)
+- [ ] **Unpaywall** — Free OA PDF URLs by DOI. Trivial to add, high user value.
+- [ ] **DBLP API** — Structured author/venue queries ("all papers by X at Y"). Complements semantic search.
+- [ ] **Hugging Face Papers** — Model-paper linking, trending ML papers.
+- [ ] **OpenCitations** — Citation context (the sentence where A cites B). Deep analysis.
+- [ ] **CORE API** — 200M+ open access full-text search beyond abstracts.
+- [ ] **ORCID** — Author disambiguation across venues.
+- [ ] **Altmetric** — Social media attention, news mentions, trending papers.
+- [ ] **PubMed/Europe PMC** — Cross-domain when AI papers reference bio/medical work.
+
 ---
 
 ## Completed
