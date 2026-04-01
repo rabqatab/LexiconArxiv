@@ -103,3 +103,54 @@ class CorpusStatsResponse(BaseModel):
     venues: dict[str, int] = Field(
         default_factory=dict, description="Paper count per venue"
     )
+
+
+# ---------------------------------------------------------------------------
+# Research topic models
+# ---------------------------------------------------------------------------
+
+
+class ResearchRequest(BaseModel):
+    """Research topic request body."""
+
+    query: str = Field(..., min_length=1, max_length=500, description="Research topic or question")
+    limit: int = Field(default=20, ge=1, le=50, description="Number of papers to return")
+    year_min: int | None = Field(None, description="Minimum publication year")
+
+
+class ResearchPaperItem(BaseModel):
+    """A paper in the research topic response, with combined scoring."""
+
+    id: str
+    title: str
+    authors: list[str] = Field(default_factory=list)
+    venue: str | None = None
+    year: int | None = None
+    tier: int | None = None
+    abstract: str | None = None
+    citation_count: int = 0
+    pagerank: float | None = None
+    keywords: list[str] = Field(default_factory=list)
+    code_url: str | None = None
+    pdf_url: str | None = None
+    relevance_score: float = 0.0
+    notable_score: float = 0.0
+    combined_score: float = 0.0
+
+
+class TopicTrend(BaseModel):
+    """A trending keyword within the research topic."""
+
+    keyword: str
+    counts_by_year: dict[str, int] = Field(default_factory=dict)
+    growth_rate: float = 0.0
+
+
+class ResearchResponse(BaseModel):
+    """Full research topic response."""
+
+    query: str
+    papers: list[ResearchPaperItem]
+    trends: list[TopicTrend]
+    summary: dict
+    query_time_ms: int

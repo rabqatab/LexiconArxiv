@@ -11,7 +11,8 @@ from qdrant_client.http import models as qdrant_models
 
 from src.core.search.service import SearchService
 from src.core.storage.base import QdrantStorage
-from src.mcp.formatters import format_paper_detail, format_search_results
+from src.core.search.research import research_topic
+from src.mcp.formatters import format_paper_detail, format_research_results, format_search_results
 
 logger = logging.getLogger(__name__)
 
@@ -199,6 +200,33 @@ async def list_tools() -> list[Tool]:
                 "required": ["query"],
             },
         ),
+        Tool(
+            name="research_topic",
+            description=(
+                "Research an academic topic: finds the most notable and relevant papers, "
+                "shows trending keywords, and summarizes the research landscape. "
+                "Use this when a user wants to understand a research area or find important papers to read."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Research topic or question",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Number of papers to return (default: 20)",
+                        "default": 20,
+                    },
+                    "year_min": {
+                        "type": "integer",
+                        "description": "Minimum publication year",
+                    },
+                },
+                "required": ["query"],
+            },
+        ),
     ]
 
 
@@ -221,6 +249,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             return await _handle_get_similar_papers(arguments)
         elif name == "expand_search":
             return await _handle_expand_search(arguments)
+        elif name == "research_topic":
+            return await _handle_research_topic(arguments)
         else:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]
     except Exception as e:
@@ -477,6 +507,25 @@ async def _handle_expand_search(arguments: dict) -> list[TextContent]:
             lines.append(f"   -> {cp.get('relation', '?')}: {cp.get('title', '?')}")
 
     return [TextContent(type="text", text="\n".join(lines))]
+
+
+async def _handle_research_topic(arguments: dict) -> list[TextContent]:
+    service = _get_service()
+    storage = _get_storage()
+    query = arguments["query"]
+    limit = min(arguments.get("limit", 20), 50)
+    year_min = arguments.get("year_min")
+
+    result = await research_topic(
+        query=query,
+        search_service=service,
+        storage=storage,
+        limit=limit,
+        year_min=year_min,
+    )
+
+    text = format_research_results(result)
+    return [TextContent(type="text", text=text)]
 
 
 # ---------------------------------------------------------------------------

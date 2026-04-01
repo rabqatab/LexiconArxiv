@@ -19,7 +19,12 @@ from src.api.models.search import (
     SuggestResponse,
     PaperDetailResponse,
     CorpusStatsResponse,
+    ResearchRequest,
+    ResearchPaperItem,
+    ResearchResponse,
+    TopicTrend,
 )
+from src.core.search.research import research_topic
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +55,40 @@ async def search_papers(request: SearchRequest):
         query_time_ms=results["query_time_ms"],
         search_mode=results["search_mode"],
         on_demand_available=results["on_demand_available"],
+    )
+
+
+@router.post("/research", response_model=ResearchResponse)
+async def research_topic_endpoint(request: ResearchRequest):
+    """Research a topic: returns notable papers + trends + summary."""
+    services = get_services()
+    search = services.search_service
+    storage = services.storage
+
+    result = await research_topic(
+        query=request.query,
+        search_service=search,
+        storage=storage,
+        limit=request.limit,
+        year_min=request.year_min,
+    )
+
+    # Convert trend counts_by_year keys to strings for the Pydantic model
+    trends = []
+    for t in result.get("trends", []):
+        counts_by_year = {str(k): v for k, v in t.get("counts_by_year", {}).items()}
+        trends.append(TopicTrend(
+            keyword=t["keyword"],
+            counts_by_year=counts_by_year,
+            growth_rate=t.get("growth_rate", 0.0),
+        ))
+
+    return ResearchResponse(
+        query=result["query"],
+        papers=[ResearchPaperItem(**p) for p in result["papers"]],
+        trends=trends,
+        summary=result["summary"],
+        query_time_ms=result["query_time_ms"],
     )
 
 

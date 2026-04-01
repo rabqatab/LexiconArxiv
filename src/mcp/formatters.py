@@ -1,5 +1,7 @@
 """LLM-friendly formatters for search results and paper details."""
 
+from __future__ import annotations
+
 
 def format_search_results(results: dict, max_results: int = 10) -> str:
     """Format search results as a numbered list for LLM consumption.
@@ -183,5 +185,121 @@ def format_paper_detail(paper: dict) -> str:
     if pdf_url:
         lines.append(f"**PDF:** {pdf_url}")
         lines.append("")
+
+    return "\n".join(lines)
+
+
+def format_research_results(data: dict) -> str:
+    """Format research_topic() output as markdown for LLM consumption.
+
+    Args:
+        data: Result dict from research_topic(), containing query, papers,
+              trends, summary, and query_time_ms.
+
+    Returns:
+        Markdown-formatted research overview string.
+    """
+    query = data.get("query", "")
+    papers = data.get("papers", [])
+    trends = data.get("trends", [])
+    summary = data.get("summary", {})
+    query_time_ms = data.get("query_time_ms", 0)
+
+    if not papers:
+        return f"# Research: {query}\n\nNo papers found for this topic."
+
+    lines: list[str] = [f"# Research: {query}\n"]
+
+    # ----- Key Papers -----
+    lines.append(f"## Key Papers ({len(papers)} most notable & relevant)\n")
+
+    for i, paper in enumerate(papers, 1):
+        title = paper.get("title", "Untitled")
+        authors = paper.get("authors", [])
+        author_str = ", ".join(authors[:3])
+        if len(authors) > 3:
+            author_str += " et al."
+
+        venue = paper.get("venue", "")
+        year = paper.get("year", "")
+        tier = paper.get("tier")
+        citations = paper.get("citation_count", 0)
+        relevance = paper.get("relevance_score", 0.0)
+        notable = paper.get("notable_score", 0.0)
+        combined = paper.get("combined_score", 0.0)
+        keywords = paper.get("keywords", [])
+
+        venue_year = f"{venue} {year}".strip() if venue else str(year) if year else ""
+        if tier is not None:
+            tier_str = f"Tier {tier}"
+        else:
+            tier_str = ""
+
+        lines.append(f'{i}. "{title}"')
+        meta_parts = []
+        if author_str:
+            meta_parts.append(author_str)
+        if venue_year:
+            meta_parts.append(venue_year)
+        if tier_str:
+            meta_parts.append(tier_str.strip())
+        meta_parts.append(f"{citations:,} citations")
+        lines.append(f"   {' | '.join(meta_parts)}")
+        lines.append(
+            f"   Combined score: {combined:.2f} "
+            f"(relevance: {relevance:.2f}, notable: {notable:.2f})"
+        )
+        if keywords:
+            lines.append(f"   Keywords: {', '.join(keywords[:6])}")
+        lines.append("")
+
+    # ----- Trends -----
+    if trends:
+        lines.append("## Trends in This Area\n")
+
+        rising_parts = []
+        for t in trends[:8]:
+            keyword = t.get("keyword", "")
+            growth = t.get("growth_rate", 0.0)
+            if growth > 1.0:
+                pct = int((growth - 1.0) * 100)
+                rising_parts.append(f"{keyword} (+{pct}%)")
+            elif growth == 0.0:
+                continue
+            else:
+                rising_parts.append(keyword)
+
+        if rising_parts:
+            lines.append(f"Rising: {', '.join(rising_parts)}")
+
+        # Peak years from the papers
+        years = [p.get("year") for p in papers if p.get("year")]
+        if years:
+            year_min = min(years)
+            year_max = max(years)
+            lines.append(f"Peak years: {year_min}-{year_max} (majority of papers)")
+        lines.append("")
+
+    # ----- Summary -----
+    lines.append("## Summary\n")
+
+    total_found = summary.get("total_found", len(papers))
+    lines.append(f"- {total_found} total papers found")
+
+    year_range = summary.get("year_range", [])
+    if year_range and len(year_range) == 2:
+        lines.append(f"- Years: {year_range[0]}-{year_range[1]}")
+
+    top_venues = summary.get("top_venues", [])
+    if top_venues:
+        venue_strs = [f"{v['venue']} ({v['count']})" for v in top_venues[:6]]
+        lines.append(f"- Top venues: {', '.join(venue_strs)}")
+
+    top_authors = summary.get("top_authors", [])
+    if top_authors:
+        author_strs = [f"{a['author']} ({a['count']})" for a in top_authors[:6]]
+        lines.append(f"- Top authors: {', '.join(author_strs)}")
+
+    lines.append(f"\n_Query time: {query_time_ms}ms_")
 
     return "\n".join(lines)
