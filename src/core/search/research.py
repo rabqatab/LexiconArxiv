@@ -12,6 +12,7 @@ from collections import Counter, defaultdict
 from datetime import datetime
 
 from src.core.analytics.notable import TIER_BOOST, _recency_boost, _tier_boost
+from src.core.search.config import RetrievalConfig
 from src.core.search.service import SearchService
 from src.core.storage.base import QdrantStorage
 
@@ -26,6 +27,7 @@ async def research_topic(
     storage: QdrantStorage,
     limit: int = 20,
     year_min: int | None = None,
+    config: RetrievalConfig | None = None,
 ) -> dict:
     """Research a topic: find notable papers + extract trends.
 
@@ -48,10 +50,13 @@ async def research_topic(
     # ------------------------------------------------------------------
     # 1. Search -- over-fetch for re-ranking
     # ------------------------------------------------------------------
+    # Use quality config for research queries unless caller overrides
+    cfg = config or RetrievalConfig.quality()
     search_results = await search_service.search(
         query=query,
         year_min=year_min,
         limit=50,
+        config=cfg,
     )
 
     items = search_results.get("results", [])

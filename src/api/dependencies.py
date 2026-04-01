@@ -88,6 +88,13 @@ class GraphServices:
         await self._search_service.init_on_demand()
         logger.info("On-demand search initialized (arXiv + OpenAlex)")
 
+        # Optionally load the cross-encoder reranker
+        try:
+            await self._search_service.init_reranker()
+            logger.info("Reranker loaded successfully")
+        except Exception as e:
+            logger.warning("Reranker not available: %s", e)
+
     async def shutdown_search_service(self) -> None:
         """Cleanup search service on shutdown."""
         if self._search_service:

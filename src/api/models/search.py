@@ -12,6 +12,29 @@ class SearchFilters(BaseModel):
     tiers: list[int] | None = Field(None, description="Filter by venue tiers")
 
 
+class RetrievalOptions(BaseModel):
+    """Optional retrieval pipeline configuration.
+
+    Any field left as *None* uses the pipeline default.
+    """
+
+    query_intent: bool | None = Field(None, description="Auto-detect target section from query")
+    hyde: bool | None = Field(None, description="Generate hypothetical document embedding")
+    rag_fusion: bool | None = Field(None, description="Generate multi-query variants")
+    multi_vector: bool | None = Field(None, description="Search across multiple dense vectors")
+    reranker: bool | None = Field(None, description="Apply cross-encoder reranking")
+    citation_boost: bool | None = Field(None, description="Boost results by citations + PageRank")
+    mmr_diversity: bool | None = Field(None, description="Apply MMR diversification")
+
+
+class PipelineInfo(BaseModel):
+    """Metadata about which pipeline stages were applied."""
+
+    stages_applied: list[str] = Field(default_factory=list)
+    query_analysis: dict | None = None
+    vectors_searched: list[str] = Field(default_factory=list)
+
+
 class SearchRequest(BaseModel):
     """Search request body."""
 
@@ -20,6 +43,7 @@ class SearchRequest(BaseModel):
     section: str | None = Field(None, description="Target a specific paper section (task, method, result, approach, background, domain, contribution). Uses section-specific vector for more precise matching.")
     limit: int = Field(default=20, ge=1, le=100, description="Number of results to return")
     offset: int = Field(default=0, ge=0, description="Pagination offset")
+    retrieval: RetrievalOptions | None = Field(None, description="Optional retrieval pipeline overrides")
 
 
 class SearchResultItem(BaseModel):
@@ -51,6 +75,9 @@ class SearchResponse(BaseModel):
     search_mode: str = Field(..., description="Search mode used: 'hybrid' or 'bm25_only'")
     on_demand_available: bool = Field(
         False, description="Whether on-demand vector search is available"
+    )
+    pipeline: PipelineInfo | None = Field(
+        None, description="Retrieval pipeline metadata"
     )
 
 

@@ -13,6 +13,7 @@ from src.api.models.on_demand import (
     ConnectedPaper,
 )
 from src.api.models.search import (
+    PipelineInfo,
     SearchRequest,
     SearchResponse,
     SearchResultItem,
@@ -22,13 +23,33 @@ from src.api.models.search import (
     ResearchRequest,
     ResearchPaperItem,
     ResearchResponse,
+    RetrievalOptions,
     TopicTrend,
 )
+from src.core.search.config import RetrievalConfig
 from src.core.search.research import research_topic
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["search"])
+
+
+def _build_retrieval_config(opts: RetrievalOptions | None) -> RetrievalConfig | None:
+    """Translate API-level RetrievalOptions into a RetrievalConfig.
+
+    Returns *None* (use default) when no overrides are provided.
+    """
+    if opts is None:
+        return None
+    cfg = RetrievalConfig()
+    for field_name in (
+        "query_intent", "hyde", "rag_fusion", "multi_vector",
+        "reranker", "citation_boost", "mmr_diversity",
+    ):
+        val = getattr(opts, field_name, None)
+        if val is not None:
+            setattr(cfg, field_name, val)
+    return cfg
 
 
 @router.post("/search", response_model=SearchResponse)
@@ -38,6 +59,8 @@ async def search_papers(request: SearchRequest):
     search = services.search_service
 
     filters = request.filters
+    cfg = _build_retrieval_config(request.retrieval)
+
     results = await search.search(
         query=request.query,
         venues=filters.venues if filters else None,
@@ -47,7 +70,11 @@ async def search_papers(request: SearchRequest):
         section=request.section,
         limit=request.limit,
         offset=request.offset,
+        config=cfg,
     )
+
+    pipeline_raw = results.get("pipeline")
+    pipeline = PipelineInfo(**pipeline_raw) if pipeline_raw else None
 
     return SearchResponse(
         results=[SearchResultItem(**r) for r in results["results"]],
@@ -55,6 +82,7 @@ async def search_papers(request: SearchRequest):
         query_time_ms=results["query_time_ms"],
         search_mode=results["search_mode"],
         on_demand_available=results["on_demand_available"],
+        pipeline=pipeline,
     )
 
 
