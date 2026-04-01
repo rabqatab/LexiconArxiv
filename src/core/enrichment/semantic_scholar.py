@@ -316,6 +316,7 @@ class SemanticScholarEnricher:
         self,
         dry_run: bool = False,
         limit: int | None = None,
+        fetched_since: str | None = None,
     ) -> S2EnrichmentProgress:
         """Enrich papers with DOIs using Semantic Scholar.
 
@@ -324,6 +325,7 @@ class SemanticScholarEnricher:
         Args:
             dry_run: Only count papers without updating.
             limit: Maximum papers to process.
+            fetched_since: ISO date string. Only process papers fetched after this date.
 
         Returns:
             S2EnrichmentProgress with statistics.
@@ -331,7 +333,10 @@ class SemanticScholarEnricher:
         progress = self._load_checkpoint(by_title=False)
         offset = progress.last_offset
 
-        logger.info("Starting Semantic Scholar DOI-based enrichment...")
+        if fetched_since:
+            logger.info(f"Starting Semantic Scholar DOI-based enrichment (fetched_since={fetched_since})...")
+        else:
+            logger.info("Starting Semantic Scholar DOI-based enrichment...")
 
         while True:
             # Get papers with DOI but no refs (OpenAlex failed)
@@ -339,6 +344,7 @@ class SemanticScholarEnricher:
                 has_doi=True,
                 limit=self.batch_size,
                 offset=offset,
+                fetched_since=fetched_since,
             )
 
             if not papers:
@@ -379,6 +385,7 @@ class SemanticScholarEnricher:
         limit: int | None = None,
         venues: list[str] | None = None,
         min_refs: int = 1,
+        fetched_since: str | None = None,
     ) -> S2EnrichmentProgress:
         """Enrich papers without DOIs by searching S2 by title.
 
@@ -387,6 +394,7 @@ class SemanticScholarEnricher:
             limit: Maximum papers to process.
             venues: Filter by venue names.
             min_refs: Minimum refs required for match.
+            fetched_since: ISO date string. Only process papers fetched after this date.
 
         Returns:
             S2EnrichmentProgress with statistics.
@@ -394,13 +402,17 @@ class SemanticScholarEnricher:
         progress = self._load_checkpoint(by_title=True)
         offset = progress.last_offset
 
-        logger.info("Starting Semantic Scholar title-based enrichment...")
+        if fetched_since:
+            logger.info(f"Starting Semantic Scholar title-based enrichment (fetched_since={fetched_since})...")
+        else:
+            logger.info("Starting Semantic Scholar title-based enrichment...")
 
         while True:
             papers, next_offset = self.storage.get_papers_without_doi_missing_references(
                 limit=self.batch_size,
                 offset=offset,
                 venues=venues,
+                fetched_since=fetched_since,
             )
 
             if not papers:

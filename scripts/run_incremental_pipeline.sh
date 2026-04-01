@@ -135,7 +135,10 @@ if [ "$DRY_RUN" = true ]; then
     echo "[DRY RUN] Would execute the following steps:"
     echo "  1. collect-incremental --days $DAYS"
     echo "  2. enrich-6-abstracts-by-doi-via-openalex --parallel $PARALLEL"
-    echo "  3. enrich-4-refs-by-doi-via-s2 --parallel $PARALLEL"
+    echo "  3a. enrich-4-refs-by-doi-via-s2 --parallel $PARALLEL --recent-days $DAYS"
+    if [ "$WEEKLY" = true ]; then
+        echo "  3b. enrich-4-refs-by-doi-via-s2 --parallel $PARALLEL (backlog, background)"
+    fi
     echo "  4. enrich-2-refs-by-doi-via-crossref --parallel $PARALLEL"
     echo "  5. extract-keywords"
     echo "  6. label-abstracts"
@@ -170,10 +173,19 @@ echo ""
 echo "[Step 2] Enriching abstracts..."
 uv run python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --parallel "$PARALLEL"
 
-# Step 3: Enrich citations via Semantic Scholar
+# Step 3a: Enrich citations via Semantic Scholar — NEW papers only (fast)
 echo ""
-echo "[Step 3] Enriching citations (Semantic Scholar)..."
-uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --parallel "$PARALLEL"
+echo "[Step 3a] Enriching citations (S2) — recent papers only..."
+uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --parallel "$PARALLEL" --recent-days "$DAYS"
+
+# Step 3b: S2 backlog — run in background (slow, non-blocking)
+S2_BACKLOG_PID=""
+if [ "$WEEKLY" = true ]; then
+    echo ""
+    echo "[Step 3b] S2 backlog enrichment (background)..."
+    uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --parallel "$PARALLEL" &
+    S2_BACKLOG_PID=$!
+fi
 
 # Step 4: Enrich citations via CrossRef (for papers S2 missed)
 echo ""
@@ -257,6 +269,17 @@ if [ "$CLUSTER" = true ]; then
     echo ""
     echo "[Quarterly] Recomputing UMAP + HDBSCAN topic clusters..."
     uv run python -m src.cli.core_collect compute-topics
+fi
+
+# Wait for S2 backlog if it was started
+if [ -n "$S2_BACKLOG_PID" ]; then
+    echo ""
+    echo "[Waiting] S2 backlog enrichment still running (PID $S2_BACKLOG_PID)..."
+    if ! wait "$S2_BACKLOG_PID"; then
+        echo "[WARNING] S2 backlog enrichment failed (non-fatal)."
+    else
+        echo "[Done] S2 backlog enrichment finished."
+    fi
 fi
 
 # Done

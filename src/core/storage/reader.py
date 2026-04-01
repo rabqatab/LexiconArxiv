@@ -23,6 +23,7 @@ class PaperReader:
         has_doi: bool = True,
         limit: int = 100,
         offset: str | None = None,
+        fetched_since: str | None = None,
     ) -> tuple[list[tuple[str, dict]], str | None]:
         """Get papers with DOI but empty referenced_works.
 
@@ -30,6 +31,8 @@ class PaperReader:
             has_doi: If True, only return papers that have a DOI.
             limit: Maximum number of papers to return.
             offset: Scroll offset for pagination.
+            fetched_since: ISO date string (e.g., "2026-03-01"). Only papers
+                fetched after this date will be returned.
 
         Returns:
             Tuple of (list of (point_id, payload), next_offset).
@@ -39,6 +42,15 @@ class PaperReader:
                 is_empty=models.PayloadField(key="referenced_works"),
             )
         ]
+
+        if fetched_since:
+            filter_conditions.append(
+                models.FieldCondition(
+                    key="fetched_at",
+                    range=models.Range(gte=fetched_since),
+                )
+            )
+
         # Exclude papers where DOI is null/missing (we need DOI for lookup)
         must_not_conditions = []
         if has_doi:
@@ -115,6 +127,7 @@ class PaperReader:
         limit: int = 100,
         offset: str | None = None,
         venues: list[str] | None = None,
+        fetched_since: str | None = None,
     ) -> tuple[list[tuple[str, dict]], str | None]:
         """Get papers without DOI that are missing referenced_works.
 
@@ -124,6 +137,8 @@ class PaperReader:
             limit: Maximum number of papers to return.
             offset: Scroll offset for pagination.
             venues: Optional list of venues to filter by.
+            fetched_since: ISO date string (e.g., "2026-03-01"). Only papers
+                fetched after this date will be returned.
 
         Returns:
             Tuple of (list of (point_id, payload), next_offset).
@@ -137,6 +152,14 @@ class PaperReader:
                 is_empty=models.PayloadField(key="doi"),
             ),
         ]
+
+        if fetched_since:
+            filter_conditions.append(
+                models.FieldCondition(
+                    key="fetched_at",
+                    range=models.Range(gte=fetched_since),
+                )
+            )
 
         # Optionally filter by venue
         if venues:

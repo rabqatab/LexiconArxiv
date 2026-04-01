@@ -263,6 +263,8 @@ def register_commands(cli: click.Group):
     @click.option("--by-title", is_flag=True, help="Search by title instead of DOI")
     @click.option("--venue", "-v", multiple=True, help="Filter by venue (for title search)")
     @click.option("--min-refs", type=int, default=1, help="Min refs required (for title search)")
+    @click.option("--recent-days", type=int, default=None,
+                  help="Only process papers fetched in the last N days")
     def enrich_4_refs_by_doi_via_s2(
         dry_run: bool,
         limit: int | None,
@@ -272,6 +274,7 @@ def register_commands(cli: click.Group):
         by_title: bool,
         venue: tuple[str, ...],
         min_refs: int,
+        recent_days: int | None,
     ) -> None:
         """Enrich citations using Semantic Scholar API.
 
@@ -291,6 +294,9 @@ def register_commands(cli: click.Group):
           # Enrich papers with DOIs (fallback after OpenAlex)
           python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2
 
+          # Only enrich papers fetched in the last 7 days
+          python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --recent-days 7
+
           # With API key for faster processing
           S2_API_KEY=your_key python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2
 
@@ -303,6 +309,13 @@ def register_commands(cli: click.Group):
         from src.core.enrichment.semantic_scholar import SemanticScholarEnricher
 
         venues_list = list(venue) if venue else None
+
+        # Compute fetched_since date from --recent-days
+        fetched_since = None
+        if recent_days is not None:
+            from datetime import datetime, timedelta, timezone
+            fetched_since = (datetime.now(timezone.utc) - timedelta(days=recent_days)).isoformat()
+            click.echo(f"Filtering to papers fetched since {fetched_since}")
 
         async def run_enrichment():
             storage = QdrantStorage()
@@ -318,11 +331,13 @@ def register_commands(cli: click.Group):
                         limit=limit,
                         venues=venues_list,
                         min_refs=min_refs,
+                        fetched_since=fetched_since,
                     )
                 else:
                     progress = await enricher.enrich_by_doi(
                         dry_run=dry_run,
                         limit=limit,
+                        fetched_since=fetched_since,
                     )
 
                 click.echo(f"\nSemantic Scholar Enrichment Results:")
