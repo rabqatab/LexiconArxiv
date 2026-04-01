@@ -698,6 +698,47 @@ A search interface is available at `/search` (served as a static page by the Fas
 
 ---
 
+## 11. Advanced Retrieval Pipeline
+
+The search service supports a configurable multi-stage pipeline. Each stage can be toggled on/off via the `retrieval` parameter in the API or via presets.
+
+### 11.1 Stage 1: Query Analysis
+- **Intent detection** (default ON): Keyword heuristics detect target section (method/task/result/background) and query type (title search, recency bias)
+- **HyDE** (default OFF): Generates a hypothetical abstract via Ollama (qwen3:8b), embeds it alongside the original query. +5-25% recall on vague queries, adds ~500ms.
+- **RAG-Fusion** (default OFF): Generates 3 query variants via LLM, searches each independently. +8-10% accuracy, adds ~500ms.
+
+### 11.2 Stage 2: Multi-Vector Retrieval
+- Searches 3 section vectors by default: structured-abstract, section-method, section-task
+- Plus BM25 sparse on abstract text
+- All queries x all vectors -> multiple prefetch legs, fused by RRF
+
+### 11.3 Stage 3: RRF Fusion (always on)
+- Reciprocal Rank Fusion: score = sum of 1/(60 + rank_i)
+- Fuses all prefetch legs (dense + sparse x queries)
+
+### 11.4 Stage 4: Cross-Encoder Reranking (default OFF)
+- Model: Qwen3-Reranker-0.6B via sentence-transformers
+- Reranks top-50 candidates by (query, title+abstract) cross-encoder score
+- +5-15% nDCG@10, adds ~200-500ms
+
+### 11.5 Stage 5: Post-Processing
+- **Citation boost** (default ON): score = 0.6*retrieval + 0.2*log(citations) + 0.2*pagerank
+- **MMR diversity** (default OFF): Maximal Marginal Relevance using keyword overlap to penalize redundant results
+
+### 11.6 Presets
+- **Fast** (default): intent + multi-vector + citation boost (~200ms)
+- **Quality**: + HyDE + reranker + MMR (~2-3s)
+- **Comprehensive**: + RAG-Fusion + reranker + MMR (~3-5s)
+
+### 11.7 API Usage
+
+```
+POST /api/search with retrieval options:
+{"query": "...", "retrieval": {"hyde": true, "reranker": true}}
+```
+
+---
+
 ## Related Documents
 
 - [Architecture Overview](../architecture/overview.md)

@@ -706,7 +706,87 @@ The API includes an interactive D3.js visualization at the root URL (`/`).
 └─────────────────────────────────────────────────────────┘
 ```
 
-### 8.5 Performance Notes
+---
+
+## 9. Research & Advanced Endpoints
+
+### 9.1 POST /api/research
+
+Deep research on a topic with combined scoring and trend analysis.
+
+**Request**:
+```json
+{
+  "topic": "retrieval augmented generation evaluation",
+  "year_from": 2023,
+  "limit": 50
+}
+```
+
+**Response** includes:
+- Ranked papers with combined scoring (relevance + citations + PageRank)
+- Trend data: paper counts and citation velocity by year
+- Key authors and venues for the topic
+
+### 9.2 POST /api/search (retrieval options)
+
+Extended search with configurable retrieval pipeline stages.
+
+**Request**:
+```json
+{
+  "query": "efficient transformer inference",
+  "retrieval": {
+    "hyde": true,
+    "rag_fusion": false,
+    "reranker": true,
+    "mmr": true
+  },
+  "limit": 20
+}
+```
+
+The `retrieval` object toggles individual pipeline stages. See [Search Pipeline - Advanced Retrieval](../pipelines/search.md#11-advanced-retrieval-pipeline) for stage details and presets.
+
+### 9.3 GET /api/paper/{id}/similar
+
+Returns pre-computed similar papers for a given paper ID.
+
+**Response**:
+```json
+{
+  "paper_id": "uuid-here",
+  "similar": [
+    {"id": "uuid-1", "title": "...", "score": 0.92},
+    {"id": "uuid-2", "title": "...", "score": 0.88}
+  ]
+}
+```
+
+### 9.4 GET /api/dashboard
+
+Returns corpus-level statistics for the dashboard UI: total papers, papers by venue/year/tier, enrichment coverage, and embedding progress.
+
+---
+
+## 10. MCP Tools (Updated)
+
+The MCP server now exposes 8 tools:
+
+| Tool | Description |
+|------|-------------|
+| `search_papers` | Hybrid search with filters |
+| `get_paper_details` | Single paper metadata |
+| `export_papers` | Export to BibTeX/CSV/JSON |
+| `research_topic` | Deep topic research with trends and combined scoring |
+| `get_similar_papers` | Retrieve similar papers for a given paper ID |
+| `get_graph_subgraph` | Citation graph neighborhood |
+| `get_corpus_stats` | Corpus statistics |
+| `get_paper_citations` | Citation details for a paper |
+
+---
+
+### 10.1 Performance Notes (Graph)
 
 - **Startup**: ReverseCitationIndex pre-built (~10-30s for 150K nodes)
 - **Query**: O(nodes in neighborhood), typically < 100ms

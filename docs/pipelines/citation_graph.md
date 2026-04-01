@@ -633,6 +633,70 @@ uv run python -m src.cli.core_collect stub-stats
 
 ---
 
+## Semantic Similarity Graph
+
+### Overview
+
+The semantic similarity graph complements the citation graph by capturing **undeclared connections** between papers. While citations show explicitly declared influence (Paper A cites Paper B), semantic similarity reveals papers that address the same problems, use the same methods, or reach similar conclusions -- even when they do not cite each other.
+
+### Edge Types
+
+The similarity graph uses 5 typed edges, each derived from section-level embeddings:
+
+| Edge Type | Source Vectors | Captures |
+|-----------|----------------|----------|
+| `same_method` | Method section embeddings | Papers using similar techniques |
+| `same_task` | Task section embeddings | Papers addressing similar problems |
+| `same_result` | Result section embeddings | Papers reaching similar conclusions |
+| `method_transfer` | Cross: method vs. task | Methods applied to different tasks |
+| `overall` | Full abstract embeddings | General topical similarity |
+
+### How It Works
+
+1. Section-level embeddings are computed during the `embed-papers` step (9 dense vectors per paper).
+2. `compute-similarity` uses Qdrant vector search to find the k-nearest neighbors for each edge type.
+3. Results are stored as a `similar_papers` payload field on each paper.
+
+### Storage Format
+
+```json
+{
+  "similar_papers": {
+    "same_method": [{"id": "uuid-1", "score": 0.92}, ...],
+    "same_task": [{"id": "uuid-2", "score": 0.89}, ...],
+    "same_result": [{"id": "uuid-3", "score": 0.87}, ...],
+    "method_transfer": [{"id": "uuid-4", "score": 0.85}, ...],
+    "overall": [{"id": "uuid-5", "score": 0.91}, ...]
+  }
+}
+```
+
+### CLI
+
+```bash
+# Preview
+uv run python -m src.cli.core_collect compute-similarity --dry-run
+
+# Run with defaults
+uv run python -m src.cli.core_collect compute-similarity
+
+# Custom k neighbors
+uv run python -m src.cli.core_collect compute-similarity --k 20 --batch-size 128
+```
+
+### Citations vs. Similarity
+
+| Dimension | Citation Graph | Similarity Graph |
+|-----------|---------------|-----------------|
+| Signal | Declared influence | Undeclared connections |
+| Direction | Directed (A cites B) | Undirected (A similar to B) |
+| Coverage | Only papers with resolved refs | All embedded papers |
+| Staleness | Fixed at publication time | Recomputable as corpus grows |
+
+Used together, the two graphs power richer retrieval: citations for lineage and influence, similarity for discovery and serendipity.
+
+---
+
 ## Next Steps
 
 1. ~~**Implement `build-cited-by` command**~~ ✅ Complete

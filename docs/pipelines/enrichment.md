@@ -283,18 +283,28 @@ Features:
 
 Semantic Scholar (S2) provides an alternative API for citation data, useful as a fallback for papers not enrichable via OpenAlex or CrossRef.
 
-### API Key (Recommended)
+### API Keys (Recommended)
 
 Get a free API key for ~30x faster processing:
 1. Register at: https://www.semanticscholar.org/product/api#api-key
-2. Set the environment variable: `export S2_API_KEY=your_key_here`
+2. Set the environment variable:
+   ```env
+   # Single key (legacy, still works)
+   S2_API_KEY=your_key_here
+
+   # Multiple keys for round-robin rotation (recommended)
+   S2_API_KEYS=key1,key2,key3
+   ```
+
+**Multi-key rotation:** When `S2_API_KEYS` is set (comma-separated), keys are rotated round-robin with per-key rate limiting. When one key hits a 429, it enters a cooldown while remaining keys continue. This multiplies effective throughput by the number of keys.
 
 ### Rate Limits
 
 | Configuration | Requests/sec | Time for 10K papers |
 |--------------|-------------|---------------------|
 | Without API key | 0.3 | ~9 hours |
-| With API key | 1 | ~3 hours |
+| With 1 API key | 1 | ~3 hours |
+| With 3 API keys | ~3 | ~1 hour |
 
 Rate limits are **auto-adjusted** based on API key presence.
 
@@ -309,6 +319,9 @@ uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --by-title
 
 # Target specific venues
 uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --by-title -v "NeurIPS 2024 poster"
+
+# Prioritize recently collected papers (incremental enrichment)
+uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --recent-days 30
 ```
 
 ### Implementation
@@ -642,7 +655,7 @@ Checkpoint files are stored in `data/core/checkpoints/`.
 |----------|-------------|----------|
 | `OPENALEX_API_KEYS` | Comma-separated OpenAlex API keys for round-robin rotation | No |
 | `OPENALEX_EMAIL` | Email for OpenAlex polite pool fallback (10 req/sec) | Yes |
-| `S2_API_KEY` | Semantic Scholar API key | No |
+| `S2_API_KEYS` | Semantic Scholar API keys, comma-separated for round-robin rotation (legacy `S2_API_KEY` still works) | No |
 | `CROSSREF_EMAIL` | Email for CrossRef polite pool | No |
 | `GITHUB_TOKEN` | GitHub personal access token (30 req/min vs 10/min) | No |
 

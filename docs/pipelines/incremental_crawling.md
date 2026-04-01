@@ -10,7 +10,7 @@ Each data source has different APIs, update patterns, and limitations:
 
 | Source | API Type | Date Filtering | Update Pattern | Challenges |
 |--------|----------|----------------|----------------|------------|
-| **OpenAlex** | REST API | `from_updated_date` | Daily updates | Best for incremental |
+| **OpenAlex** | REST API | `from_updated_date` (Premium) | Daily updates | Requires Premium plan since early 2026 |
 | **ACL Anthology** | GitHub XML files | None (file-based) | Batch releases | No date filter, pattern changes |
 | **OpenReview** | REST API | `mdate` field | Conference cycles | Invitation patterns change yearly |
 | **DBLP** | XML dump | None | Monthly updates | Bulk download only |
@@ -55,6 +55,7 @@ GET /works?filter=from_updated_date:2026-01-01
 - Consistent API across all venues
 
 **Cons:**
+- `from_updated_date` requires Premium/Institutional/Partner plan since early 2026 (falls back to `publication_year` range filtering)
 - Slow to index new NLP papers (ACL, EMNLP have 87% coverage gap)
 - May miss papers not yet in their database
 
@@ -302,13 +303,17 @@ GITHUB_TREES_API = "https://api.github.com/repos/acl-org/acl-anthology/git/trees
 }
 ```
 
-### 6.4 OpenAlex Slow to Index NLP Papers
+### 6.4 OpenAlex from_updated_date (Premium Required)
+
+As of early 2026, OpenAlex's `from_updated_date` filter requires a Premium, Institutional, or Partner plan. The incremental collector falls back to `publication_year` range filtering with checkpoint-based deduplication. This means incremental runs scan all papers for the target year(s) rather than only recently updated ones.
+
+### 6.5 OpenAlex Slow to Index NLP Papers
 
 **Issue:** OpenAlex has 87% coverage gap for NLP venues (ACL, EMNLP, etc.)
 
 **Workaround:** Use ACL Anthology as primary source for NLP venues, not OpenAlex.
 
-### 6.5 Incremental --days Only Affected OpenAlex (Fixed in v0.7.2)
+### 6.6 Incremental --days Only Affected OpenAlex (Fixed in v0.7.2)
 
 **Issue:** The `--days` parameter only worked for OpenAlex. Other sources used `current_year` only, missing papers from the previous year when running in January-March.
 
@@ -320,11 +325,27 @@ GITHUB_TREES_API = "https://api.github.com/repos/acl-org/acl-anthology/git/trees
 uv run python -m src.cli.core_collect collect-incremental --days 90
 ```
 
-### 6.6 build_cited_by Connection Reset (Fixed in v0.7.2)
+### 6.7 build_cited_by Connection Reset (Fixed in v0.7.2)
 
 **Issue:** `build_cited_by` crashed with "Connection reset by peer" when updating 100k+ papers.
 
 **Fix:** Added retry logic, smaller batches (50 ops), and delays between batches.
+
+---
+
+### 6.8 --recent-days for S2 Enrichment and force=True for Collection
+
+The Semantic Scholar enrichment step supports a `--recent-days N` flag to limit enrichment to papers added within the last N days, reducing API calls during incremental runs:
+
+```bash
+uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --recent-days 7
+```
+
+For collection commands, passing `force=True` (or `--force` on the CLI) skips checkpoint-based deduplication and re-collects all papers for the target venue/year range. This is useful after fixing a collector bug or when checkpoint data is stale:
+
+```bash
+uv run python -m src.cli.core_collect collect-openalex --venue neurips --since-year 2025 --force
+```
 
 ---
 

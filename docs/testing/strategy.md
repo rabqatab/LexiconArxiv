@@ -880,7 +880,24 @@ def seeded_database(db, sample_papers):
     db.clear()
 ```
 
-### 9.2 Test Data Generation
+### 9.2 New Test Areas
+
+The following areas have been added or are planned for expanded coverage:
+
+**Advanced Retrieval Pipeline Tests**
+- HyDE (Hypothetical Document Embeddings): verify that LLM-generated hypothetical abstracts improve recall on vague queries.
+- Cross-encoder reranker: validate that reranking top-50 results with Qwen3-Reranker-0.6B improves nDCG@10.
+- MMR (Maximal Marginal Relevance): confirm that diversity post-processing reduces redundancy without dropping relevant results.
+
+**Section-level Embedding Quality**
+- Verify that section-level vectors (method, task, result, etc.) cluster by semantic type.
+- Regression tests for section extraction: ensure structured-abstract parsing does not degrade across model updates.
+
+**Incremental Pipeline End-to-End Testing**
+- Simulate incremental collection, embedding, similarity recomputation, and clustering on a small fixture corpus.
+- Verify that partially embedded papers are recovered correctly after interruption.
+
+### 9.3 Test Data Generation
 
 ```python
 # tests/utils/generators.py

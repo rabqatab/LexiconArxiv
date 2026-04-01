@@ -13,18 +13,18 @@ Tracked enhancement backlog. Items are grouped by priority and area.
 - [ ] **Stub → core promotion** — When incremental collection adds a paper matching an existing stub, preserve the stub's `cited_by` data on the promoted paper. Verify dedup handles this correctly.
 
 ### Pipeline Performance
+- [x] **S2 multi-key rotation** — `S2_API_KEYS` env var supports comma-separated keys with round-robin rotation and per-key rate limiting/cooldown.
+- [x] **Incremental collection force=True for non-OpenAlex sources** — ACL, DBLP, OpenReview, ACM, AAAI now support forced re-collection.
+- [x] **OpenAlex 429 handling + publication_year fallback** — Graceful handling of 429 rate limits with key cooldown. `from_updated_date` falls back to `publication_year` filtering when Premium plan is unavailable.
+- [x] **--recent-days for S2 enricher** — Prioritize recently collected papers for incremental enrichment.
 - [ ] **S2 enricher scroll optimization** — The Semantic Scholar enricher scrolls ALL 152K papers to find ~9K missing refs (client-side filtering). Should add a Qdrant filter for `IsEmptyCondition(referenced_works)` to only fetch papers actually needing S2 enrichment. Current behavior wastes ~90% of scroll time on papers that already have refs. Same issue likely affects other enrichers.
 
 ### Advanced Retrieval Pipeline
-- [ ] **Multi-vector prefetch** — Search 3+ section vectors per query (structured-abstract + section-method + section-task), fuse with RRF. Currently only 1 dense vector used per search.
-- [ ] **Query intent detection** — Auto-detect target section from query ("papers using X" → method, "papers about X" → task). Keyword heuristics first, optional LLM.
-- [ ] **Cross-encoder reranking** — Rerank top-50 with Qwen3-Reranker-8B via Ollama. Pull model: `ollama pull dengcao/Qwen3-Reranker-8B`. Expected +5-15% nDCG@10.
-- [ ] **Citation-aware score boosting** — Multiply RRF score by `alpha*score + beta*log(citations) + gamma*pagerank`. Pure post-processing on existing data.
-- [ ] **MMR diversity** — Maximal Marginal Relevance to prevent redundant results. Client-side post-processing.
+- [x] **Advanced Retrieval Pipeline (HyDE, multi-vector, reranker, citation boost, MMR)** — HyDE generates hypothetical abstracts for vague queries. Multi-vector prefetch searches section-level vectors fused with RRF. Cross-encoder reranking via Qwen3-Reranker-0.6B. Citation-aware score boosting. MMR diversity post-processing.
+- [x] **research_topic API and MCP tool** — Dedicated endpoint and MCP tool for topic-oriented research exploration.
 - [ ] **Venue name normalization** — "ICLR 2025 Poster" should match filter "ICLR". Add `venue_canonical` field or use substring matching.
 
 ### Advanced Query Processing
-- [ ] **HyDE** — Generate hypothetical abstract via LLM, embed that instead of raw query. +5-25% recall on vague queries. Adds ~500ms.
 - [ ] **RAG-Fusion** — Generate 3-5 query variants via LLM, search each, fuse with RRF. +8-10% accuracy. Qdrant prefetch supports natively.
 - [ ] **Query decomposition** — "BERT vs GPT for code" → 3 sub-queries targeting different section vectors.
 

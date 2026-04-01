@@ -14,9 +14,27 @@ The embedding pipeline converts paper abstracts into dense and sparse vectors st
 | Full dimension | 4096 |
 | Target dimension | 1024 (via Matryoshka Representation Learning truncation) |
 | Instruction-aware | Yes — prepends `"Retrieve academic papers: "` for retrieval quality |
-| Named vector | `abstract-qwen3-8b` |
 
 The model is served locally by Ollama. Client-side MRL truncation (slice first 1024 dims) reduces storage and index size by 4x while retaining most retrieval quality.
+
+### 2.1 Vector Configuration (9 Dense + BM25)
+
+The collection uses 9 dense named vectors plus 1 BM25 sparse vector. Title text is included in all dense vectors for improved retrieval.
+
+| Named Vector | Description |
+|-------------|-------------|
+| `abstract-qwen3-8b` | Full abstract text |
+| `structured-abstract` | Section-prefixed with multi-label dedup (e.g., `[TASK,APPROACH] sentence`) |
+| `section-task` | Sentences labeled as task descriptions |
+| `section-method` | Sentences labeled as method descriptions |
+| `section-result` | Sentences labeled as results |
+| `section-background` | Sentences labeled as background/related work |
+| `section-approach` | Sentences labeled as approach details |
+| `section-domain` | Sentences labeled as domain context |
+| `section-contribution` | Sentences labeled as contributions |
+| `bm25` (sparse) | BM25 sparse via `qdrant/bm25` on title + abstract |
+
+All 9 dense vectors are 1024-dimensional (Qwen3-Embedding-8B with MRL truncation) using cosine distance.
 
 ---
 

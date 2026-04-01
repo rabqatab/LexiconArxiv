@@ -251,7 +251,7 @@ uv run python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --p
 
 ### enrich-4-refs-by-doi-via-s2
 
-Enrich using Semantic Scholar (fallback).
+Enrich using Semantic Scholar (fallback). Supports multi-key rotation via `S2_API_KEYS` (comma-separated); keys are rotated round-robin with per-key rate limiting.
 
 ```bash
 # By DOI
@@ -262,7 +262,20 @@ uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --by-title
 
 # Target specific venues
 uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --by-title -v "NeurIPS 2024 poster"
+
+# Prioritize recently collected papers (e.g., last 30 days)
+uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --recent-days 30
 ```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--by-title` | Search by title instead of DOI |
+| `-v, --venue` | Filter by venue (repeatable) |
+| `--min-refs N` | Minimum references for title match |
+| `--recent-days N` | Prioritize papers collected within the last N days |
+| `-n, --limit N` | Max papers to process |
+| `-p, --parallel N` | Concurrent requests |
 
 ### enrich-2-refs-by-doi-via-crossref
 
@@ -916,7 +929,7 @@ uv run python -m src.cli.core_collect clear-keyword-checkpoint
 | `OPENALEX_EMAIL` | Email for OpenAlex polite pool fallback (10 req/sec) | Yes |
 | `QDRANT_URL` | Qdrant server URL | Yes |
 | `QDRANT_API_KEY` | Qdrant API key (for cloud) | No |
-| `S2_API_KEY` | Semantic Scholar API key | No |
+| `S2_API_KEYS` | Semantic Scholar API keys (comma-separated for round-robin rotation with per-key rate limiting). Legacy `S2_API_KEY` (singular) still works. | No |
 | `GEMINI_API_KEYS` | Gemini API key(s), comma-separated for round-robin (keywords + labeling) | No |
 | `GEMINI_API_KEY` | Fallback for `GEMINI_API_KEYS` (singular) | No |
 | `GOOGLE_API_KEY` | Fallback (legacy) | No |

@@ -429,12 +429,19 @@ Or with virtual environment:
 
 | Source | Method |
 |--------|--------|
-| OpenAlex | Uses `from_updated_date` API filter |
+| OpenAlex | Uses `from_updated_date` API filter (Premium plan required; see note below) |
 | ACL Anthology | Re-checks current year XML files |
 | DBLP | Re-checks current year, deduplication handles existing |
 | OpenReview | Re-checks current year venues |
 | ACM | Re-checks current year, deduplication handles existing |
 | AAAI | Re-checks current year issues |
+
+> **OpenAlex `from_updated_date` requires a Premium plan.**
+> The `from_updated_date` filter is restricted to Premium API subscribers. If you
+> are on the free tier, incremental collection falls back to filtering by
+> `publication_year` for the current year, which is less precise but still
+> functional. The fallback re-fetches all papers published in the current year
+> and deduplication skips papers already in the corpus.
 
 ---
 
