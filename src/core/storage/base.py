@@ -271,8 +271,9 @@ class QdrantStorage:
         has_doi: bool = True,
         limit: int = 100,
         offset: str | None = None,
+        fetched_since: str | None = None,
     ) -> tuple[list[tuple[str, dict]], str | None]:
-        return self.readers.get_papers_missing_references(has_doi, limit, offset)
+        return self.readers.get_papers_missing_references(has_doi, limit, offset, fetched_since)
 
     def get_papers_missing_abstracts(
         self,
@@ -287,8 +288,9 @@ class QdrantStorage:
         limit: int = 100,
         offset: str | None = None,
         venues: list[str] | None = None,
+        fetched_since: str | None = None,
     ) -> tuple[list[tuple[str, dict]], str | None]:
-        return self.readers.get_papers_without_doi_missing_references(limit, offset, venues)
+        return self.readers.get_papers_without_doi_missing_references(limit, offset, venues, fetched_since)
 
     def get_papers_with_references(
         self,
