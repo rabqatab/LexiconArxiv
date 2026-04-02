@@ -349,9 +349,71 @@ uv run python -m src.cli.core_collect collect-openalex --venue neurips --since-y
 
 ---
 
-## 7. Future Improvements
+## 7. First Incremental Loop Results (March 2026)
 
-### 7.1 Proposed: Unified Incremental System
+The first real incremental crawling-preprocessing loop ran March 28-30, 2026. This section documents actual results, timings, and lessons learned.
+
+### 7.1 Collection Results
+
+| Source | New Papers | Notes |
+|--------|-----------|-------|
+| OpenAlex | 6,089 | `publication_year` fallback (Premium required for `from_updated_date`) |
+| ACL Anthology | 999 | Required `force=True` to bypass `is_complete` checkpoint flag |
+| DBLP | 187 | Required `force=True` to bypass `is_complete` checkpoint flag |
+| OpenReview | 0 | 2026 papers not yet public |
+| AAAI OJS | 0 | No new papers available |
+| **Total** | **7,275** | **Corpus grew from 145K to 152,769 core papers** |
+
+### 7.2 Enrichment Results
+
+| Stage | Result | Notes |
+|-------|--------|-------|
+| Abstracts (OpenAlex) | 17,561 enriched | Covers both new and previously missed papers |
+| S2 citations | 369 enriched | 7,229 papers scanned in 12 min after stub-exclusion fix |
+| CrossRef citations | 20,796 enriched | |
+| Keywords | Done | regex + KeyBERT |
+| Labeling | Done | Gemini, ~4,400 calls, ~$3 cost |
+| Reference resolution | Done | |
+| Cited_by | Done | Incremental rebuild |
+| Embedding | 167 new papers | Section-level + BM25 |
+
+### 7.3 Issues Encountered and Fixes Applied
+
+1. **OpenAlex `from_updated_date` requires Premium** -- The free tier no longer supports date-based incremental filtering. The collector now falls back to `publication_year` range filtering with checkpoint deduplication.
+2. **OpenAlex 429 rate limits** -- Transient vs quota-exhaustion 429s are now distinguished; same-key retry is used for transient errors.
+3. **Non-OpenAlex sources skipped by `is_complete` flag** -- ACL, DBLP, OpenReview, ACM, and AAAI all returned 0 papers because checkpoints were marked complete from the initial collection. Fix: pass `force=True` (or `--force` on CLI) to bypass the flag.
+4. **OpenReview missing `httpx` import** -- Runtime error on OpenReview collection; fixed with the missing import.
+5. **S2 enricher scrolled 666K papers (including stubs)** -- Added `must_not: [is_stub=true]` filter to `get_papers_missing_references()`, reducing scroll from 666K to 7K papers.
+6. **S2 `--recent-days` flag** -- Added for prioritized incremental enrichment of recently collected papers.
+7. **S2 multi-key rotation** -- Two keys with concurrency=2 for parallel enrichment.
+8. **QdrantStorage facade missing `fetched_since` passthrough** -- Fixed the facade to forward `fetched_since` to the underlying storage methods.
+
+### 7.4 Recommended Configuration for Future Runs
+
+```bash
+# 1. Collection: use --force for non-OpenAlex sources
+./scripts/run_incremental_pipeline.sh --days 7
+
+# Or manually with force for sources that checkpoint as complete:
+uv run python -m src.cli.core_collect collect-incremental --days 7 --force
+
+# 2. S2 enrichment: use --recent-days to limit scope
+uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --recent-days 7
+
+# 3. Full pipeline takes ~30-60 minutes depending on new paper volume
+```
+
+**Key takeaways:**
+- Always use `--force` for non-OpenAlex sources in incremental runs, since checkpoints mark them as complete after initial collection.
+- The S2 enricher should always be run with `--recent-days` to avoid scanning the entire corpus.
+- OpenAlex `from_updated_date` requires a Premium plan; without it, expect full-year scans with deduplication.
+- Gemini labeling cost is modest (~$3 for ~4,400 calls) and can be run on every incremental loop.
+
+---
+
+## 8. Future Improvements
+
+### 8.1 Proposed: Unified Incremental System
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -371,7 +433,7 @@ uv run python -m src.cli.core_collect collect-openalex --venue neurips --since-y
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### 7.2 Proposed: RSS/Webhook Integration
+### 8.2 Proposed: RSS/Webhook Integration
 
 - ACL Anthology: Monitor GitHub releases
 - OpenReview: Webhook for new decisions
@@ -379,7 +441,7 @@ uv run python -m src.cli.core_collect collect-openalex --venue neurips --since-y
 
 ---
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
 ### Incremental Returns 0 Papers
 

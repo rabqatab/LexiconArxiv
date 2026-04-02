@@ -362,7 +362,12 @@ lexiconarxiv/
 └── data/core/checkpoints/       # Collection state
 ```
 
-## Recent Updates (Mar 2026) — v0.11.0
+## Recent Updates (Mar 2026) — v0.11.1
+
+- **First Incremental Loop**: Collected 7,275 new papers (OpenAlex 6,089, ACL 999, DBLP 187) bringing corpus to 152K+ core papers. Full enrichment cycle completed including abstracts, citations, keywords, labeling, and embedding.
+- **Incremental Fixes**: OpenAlex Premium fallback, `force=True` for non-OpenAlex sources, S2 stub exclusion, QdrantStorage `fetched_since` passthrough, S2 `--recent-days` flag, multi-key rotation.
+
+### v0.11.0
 
 - **Hybrid Search**: Dense Qwen3-Embedding-8B + server-side BM25 via Qdrant Reciprocal Rank Fusion (RRF); title now included in BM25 and dense vectors
 - **Search Web UI**: Interactive search at `/search` with faceted filters (venue dropdown with 21 major venues, year, tier), landing page with corpus stats and trending keywords, similar papers by section type in paper detail

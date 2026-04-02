@@ -160,7 +160,7 @@ uv run python -m src.cli.core_collect keyword-stats
 uv run python -m src.cli.core_collect migrate-collection
 # Update QDRANT_COLLECTION=lexicon_arxiv_v2 in .env
 
-# 2. Embed papers (25-50 min for 145K papers)
+# 2. Embed papers (25-50 min for 152K+ papers)
 scripts/embedding/run_embedding.sh
 
 # 3. Start the API
@@ -379,6 +379,8 @@ The cron job runs the full pipeline for **current year only**:
 4. Resolution - Build citation graph
 
 Logs are saved to `logs/incremental_pipeline.log`.
+
+> **OpenAlex Premium limitation**: As of early 2026, OpenAlex's `from_updated_date` filter requires a Premium, Institutional, or Partner plan. Without it, the incremental collector falls back to `publication_year` range filtering (scanning all papers for the target year) with checkpoint-based deduplication. This is slower but functionally correct. Additionally, non-OpenAlex sources (ACL, DBLP, OpenReview, etc.) may need `--force` on incremental runs to bypass `is_complete` checkpoint flags set during initial collection.
 
 ### Manual Incremental Run
 
