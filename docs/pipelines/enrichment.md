@@ -283,6 +283,8 @@ Features:
 
 Semantic Scholar (S2) provides an alternative API for citation data, useful as a fallback for papers not enrichable via OpenAlex or CrossRef.
 
+> **Note**: S2 enrichment now excludes stub papers from the scroll query (`must_not: [is_stub=true]` on `get_papers_missing_references()` and `get_papers_without_doi_missing_references()`). This reduced the scroll from ~666K to ~7K papers, dramatically cutting processing time.
+
 ### API Keys (Recommended)
 
 Get a free API key for ~30x faster processing:

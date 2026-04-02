@@ -403,6 +403,16 @@ nlp_filter = Filter(
         FieldCondition(key="is_core", match=MatchValue(value=True)),
     ]
 )
+
+# Enrichment queries exclude stubs to avoid scrolling the full corpus
+enrichment_filter = Filter(
+    must=[
+        IsEmptyCondition(field="referenced_works"),
+    ],
+    must_not=[
+        FieldCondition(key="is_stub", match=MatchValue(value=True)),
+    ]
+)
 ```
 
 ---

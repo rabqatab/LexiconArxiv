@@ -17,11 +17,12 @@ Tracked enhancement backlog. Items are grouped by priority and area.
 - [x] **Incremental collection force=True for non-OpenAlex sources** — ACL, DBLP, OpenReview, ACM, AAAI now support forced re-collection.
 - [x] **OpenAlex 429 handling + publication_year fallback** — Graceful handling of 429 rate limits with key cooldown. `from_updated_date` falls back to `publication_year` filtering when Premium plan is unavailable.
 - [x] **--recent-days for S2 enricher** — Prioritize recently collected papers for incremental enrichment.
-- [ ] **S2 enricher scroll optimization** — The Semantic Scholar enricher scrolls ALL 152K papers to find ~9K missing refs (client-side filtering). Should add a Qdrant filter for `IsEmptyCondition(referenced_works)` to only fetch papers actually needing S2 enrichment. Current behavior wastes ~90% of scroll time on papers that already have refs. Same issue likely affects other enrichers.
+- [x] **S2 enricher scroll optimization** — Added `must_not: [is_stub=true]` to `get_papers_missing_references()` and `get_papers_without_doi_missing_references()`. Reduced scroll from 666K to 7K papers.
 
 ### Advanced Retrieval Pipeline
 - [x] **Advanced Retrieval Pipeline (HyDE, multi-vector, reranker, citation boost, MMR)** — HyDE generates hypothetical abstracts for vague queries. Multi-vector prefetch searches section-level vectors fused with RRF. Cross-encoder reranking via Qwen3-Reranker-0.6B. Citation-aware score boosting. MMR diversity post-processing.
 - [x] **research_topic API and MCP tool** — Dedicated endpoint and MCP tool for topic-oriented research exploration.
+- [ ] **Research API paper type filter** — Add option to exclude benchmark/dataset papers from `/api/research` results (currently filtered client-side).
 - [ ] **Venue name normalization** — "ICLR 2025 Poster" should match filter "ICLR". Add `venue_canonical` field or use substring matching.
 
 ### Advanced Query Processing
