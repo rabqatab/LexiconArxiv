@@ -51,8 +51,12 @@ class PaperReader:
                 )
             )
 
-        # Exclude papers where DOI is null/missing (we need DOI for lookup)
-        must_not_conditions = []
+        # Exclude stubs and optionally papers without DOI
+        must_not_conditions = [
+            models.FieldCondition(
+                key="is_stub", match=models.MatchValue(value=True),
+            ),
+        ]
         if has_doi:
             must_not_conditions.append(
                 models.IsEmptyCondition(
@@ -170,7 +174,14 @@ class PaperReader:
                 )
             )
 
-        scroll_filter = models.Filter(must=filter_conditions)
+        scroll_filter = models.Filter(
+            must=filter_conditions,
+            must_not=[
+                models.FieldCondition(
+                    key="is_stub", match=models.MatchValue(value=True),
+                ),
+            ],
+        )
 
         results, next_offset = self.client.scroll(
             collection_name=self.collection_name,
