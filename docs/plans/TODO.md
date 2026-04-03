@@ -20,6 +20,7 @@ Tracked enhancement backlog. Items are grouped by priority and area.
 - [x] **S2 enricher scroll optimization** — Added `must_not: [is_stub=true]` to `get_papers_missing_references()` and `get_papers_without_doi_missing_references()`. Reduced scroll from 666K to 7K papers.
 - [x] **QdrantStorage `fetched_since` passthrough** — Fixed the storage facade to forward `fetched_since` parameter to underlying query methods.
 - [x] **OpenReview missing `httpx` import** — Fixed runtime import error in OpenReview collector.
+- [ ] **Similarity graph performance** — At 7.4s/paper (3.5M point collection), computing similarity for 120K papers takes ~10 days. Needs: (a) reduce collection size by deleting old v1/v2 collections, (b) pre-filter to only search among papers with vectors, (c) consider approximate methods or incremental-only computation for new papers.
 
 ### Advanced Retrieval Pipeline
 - [x] **Advanced Retrieval Pipeline (HyDE, multi-vector, reranker, citation boost, MMR)** — HyDE generates hypothetical abstracts for vague queries. Multi-vector prefetch searches section-level vectors fused with RRF. Cross-encoder reranking via Qwen3-Reranker-0.6B. Citation-aware score boosting. MMR diversity post-processing.
