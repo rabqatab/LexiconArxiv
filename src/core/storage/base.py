@@ -129,7 +129,37 @@ class QdrantStorage:
                 f"{len(ALL_DENSE_VECTORS)} dense vectors ({dense_vector_size}d) "
                 f"and BM25 sparse vector"
             )
+            self.ensure_venue_text_index()
             return True
+
+    def ensure_venue_text_index(self) -> None:
+        """Create a full-text index on the ``venue`` field if missing.
+
+        The index uses a word tokenizer with lowercasing so that
+        ``MatchText`` queries are case-insensitive (e.g. ``"iclr"``
+        matches ``"ICLR 2025 Poster"``).
+        """
+        try:
+            info = self.client.get_collection(self.collection_name)
+            venue_schema = info.payload_schema.get("venue")
+            if venue_schema and venue_schema.data_type == "text":
+                return  # Index already exists
+        except Exception:
+            pass
+
+        try:
+            self.client.create_payload_index(
+                collection_name=self.collection_name,
+                field_name="venue",
+                field_schema=models.TextIndexParams(
+                    type="text",
+                    tokenizer=models.TokenizerType.WORD,
+                    lowercase=True,
+                ),
+            )
+            logger.info("Created text index on 'venue' field")
+        except Exception as e:
+            logger.warning(f"Could not create venue text index (may already exist): {e}")
 
     def delete_collection(self) -> bool:
         """Delete the collection.

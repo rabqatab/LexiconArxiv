@@ -21,12 +21,21 @@ logger = logging.getLogger(__name__)
 CURRENT_YEAR = datetime.now().year
 
 
+# Keyword patterns used to identify paper types for filtering.
+_TYPE_KEYWORDS: dict[str, list[str]] = {
+    "benchmark": ["benchmark", "evaluation suite", "eval suite", "leaderboard"],
+    "dataset": ["dataset", "corpus", "data collection", "annotated data"],
+    "survey": ["survey", "review", "overview", "systematic literature", "meta-analysis"],
+}
+
+
 async def research_topic(
     query: str,
     search_service: SearchService,
     storage: QdrantStorage,
     limit: int = 20,
     year_min: int | None = None,
+    exclude_types: list[str] | None = None,
     config: RetrievalConfig | None = None,
 ) -> dict:
     """Research a topic: find notable papers + extract trends.
@@ -41,6 +50,9 @@ async def research_topic(
         storage: QdrantStorage instance.
         limit: Number of top papers to return (after re-ranking).
         year_min: Optional minimum publication year filter.
+        exclude_types: Optional list of paper types to exclude
+            (``"benchmark"``, ``"dataset"``, ``"survey"``).  Papers
+            whose title contains any associated keyword are removed.
 
     Returns:
         Dict with keys: query, papers, trends, summary, query_time_ms.
@@ -60,6 +72,18 @@ async def research_topic(
     )
 
     items = search_results.get("results", [])
+
+    # ------------------------------------------------------------------
+    # 1b. Exclude paper types (by title keywords)
+    # ------------------------------------------------------------------
+    if exclude_types and items:
+        exclude_words: list[str] = []
+        for t in exclude_types:
+            exclude_words.extend(_TYPE_KEYWORDS.get(t.lower(), [t.lower()]))
+        items = [
+            p for p in items
+            if not any(w in p.get("title", "").lower() for w in exclude_words)
+        ]
 
     if not items:
         elapsed_ms = int((time.time() - start) * 1000)

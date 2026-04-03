@@ -223,6 +223,14 @@ async def list_tools() -> list[Tool]:
                         "type": "integer",
                         "description": "Minimum publication year",
                     },
+                    "exclude_types": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Paper types to exclude: 'benchmark', 'dataset', 'survey'. "
+                            "Papers whose title contains related keywords are filtered out."
+                        ),
+                    },
                 },
                 "required": ["query"],
             },
@@ -515,6 +523,7 @@ async def _handle_research_topic(arguments: dict) -> list[TextContent]:
     query = arguments["query"]
     limit = min(arguments.get("limit", 20), 50)
     year_min = arguments.get("year_min")
+    exclude_types = arguments.get("exclude_types")
 
     result = await research_topic(
         query=query,
@@ -522,6 +531,7 @@ async def _handle_research_topic(arguments: dict) -> list[TextContent]:
         storage=storage,
         limit=limit,
         year_min=year_min,
+        exclude_types=exclude_types,
     )
 
     text = format_research_results(result)

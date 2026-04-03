@@ -143,6 +143,14 @@ class ResearchRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=500, description="Research topic or question")
     limit: int = Field(default=20, ge=1, le=50, description="Number of papers to return")
     year_min: int | None = Field(None, description="Minimum publication year")
+    exclude_types: list[str] | None = Field(
+        None,
+        description=(
+            "Paper types to exclude from results. "
+            "Supported types: 'benchmark', 'dataset', 'survey'. "
+            "Papers whose title contains related keywords will be filtered out."
+        ),
+    )
 
 
 class ResearchPaperItem(BaseModel):

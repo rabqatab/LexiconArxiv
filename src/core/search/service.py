@@ -22,6 +22,7 @@ from src.core.search.query_analyzer import (
     generate_hyde,
     generate_query_variants,
 )
+from src.core.search.venue_map import expand_venue_names
 from src.core.storage.base import QdrantStorage
 
 logger = logging.getLogger(__name__)
@@ -116,11 +117,27 @@ class SearchService:
             ),
         ]
         if venues:
-            must.append(
-                models.FieldCondition(
-                    key="venue", match=models.MatchAny(any=venues)
+            # Expand short names (e.g. "ICLR") into all matching patterns,
+            # then use MatchText for substring matching so that "ICLR"
+            # matches "ICLR 2025 Poster", "ICLR 2024 poster", etc.
+            patterns = expand_venue_names(venues)
+            if len(patterns) == 1:
+                must.append(
+                    models.FieldCondition(
+                        key="venue",
+                        match=models.MatchText(text=patterns[0]),
+                    )
                 )
-            )
+            else:
+                # Multiple patterns: combine with OR (should) inside must
+                venue_conditions = [
+                    models.FieldCondition(
+                        key="venue",
+                        match=models.MatchText(text=p),
+                    )
+                    for p in patterns
+                ]
+                must.append(models.Filter(should=venue_conditions))
         if year_min is not None:
             must.append(
                 models.FieldCondition(

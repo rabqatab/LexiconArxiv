@@ -99,6 +99,7 @@ async def research_topic_endpoint(request: ResearchRequest):
         storage=storage,
         limit=request.limit,
         year_min=request.year_min,
+        exclude_types=request.exclude_types,
     )
 
     # Convert trend counts_by_year keys to strings for the Pydantic model
