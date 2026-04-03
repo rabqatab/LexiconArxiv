@@ -130,6 +130,7 @@ class QdrantStorage:
                 f"and BM25 sparse vector"
             )
             self.ensure_venue_text_index()
+            self.ensure_stub_payload_index()
             return True
 
     def ensure_venue_text_index(self) -> None:
@@ -160,6 +161,18 @@ class QdrantStorage:
             logger.info("Created text index on 'venue' field")
         except Exception as e:
             logger.warning(f"Could not create venue text index (may already exist): {e}")
+
+    def ensure_stub_payload_index(self) -> None:
+        """Create a boolean index on is_stub for fast filtering."""
+        try:
+            self.client.create_payload_index(
+                collection_name=self.collection_name,
+                field_name="is_stub",
+                field_schema=models.PayloadSchemaType.BOOL,
+            )
+            logger.info("Created is_stub payload index")
+        except Exception:
+            pass  # Already exists
 
     def delete_collection(self) -> bool:
         """Delete the collection.
