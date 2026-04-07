@@ -47,7 +47,7 @@ class PaperReader:
             filter_conditions.append(
                 models.FieldCondition(
                     key="fetched_at",
-                    range=models.Range(gte=fetched_since),
+                    datetime_range=models.DatetimeRange(gte=fetched_since),
                 )
             )
 
@@ -161,7 +161,7 @@ class PaperReader:
             filter_conditions.append(
                 models.FieldCondition(
                     key="fetched_at",
-                    range=models.Range(gte=fetched_since),
+                    datetime_range=models.DatetimeRange(gte=fetched_since),
                 )
             )
 
