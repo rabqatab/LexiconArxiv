@@ -43,13 +43,9 @@ class PaperReader:
             )
         ]
 
-        if fetched_since:
-            filter_conditions.append(
-                models.FieldCondition(
-                    key="fetched_at",
-                    datetime_range=models.DatetimeRange(gte=fetched_since),
-                )
-            )
+        # Note: fetched_since is NOT applied server-side because qdrant-client 1.16
+        # Range model doesn't accept ISO date strings. The caller (S2 enricher)
+        # filters by fetched_at client-side instead.
 
         # Exclude stubs and optionally papers without DOI
         must_not_conditions = [
@@ -157,13 +153,9 @@ class PaperReader:
             ),
         ]
 
-        if fetched_since:
-            filter_conditions.append(
-                models.FieldCondition(
-                    key="fetched_at",
-                    datetime_range=models.DatetimeRange(gte=fetched_since),
-                )
-            )
+        # Note: fetched_since is NOT applied server-side because qdrant-client 1.16
+        # Range model doesn't accept ISO date strings. The caller (S2 enricher)
+        # filters by fetched_at client-side instead.
 
         # Optionally filter by venue
         if venues:

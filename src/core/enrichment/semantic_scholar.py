@@ -344,11 +344,20 @@ class SemanticScholarEnricher:
                 has_doi=True,
                 limit=self.batch_size,
                 offset=offset,
-                fetched_since=fetched_since,
             )
 
             if not papers:
                 break
+
+            # Client-side date filter (qdrant-client Range doesn't accept ISO strings)
+            if fetched_since:
+                papers = [(pid, p) for pid, p in papers
+                          if (p.get("fetched_at") or "") >= fetched_since]
+                if not papers:
+                    if next_offset is None:
+                        break
+                    offset = next_offset
+                    continue
 
             if dry_run:
                 progress.total_to_process += len(papers)
