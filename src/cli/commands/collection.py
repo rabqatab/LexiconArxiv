@@ -403,3 +403,132 @@ def register_commands(cli: click.Group):
 
         # Log timestamp for cron
         click.echo(f"Completed at: {datetime.datetime.now().isoformat()}")
+
+    @cli.command("dedup-cleanup")
+    @click.option("--dry-run", is_flag=True, help="Report duplicates without deleting")
+    @click.option("--collection", "-c", default=None, help="Qdrant collection name")
+    def dedup_cleanup(dry_run: bool, collection: str | None) -> None:
+        """Find and remove duplicate papers in the corpus.
+
+        Scrolls all non-stub papers, groups by DOI (or OpenAlex ID if no
+        DOI), and for each duplicate group keeps the paper with the richest
+        data (has abstract, keywords, vectors) and deletes the rest.
+
+        Examples:
+
+          # Preview duplicates
+          python -m src.cli.core_collect dedup-cleanup --dry-run
+
+          # Remove duplicates
+          python -m src.cli.core_collect dedup-cleanup
+        """
+        from collections import defaultdict
+        from qdrant_client.http import models
+
+        storage = QdrantStorage(collection_name=collection) if collection else QdrantStorage()
+
+        click.echo("\n=== Duplicate Cleanup ===\n")
+        click.echo("Scanning all non-stub papers...")
+
+        # ---- 1. Scroll all non-stub papers and group by identifier ----
+        doi_groups: dict[str, list[tuple[str, dict]]] = defaultdict(list)
+        oa_groups: dict[str, list[tuple[str, dict]]] = defaultdict(list)
+
+        offset = None
+        scanned = 0
+        while True:
+            results, next_offset = storage.client.scroll(
+                collection_name=storage.collection_name,
+                scroll_filter=models.Filter(
+                    must_not=[
+                        models.FieldCondition(
+                            key="is_stub",
+                            match=models.MatchValue(value=True),
+                        ),
+                    ]
+                ),
+                limit=1000,
+                offset=offset,
+                with_payload=True,
+            )
+            if not results:
+                break
+            for point in results:
+                pid = str(point.id)
+                payload = point.payload or {}
+                doi = payload.get("doi")
+                oa_id = payload.get("openalex_id")
+                if doi:
+                    doi_groups[doi.lower()].append((pid, payload))
+                elif oa_id:
+                    oa_groups[oa_id].append((pid, payload))
+                scanned += 1
+            if next_offset is None:
+                break
+            offset = next_offset
+
+        click.echo(f"Scanned {scanned:,} non-stub papers")
+
+        # ---- 2. Identify duplicates ----
+        def _richness_score(payload: dict) -> int:
+            """Higher score = more data-rich paper (preferred to keep)."""
+            score = 0
+            abstract = payload.get("abstract") or ""
+            if abstract and abstract.strip():
+                score += 4
+            if payload.get("abstract_structure"):
+                score += 3
+            if payload.get("keywords"):
+                score += 2
+            if payload.get("code_repos"):
+                score += 1
+            # Prefer longer abstracts as a tiebreak
+            score += min(len(abstract) // 200, 3)
+            return score
+
+        ids_to_delete: list[str] = []
+        dup_group_count = 0
+
+        for label, groups in [("DOI", doi_groups), ("OpenAlex ID", oa_groups)]:
+            for key, members in groups.items():
+                if len(members) <= 1:
+                    continue
+                dup_group_count += 1
+                # Sort by richness descending; keep first (richest)
+                members.sort(key=lambda m: _richness_score(m[1]), reverse=True)
+                keeper_id, keeper_payload = members[0]
+                duplicates = members[1:]
+
+                if dry_run:
+                    click.echo(
+                        f"  [{label}] {key}: {len(members)} copies — "
+                        f"keeping {keeper_id} "
+                        f"(score={_richness_score(keeper_payload)}), "
+                        f"would delete {len(duplicates)}"
+                    )
+
+                for dup_id, _ in duplicates:
+                    ids_to_delete.append(dup_id)
+
+        click.echo(f"\nDuplicate groups: {dup_group_count:,}")
+        click.echo(f"Papers to {'delete' if not dry_run else 'remove (dry-run)'}: {len(ids_to_delete):,}")
+
+        # ---- 3. Delete duplicates ----
+        if ids_to_delete and not dry_run:
+            # Delete in batches
+            batch_size = 500
+            deleted = 0
+            for i in range(0, len(ids_to_delete), batch_size):
+                batch = ids_to_delete[i : i + batch_size]
+                storage.client.delete(
+                    collection_name=storage.collection_name,
+                    points_selector=models.PointIdsList(points=batch),
+                )
+                deleted += len(batch)
+                click.echo(f"  Deleted {deleted:,} / {len(ids_to_delete):,}")
+
+            click.echo(f"\nRemoved {deleted:,} duplicate papers")
+        elif not ids_to_delete:
+            click.echo("\nNo duplicates found!")
+        else:
+            click.echo("\nDry run complete. Re-run without --dry-run to delete.")

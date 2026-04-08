@@ -77,7 +77,7 @@ class CoreCorpusCollector:
             self._key_manager = OpenAlexKeyManager.from_env()
 
         self.timeout = timeout
-        self.deduplicator = deduplicator or Deduplicator()
+        self.deduplicator = deduplicator or Deduplicator(storage=self.storage)
         self._client: httpx.AsyncClient | None = None
 
     async def __aenter__(self) -> "CoreCorpusCollector":

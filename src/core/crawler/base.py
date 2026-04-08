@@ -59,7 +59,7 @@ class BaseCrawler(ABC):
         self.checkpoint_manager = checkpoint_manager or CheckpointManager(
             checkpoint_name=checkpoint_name or self.__class__.__name__.lower()
         )
-        self.deduplicator = deduplicator or Deduplicator()
+        self.deduplicator = deduplicator or Deduplicator(storage=self.storage)
         self.timeout = timeout if timeout is not None else self.DEFAULT_TIMEOUT
         self._client: httpx.AsyncClient | None = None
 

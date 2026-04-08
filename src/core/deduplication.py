@@ -4,11 +4,17 @@ Provides DOI exact match and Title+Year fuzzy matching for deduplication.
 Supports cross-source deduplication when merging papers from multiple sources.
 """
 
+from __future__ import annotations
+
 import logging
 import re
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from src.models.paper import RawPaper, SourceType
+
+if TYPE_CHECKING:
+    from src.core.storage import QdrantStorage
 
 logger = logging.getLogger(__name__)
 
@@ -44,14 +50,85 @@ class Deduplicator:
     Uses a combination of exact matching (DOI, OpenAlex ID, ACL ID) and
     fuzzy matching (normalized title + year) to detect duplicates.
     Supports cross-source deduplication with source priority.
+
+    When ``storage`` is provided, the deduplicator pre-loads existing DOIs
+    and OpenAlex IDs from Qdrant so that incremental runs do not re-insert
+    papers that are already in the database.
     """
 
-    def __init__(self):
-        """Initialize deduplicator with empty seen sets."""
+    def __init__(self, storage: "QdrantStorage | None" = None):
+        """Initialize deduplicator with empty seen sets.
+
+        Args:
+            storage: Optional QdrantStorage instance.  When provided the
+                deduplicator will pre-load existing identifiers from
+                Qdrant so that already-stored papers are treated as
+                duplicates.  Pass ``None`` (the default) for a purely
+                in-memory deduplicator with no pre-loading.
+        """
         self._seen_dois: dict[str, tuple[str, SourceType]] = {}  # doi -> (id, source)
         self._seen_openalex_ids: set[str] = set()
         self._seen_acl_ids: set[str] = set()
         self._seen_title_years: dict[str, tuple[str, SourceType]] = {}  # key -> (id, source)
+
+        if storage is not None:
+            self._preload_from_qdrant(storage)
+
+    # ------------------------------------------------------------------
+    # Qdrant pre-loading
+    # ------------------------------------------------------------------
+
+    def _preload_from_qdrant(self, storage: "QdrantStorage") -> None:
+        """Pre-load existing DOIs and OpenAlex IDs from Qdrant for dedup.
+
+        Scrolls all non-stub papers and populates ``_seen_dois`` and
+        ``_seen_openalex_ids`` so that the in-memory duplicate check
+        covers papers already persisted in the database.
+        """
+        from qdrant_client import models as qmodels
+
+        logger.info("Pre-loading existing paper identifiers from Qdrant for dedup...")
+
+        offset = None
+        count = 0
+        while True:
+            results, next_offset = storage.client.scroll(
+                collection_name=storage.collection_name,
+                scroll_filter=qmodels.Filter(
+                    must_not=[
+                        qmodels.FieldCondition(
+                            key="is_stub",
+                            match=qmodels.MatchValue(value=True),
+                        ),
+                    ]
+                ),
+                limit=1000,
+                offset=offset,
+                with_payload=["doi", "openalex_id", "source_id"],
+            )
+            if not results:
+                break
+            for point in results:
+                p = point.payload or {}
+                doi = p.get("doi")
+                oa_id = p.get("openalex_id")
+                if doi:
+                    self._seen_dois[doi.lower()] = (
+                        str(point.id),
+                        SourceType.OPENALEX,
+                    )
+                if oa_id:
+                    self._seen_openalex_ids.add(oa_id)
+                count += 1
+            if next_offset is None:
+                break
+            offset = next_offset
+
+        logger.info(
+            f"Pre-loaded {len(self._seen_dois):,} DOIs and "
+            f"{len(self._seen_openalex_ids):,} OpenAlex IDs from "
+            f"{count:,} papers"
+        )
 
     @staticmethod
     def normalize_title(title: str) -> str:

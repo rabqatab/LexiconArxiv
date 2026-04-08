@@ -439,7 +439,8 @@ def register_commands(cli: click.Group):
                 click.echo(f"Using Qdrant collection: {storage.collection_name}")
 
             # Create shared deduplicator for cross-source deduplication
-            shared_deduplicator = Deduplicator()
+            # Pass storage so existing Qdrant papers are pre-loaded
+            shared_deduplicator = Deduplicator(storage=storage)
             click.echo("Using shared deduplicator for cross-source deduplication")
 
             results: dict[str, int | list] = {}
