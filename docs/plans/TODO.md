@@ -7,7 +7,7 @@ Tracked enhancement backlog. Items are grouped by priority and area.
 ## High Priority
 
 ### Critical Data Quality
-- [ ] **Deduplicator doesn't check Qdrant** — The in-memory `Deduplicator` only deduplicates within a single collection run. Incremental runs re-add papers already in the corpus (e.g., 4,919 AAAI papers added twice, inflating 153K to 159K). Fix: check `storage.queries.exists_by_doi()` or `exists_by_openalex_id()` before inserting. Then deduplicate existing duplicates in v3.
+- [x] **Deduplicator doesn't check Qdrant** — The in-memory `Deduplicator` only deduplicates within a single collection run. Incremental runs re-add papers already in the corpus (e.g., 4,919 AAAI papers added twice, inflating 153K to 159K). Fix: check `storage.queries.exists_by_doi()` or `exists_by_openalex_id()` before inserting. Then deduplicate existing duplicates in v3.
 
 ### Stub Enrichment & Corpus Gaps
 - [ ] **Enrich high-value stubs** — 23,960 stubs cited by 20+ core papers have zero metadata (no title, abstract, authors). Enrich via OpenAlex by identifier (DOI/arXiv/OpenAlex ID). Target: top 25K stubs.
