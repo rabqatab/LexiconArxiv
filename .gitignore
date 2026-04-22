@@ -49,6 +49,7 @@ data/
 *.log
 logs/*
 !logs/.gitkeep
+logs_outdated/
 
 # Test & Coverage
 .pytest_cache/

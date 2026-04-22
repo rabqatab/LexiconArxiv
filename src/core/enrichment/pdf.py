@@ -26,6 +26,7 @@ from xml.etree import ElementTree as ET
 
 import httpx
 
+from src.core.enrichment.acm_browser import ACMBrowserDownloader, is_acm_doi
 from src.core.storage import QdrantStorage
 
 logger = logging.getLogger(__name__)
@@ -110,6 +111,11 @@ class PDFReferenceExtractor:
         self.checkpoint_file = self.checkpoint_dir / "pdf_extraction.json"
         self._client: httpx.AsyncClient | None = None
         self._semaphore: asyncio.Semaphore | None = None
+        # ACM browser downloader — lazy-initialized on first ACM DOI.
+        # Shared across all downloads so one Cloudflare clearance pass is
+        # amortized over the whole run.
+        self._acm_dl: ACMBrowserDownloader | None = None
+        self._acm_init_lock = asyncio.Lock()
 
     async def __aenter__(self) -> "PDFReferenceExtractor":
         """Enter async context."""
@@ -139,15 +145,50 @@ class PDFReferenceExtractor:
 
     async def __aexit__(self, *args) -> None:
         """Exit async context."""
+        if self._acm_dl is not None:
+            await self._acm_dl.__aexit__(None, None, None)
+            self._acm_dl = None
         if self._client:
             await self._client.aclose()
+
+    @staticmethod
+    def _extract_acm_doi(url: str) -> str | None:
+        """Extract the ACM DOI from any URL that contains an ACM DOI.
+
+        Handles:
+          - dl.acm.org/doi/pdf/10.1145/...
+          - dl.acm.org/doi/10.1145/...
+          - doi.org/10.1145/...  (DOI resolver redirect — also ACM)
+        """
+        marker = "10.1145/"
+        idx = url.find(marker)
+        if idx == -1:
+            return None
+        doi = url[idx:].split("?", 1)[0].split("#", 1)[0].rstrip("/")
+        return doi if is_acm_doi(doi) else None
+
+    async def _get_acm_downloader(self) -> ACMBrowserDownloader:
+        """Lazy-initialize the shared ACM browser downloader (thread-safe)."""
+        if self._acm_dl is not None:
+            return self._acm_dl
+        async with self._acm_init_lock:
+            if self._acm_dl is None:
+                dl = ACMBrowserDownloader()
+                await dl.__aenter__()
+                self._acm_dl = dl
+                logger.info("ACM browser downloader initialized (stealth Chromium, CPU-only)")
+        return self._acm_dl
 
     async def download_pdf(self, url: str, max_retries: int = 3) -> bytes | None:
         """Download PDF from URL with retry logic.
 
+        Routes ACM URLs (dl.acm.org) through a headless browser with stealth
+        mode, since Cloudflare blocks anonymous httpx requests. All other URLs
+        use the fast httpx path.
+
         Args:
             url: PDF URL.
-            max_retries: Maximum retry attempts for transient errors.
+            max_retries: Maximum retry attempts for transient errors (httpx path only).
 
         Returns:
             PDF bytes or None if failed.
@@ -155,6 +196,13 @@ class PDFReferenceExtractor:
         if not self._client:
             raise RuntimeError("Client not initialized.")
 
+        # ACM DL — route through stealth browser downloader.
+        acm_doi = self._extract_acm_doi(url)
+        if acm_doi is not None:
+            dl = await self._get_acm_downloader()
+            return await dl.download_pdf(acm_doi)
+
+        # All other hosts — existing httpx fast path.
         for attempt in range(max_retries):
             try:
                 response = await self._client.get(
@@ -369,6 +417,7 @@ class PDFReferenceExtractor:
         dry_run: bool = False,
         limit: int | None = None,
         venues: list[str] | None = None,
+        doi_prefix: str | None = None,
     ) -> PDFExtractionProgress:
         """Extract references from PDFs for papers missing citation data.
 
@@ -376,6 +425,7 @@ class PDFReferenceExtractor:
             dry_run: Only count papers without processing.
             limit: Maximum papers to process.
             venues: Filter by venue names.
+            doi_prefix: Only process papers whose DOI starts with this prefix.
 
         Returns:
             PDFExtractionProgress with statistics.
@@ -391,6 +441,7 @@ class PDFReferenceExtractor:
                 limit=self.batch_size,
                 offset=offset,
                 venues=venues,
+                doi_prefix=doi_prefix,
             )
 
             if not papers:
@@ -732,6 +783,7 @@ class PDFReferenceExtractor:
         limit: int,
         offset: str | None,
         venues: list[str] | None = None,
+        doi_prefix: str | None = None,
     ) -> tuple[list[tuple[str, dict]], str | None]:
         """Get papers with PDF URLs that are missing references.
 
@@ -745,10 +797,13 @@ class PDFReferenceExtractor:
             ),
         ]
 
-        # Exclude papers without pdf_url
+        # Exclude papers without pdf_url and exclude stubs
         must_not_conditions = [
             models.IsNullCondition(
                 is_null=models.PayloadField(key="pdf_url"),
+            ),
+            models.FieldCondition(
+                key="is_stub", match=models.MatchValue(value=True),
             ),
         ]
 
@@ -757,6 +812,14 @@ class PDFReferenceExtractor:
                 models.FieldCondition(
                     key="venue",
                     match=models.MatchAny(any=venues),
+                )
+            )
+
+        if doi_prefix:
+            filter_conditions.append(
+                models.FieldCondition(
+                    key="doi",
+                    match=models.MatchText(text=doi_prefix),
                 )
             )
 

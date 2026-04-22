@@ -325,7 +325,7 @@ uv run python -m src.cli.core_collect enrich-8-metadata-by-stub-via-openalex --d
 
 ### enrich-5-refs-by-pdf-via-grobid
 
-Extract references from PDFs using GROBID.
+Extract references from PDFs using GROBID. ACM papers (`10.1145/` DOIs) are automatically downloaded via a stealth headless browser that clears Cloudflare's JS challenge; all other publishers use the fast httpx path.
 
 ```bash
 # Start GROBID first
@@ -336,7 +336,22 @@ uv run python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid --dry-run
 
 # Run
 uv run python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid --parallel 2
+
+# ACM only (stealth browser, retry previous failures)
+uv run python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid \
+    --doi-prefix 10.1145/ --parallel 5 --retry-incomplete
 ```
+
+| Option | Description |
+|--------|-------------|
+| `--dry-run` | Count papers without extracting |
+| `--limit N` | Max papers to process |
+| `--batch-size N` | Papers per batch (default 50) |
+| `--parallel N` | Concurrent extractions (default 20; use 5 for ACM) |
+| `--venue TEXT` | Filter by venue name |
+| `--doi-prefix TEXT` | Filter by DOI prefix (e.g. `10.1145/` for ACM) |
+| `--retry-incomplete` | Clear checkpoint, re-process papers still missing refs |
+| `--grobid-url URL` | GROBID server URL (default `http://localhost:8070`) |
 
 ### enrich-10-code-repos
 

@@ -97,3 +97,9 @@ Tracked enhancement backlog. Items are grouped by priority and area.
 - [x] Title included in BM25 + dense vectors
 - [x] Critical incremental update fixes (HasVectorCondition, partial chunk recovery)
 - [x] First incremental crawling-preprocessing loop (152K core papers)
+- [x] DBLP 5xx retry with exponential backoff (transient server errors previously dropped silently)
+- [x] ACM DL stealth browser PDF downloader (Playwright/Crawl4AI, CPU-only, bypasses Cloudflare for primary ACM venues: KDD, SIGIR, WWW, RecSys, CIKM, WSDM)
+- [x] `--doi-prefix` filter and `--retry-incomplete` flag for enrich-5 CLI
+- [x] ACM pdf_url backfill for DBLP-sourced papers + orchestrator script
+- [x] `sentence-transformers` dependency added for cross-encoder reranking
+- [x] Plan doc drift fix (reranker model 8B→0.6B, Ollama→sentence-transformers)

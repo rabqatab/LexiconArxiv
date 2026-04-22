@@ -56,7 +56,8 @@ src/core/enrichment/
 ├── crossref.py            # CrossRef enricher
 ├── semantic_scholar.py    # Semantic Scholar enricher
 ├── stub.py                # Stub paper enricher
-├── pdf.py                 # PDF reference extraction via GROBID
+├── pdf.py                 # PDF reference extraction via GROBID (routes ACM to browser)
+├── acm_browser.py         # ACM DL stealth browser downloader (Playwright/Crawl4AI)
 ├── code_repos.py          # Code repo enrichment (PWC/HuggingFace)
 ├── grobid_code_repos.py   # GitHub URL extraction from PDFs via GROBID
 └── github_search.py       # GitHub API search for code repositories
@@ -342,13 +343,19 @@ Features:
 
 ### Overview
 
-Extract references from PDFs using GROBID for papers where API-based enrichment fails.
+Extract references from PDFs using GROBID for papers where API-based enrichment fails. For ACM papers (`doi` prefix `10.1145/`), PDFs are downloaded via a stealth headless Chromium browser that clears Cloudflare's JS challenge. All other publishers use the fast httpx path.
 
 ### Prerequisites
 
 Start GROBID server:
 ```bash
 docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.0
+```
+
+Chromium for ACM downloads (installed once via `crawl4ai`):
+```bash
+uv run crawl4ai-setup
+# Or manually: uv run python -m playwright install chromium
 ```
 
 ### Usage
@@ -359,11 +366,56 @@ uv run python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid --dry-run
 
 # Run (low concurrency recommended)
 uv run python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid --parallel 2
+
+# ACM only (stealth browser, doi-scoped, retry previous failures)
+uv run python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid \
+    --doi-prefix 10.1145/ --parallel 5 --retry-incomplete
+
+# Or use the ACM orchestrator script (backfills pdf_url + runs extraction):
+./scripts/enrichment/enrich_acm_pdfs.sh              # full run
+./scripts/enrichment/enrich_acm_pdfs.sh --dry-run    # preview
+./scripts/enrichment/enrich_acm_pdfs.sh --limit 50   # smoke test
 ```
+
+### ACM PDF Download Architecture
+
+ACM DL (dl.acm.org) is behind Cloudflare bot protection; anonymous httpx requests get 403. The pipeline routes ACM DOIs through a stealth Chromium browser:
+
+```
+download_pdf(url)
+  ├── url contains "10.1145/" ?
+  │     → ACMBrowserDownloader (stealth Chromium, CPU-only, no GPU)
+  │       ├── Clears Cloudflare JS challenge once per session
+  │       ├── Reuses cf_clearance cookie for subsequent requests
+  │       ├── Rate-limited to 1 req / 2s (internal asyncio.Lock)
+  │       └── Validates %PDF magic bytes before returning
+  └── else
+        → httpx fast path (existing behavior)
+```
+
+For ACM papers collected via DBLP (metadata-only, no `pdf_url`), the `backfill_acm_pdf_urls.py` script synthesizes the URL deterministically:
+```
+pdf_url = https://dl.acm.org/doi/pdf/{doi}
+```
+
+### CLI Options
+
+| Option | Description |
+|--------|-------------|
+| `--dry-run` | Count papers without extracting |
+| `--limit N` | Max papers to process |
+| `--batch-size N` | Papers per batch (default 50) |
+| `--parallel N` | Concurrent extractions (default 20; use 5 for ACM) |
+| `--venue TEXT` | Filter by venue name |
+| `--doi-prefix TEXT` | Filter by DOI prefix (e.g. `10.1145/` for ACM) |
+| `--retry-incomplete` | Clear checkpoint, re-process papers still missing refs |
+| `--grobid-url URL` | GROBID server URL (default `http://localhost:8070`) |
 
 ### Implementation
 
-Module: `src/core/enrichment/pdf.py`
+Modules:
+- `src/core/enrichment/pdf.py` — PDF extraction pipeline with ACM routing
+- `src/core/enrichment/acm_browser.py` — Stealth Chromium downloader (Playwright)
 
 ---
 

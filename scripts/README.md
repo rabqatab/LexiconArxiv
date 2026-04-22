@@ -49,6 +49,8 @@ scripts/
 │   ├── enrich_by_title.sh            # Step 3.3: Title-based lookup
 │   ├── enrich_abstracts.sh           # Step 3.4: Abstract enrichment
 │   ├── enrich_pdf.sh                 # Step 3.5: PDF/GROBID refs + abstracts
+│   ├── enrich_acm_pdfs.sh            # Step 3.5a: ACM-specific PDF extraction (stealth browser)
+│   ├── backfill_acm_pdf_urls.py      # Helper: synthesize pdf_url for DBLP-sourced ACM papers
 │   ├── resolve_title_refs.sh         # Step 3.6: Resolve TITLE:xxx refs via OpenAlex
 │   └── enrich_stubs.sh               # Step 3.7: Stub paper metadata
 │
@@ -217,12 +219,21 @@ Options:
 | `enrich_by_title.sh` | 3.3 | Enrich papers WITHOUT DOIs via title search |
 | `enrich_abstracts.sh` | 3.4 | Fill missing abstracts via OpenAlex |
 | `enrich_pdf.sh` | 3.5 | Extract refs + abstracts from PDFs via GROBID (fallback) |
+| `enrich_acm_pdfs.sh` | 3.5a | ACM-specific PDF extraction via stealth browser |
 | `resolve_title_refs.sh` | 3.6 | Resolve TITLE:xxx refs to DOI/OpenAlex IDs |
 | `enrich_stubs.sh` | 3.7 | Fetch metadata for stub papers (optional) |
 
 **Example**: Only enrich abstracts:
 ```bash
 ./scripts/enrichment/run_enrichment.sh --abstracts-only
+```
+
+**Example**: ACM PDF extraction (KDD, SIGIR, WWW, RecSys, CIKM, WSDM):
+```bash
+# Backfills pdf_url for DBLP-sourced ACM papers, then extracts refs via stealth browser
+./scripts/enrichment/enrich_acm_pdfs.sh --dry-run    # preview
+./scripts/enrichment/enrich_acm_pdfs.sh               # full run (~1-2h)
+./scripts/enrichment/enrich_acm_pdfs.sh --limit 50    # smoke test
 ```
 
 **Note**: Step 3.7 (stubs) is expensive (~187K papers) and not included by default.

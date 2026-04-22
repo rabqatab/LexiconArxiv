@@ -255,7 +255,7 @@ def register_commands(cli: click.Group):
     @click.option("--checkpoint", type=str,
                   default="data/core/checkpoints/title_citations_enrichment.json",
                   help="Path to title enrichment checkpoint")
-    def audit_title_matches(dry_run: bool, checkpoint: str) -> None:
+    def reset_title_enriched(dry_run: bool, checkpoint: str) -> None:
         """Reset all title-enriched papers so they can be re-matched with stricter logic.
 
         Finds all papers that received DOIs from title-based enrichment

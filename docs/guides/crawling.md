@@ -144,14 +144,18 @@ uv run python -m src.cli.core_collect list-acl-venues
 
 | Feature | Details |
 |---------|---------|
-| Coverage | 6 venues |
+| Coverage | 9 venues (6 ACM + 2 IR + 1 Legal) |
 | Metadata | Authors, venue, year (NO abstracts) |
 | Rate Limit | 1 req/sec (polite) |
+| Retry | Auto-retries on 5xx with exponential backoff (1s → 2s → 4s → 8s, max 4 attempts) |
 | Papers | ~5,000 (2020-present) |
 
 **Venues:**
+- **Tier 0:** KDD, SIGIR, WWW
 - **Tier 1:** RecSys, ECIR, CIKM, WSDM
 - **Tier 2:** ICAIL, JURIX
+
+> **Note:** DBLP's search API sometimes returns transient HTTP 500 errors under load. The collector retries these automatically — no manual intervention needed.
 
 ```bash
 # List DBLP venues

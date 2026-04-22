@@ -30,6 +30,8 @@ dependencies = [
     "cachetools>=7.0.5",
     "umap-learn>=0.5.11",
     "scikit-learn>=1.8.0",
+    "sentence-transformers>=5.2.2",
+    "crawl4ai>=0.8.6",
 ]
 
 [project.optional-dependencies]

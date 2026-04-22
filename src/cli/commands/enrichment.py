@@ -474,14 +474,20 @@ def register_commands(cli: click.Group):
     @click.option("--batch-size", type=int, default=50, help="Papers per batch")
     @click.option("--parallel", "-p", type=int, default=20, help="Concurrent extractions")
     @click.option("--venue", "-v", multiple=True, help="Filter by venue")
+    @click.option("--doi-prefix", type=str, default=None,
+                  help="Only process papers whose DOI starts with this prefix (e.g. 10.1145/)")
     @click.option("--grobid-url", type=str, help="GROBID server URL (default: http://localhost:8070)")
+    @click.option("--retry-incomplete", is_flag=True,
+                  help="Clear checkpoint and re-process all papers still missing references")
     def enrich_5_refs_by_pdf_via_grobid(
         dry_run: bool,
         limit: int | None,
         batch_size: int,
         parallel: int,
         venue: tuple[str, ...],
+        doi_prefix: str | None,
         grobid_url: str | None,
+        retry_incomplete: bool,
     ) -> None:
         """Extract references from PDFs using GROBID.
 
@@ -490,6 +496,10 @@ def register_commands(cli: click.Group):
 
         GROBID must be running:
           docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.0
+
+        For ACM DOIs (10.1145/*), downloads are automatically routed through a
+        stealth headless Chromium that clears Cloudflare's JS challenge. Other
+        DOIs use the fast httpx path.
 
         Examples:
 
@@ -501,6 +511,10 @@ def register_commands(cli: click.Group):
 
           # Target specific venues
           python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid -v "NeurIPS 2024 poster"
+
+          # ACM only (routed through stealth browser)
+          python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid \\
+              --doi-prefix 10.1145/ --parallel 5
         """
         from src.core.enrichment.pdf import PDFReferenceExtractor
 
@@ -514,10 +528,14 @@ def register_commands(cli: click.Group):
                 batch_size=batch_size,
                 max_concurrent=parallel,
             ) as extractor:
+                if retry_incomplete:
+                    extractor.clear_checkpoint()
+                    click.echo("Checkpoint cleared — retrying papers still missing references.")
                 progress = await extractor.enrich_from_pdfs(
                     dry_run=dry_run,
                     limit=limit,
                     venues=venues_list,
+                    doi_prefix=doi_prefix,
                 )
 
                 click.echo(f"\nPDF Reference Extraction Results:")

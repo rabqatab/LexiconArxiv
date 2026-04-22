@@ -1,5 +1,7 @@
 # Advanced Retrieval Pipeline — Implementation Plan
 
+> **Status:** Shipped in commit `7e88ee3`. This document is preserved as the design record, but **implementation details below have drifted** — in particular the reranker is `tomaarsen/Qwen3-Reranker-0.6B-seq-cls` via `sentence_transformers.CrossEncoder` (sync), **not** `dengcao/Qwen3-Reranker-8B` via Ollama as originally planned. See `src/core/search/reranker.py` for the shipped implementation.
+
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Transform the search service into a configurable multi-stage retrieval pipeline where each technique can be toggled on/off via API parameters and server-side defaults.
@@ -46,7 +48,7 @@ class RetrievalConfig:
 
     # Stage 4: Reranking
     reranker: bool = False            # Cross-encoder reranking (adds ~200-500ms)
-    reranker_model: str = "dengcao/Qwen3-Reranker-8B"
+    reranker_model: str = "tomaarsen/Qwen3-Reranker-0.6B-seq-cls"
     rerank_top_k: int = 50           # Retrieve this many, rerank to limit
 
     # Stage 5: Post-processing
@@ -98,7 +100,7 @@ If `retrieval` is omitted, server defaults apply. This lets the UI expose toggle
         },
         "vectors_searched": ["structured-abstract", "section-method", "section-task", "bm25"],
         "reranked": true,
-        "rerank_model": "Qwen3-Reranker-8B"
+        "rerank_model": "Qwen3-Reranker-0.6B"
     }
 }
 ```
@@ -111,7 +113,7 @@ If `retrieval` is omitted, server defaults apply. This lets the UI expose toggle
 |--------|------|---------------|
 | Create | `src/core/search/config.py` | RetrievalConfig dataclass + defaults |
 | Create | `src/core/search/query_analyzer.py` | Stage 1: intent detection, HyDE, RAG-Fusion, decomposition |
-| Create | `src/core/search/reranker.py` | Stage 4: cross-encoder reranking via Ollama |
+| Create | `src/core/search/reranker.py` | Stage 4: cross-encoder reranking via sentence-transformers |
 | Create | `src/core/search/postprocess.py` | Stage 5: citation boost, MMR, venue normalization |
 | Rewrite | `src/core/search/service.py` | Pipeline orchestrator using config + stages |
 | Modify | `src/api/models/search.py` | Add RetrievalOptions to SearchRequest, pipeline info to response |
@@ -148,7 +150,7 @@ class RetrievalConfig:
 
     # Stage 4: Reranking
     reranker: bool = False
-    reranker_model: str = "dengcao/Qwen3-Reranker-8B"
+    reranker_model: str = "tomaarsen/Qwen3-Reranker-0.6B-seq-cls"
     rerank_top_k: int = 50
 
     # Stage 5: Post-processing
@@ -261,6 +263,8 @@ This is the simplest high-impact change — Qdrant's `query_points` already supp
 ## Task 4: Cross-Encoder Reranker (Stage 4)
 
 **Files:** `src/core/search/reranker.py`
+
+> **As shipped (diverges from sketch below):** The implementation is a synchronous `Reranker` class wrapping `sentence_transformers.CrossEncoder` with `tomaarsen/Qwen3-Reranker-0.6B-seq-cls`. Model is lazy-loaded on first call via `load()`. See the actual source for the authoritative API.
 
 ```python
 class CrossEncoderReranker:

@@ -14,6 +14,8 @@ import logging
 import re
 from typing import TYPE_CHECKING, Any, AsyncIterator
 
+import httpx
+
 from src.core.checkpoint import CheckpointManager
 from src.core.crawler.base import BaseCrawler
 from src.core.deduplication import Deduplicator
@@ -309,25 +311,56 @@ class DBLPCollector(BaseCrawler):
             "f": offset,
         }
 
-        try:
-            response = await self.client.get(DBLP_SEARCH_URL, params=params)
-            response.raise_for_status()
-            data = response.json()
+        max_retries = 4
+        for attempt in range(max_retries):
+            try:
+                response = await self.client.get(DBLP_SEARCH_URL, params=params)
 
-            result = data.get("result", {})
-            hits_data = result.get("hits", {})
-            total = int(hits_data.get("@total", 0))
+                # Retry on 5xx (DBLP server errors are common under load)
+                if 500 <= response.status_code < 600:
+                    if attempt < max_retries - 1:
+                        wait = min(2 ** attempt, 30)
+                        logger.warning(
+                            f"DBLP {response.status_code} for {venue} (attempt {attempt + 1}/{max_retries}), "
+                            f"retrying in {wait}s..."
+                        )
+                        await asyncio.sleep(wait)
+                        continue
+                    logger.error(
+                        f"DBLP search failed for {venue} after {max_retries} attempts: "
+                        f"{response.status_code}"
+                    )
+                    return [], 0
 
-            # Get hit list
-            hit_list = hits_data.get("hit", [])
-            if isinstance(hit_list, dict):
-                hit_list = [hit_list]
+                response.raise_for_status()
+                data = response.json()
 
-            return hit_list, total
+                result = data.get("result", {})
+                hits_data = result.get("hits", {})
+                total = int(hits_data.get("@total", 0))
 
-        except Exception as e:
-            logger.error(f"DBLP search failed: {e}")
-            return [], 0
+                hit_list = hits_data.get("hit", [])
+                if isinstance(hit_list, dict):
+                    hit_list = [hit_list]
+
+                return hit_list, total
+
+            except (httpx.TimeoutException, httpx.ConnectError, httpx.ReadError) as e:
+                if attempt < max_retries - 1:
+                    wait = min(2 ** attempt, 30)
+                    logger.warning(
+                        f"DBLP transient error for {venue} (attempt {attempt + 1}/{max_retries}): "
+                        f"{type(e).__name__}, retrying in {wait}s..."
+                    )
+                    await asyncio.sleep(wait)
+                    continue
+                logger.error(f"DBLP search failed for {venue} after {max_retries} attempts: {e}")
+                return [], 0
+            except Exception as e:
+                logger.error(f"DBLP search failed for {venue}: {e}")
+                return [], 0
+
+        return [], 0
 
     async def collect_venue(
         self,

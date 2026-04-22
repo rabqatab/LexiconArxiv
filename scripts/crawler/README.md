@@ -215,7 +215,7 @@ Crawler implementations are in `src/core/crawler/`:
 | `acl_anthology.py` | ACL Anthology XML collector (NLP conferences + workshops) |
 | `openreview.py` | OpenReview API collector (ICLR, NeurIPS, ICML) |
 | `acm_open.py` | ACM Digital Library collector (KDD, SIGIR, WWW) |
-| `dblp.py` | DBLP Search API collector (IR/Legal venues) |
+| `dblp.py` | DBLP Search API collector (IR/Legal venues, auto-retries 5xx) |
 | `aaai_ojs.py` | AAAI OJS collector (AAAI 2020-2023) |
 
 ## See Also

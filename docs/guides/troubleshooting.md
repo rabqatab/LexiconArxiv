@@ -225,6 +225,40 @@ docker run -d --rm --name grobid -p 8070:8070 grobid-arm64
 
 See `docker/grobid-arm64/grobid_arm64_troubleshooting.md` for details.
 
+### ACM PDF Download Failures (403 / Cloudflare)
+
+**Symptoms:**
+```
+Error downloading https://doi.org/10.1145/...: Client error '403 Forbidden'
+```
+
+**Cause:** ACM Digital Library is behind Cloudflare bot protection. Anonymous httpx requests are blocked.
+
+**Solution:** The pipeline automatically routes ACM DOIs (`10.1145/...`) through a stealth headless Chromium browser. Ensure Chromium is installed:
+
+```bash
+uv run crawl4ai-setup
+# Or: uv run python -m playwright install chromium
+```
+
+If the browser can't start (missing Chromium binary), re-run setup. If Cloudflare starts blocking the stealth browser (evolving detection), the download will fail gracefully and return None — no pipeline crash.
+
+For ACM-specific re-extraction:
+```bash
+./scripts/enrichment/enrich_acm_pdfs.sh --dry-run
+```
+
+### DBLP HTTP 500 Errors
+
+**Symptoms:**
+```
+DBLP search failed for kdd after 4 attempts: 500
+```
+
+**Cause:** DBLP's search API returns transient 500s under load.
+
+**Solution:** Automatic — the collector retries with exponential backoff (1s → 8s, 4 attempts). If all retries fail, the venue is skipped and other venues continue. Re-running the incremental will pick up the failed venue.
+
 ---
 
 ## Data Quality Issues
