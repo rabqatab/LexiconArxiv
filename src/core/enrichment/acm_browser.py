@@ -72,6 +72,23 @@ def is_acm_doi(doi: str | None) -> bool:
     return doi.lower().lstrip("doi:").strip().startswith("10.1145/")
 
 
+def is_acm_paper_doi(doi: str | None) -> bool:
+    """True if the DOI is an ACM paper-level DOI (has a single PDF).
+
+    ACM convention: `10.1145/<proc-id>.<paper-id>` is a paper, while
+    `10.1145/<proc-id>` (no `.` in suffix) is a proceedings/journal-level
+    DOI without a single-paper PDF. Hitting `/doi/pdf/` on a journal DOI
+    redirects to /doi/abs/ instead of triggering a download — and that
+    pattern flags the browser session to Cloudflare for the rest of its
+    lifetime, poisoning subsequent paper requests too. Filter these out
+    upstream so we never poke them.
+    """
+    if not is_acm_doi(doi):
+        return False
+    suffix = doi.lower().lstrip("doi:").strip()[len("10.1145/"):]
+    return "." in suffix
+
+
 class ACMBrowserDownloader:
     """Download ACM PDFs via headless stealth Chromium.
 
@@ -182,6 +199,12 @@ class ACMBrowserDownloader:
         if not is_acm_doi(doi):
             logger.warning(f"Not an ACM DOI: {doi}")
             return None
+        if not is_acm_paper_doi(doi):
+            # Journal/proceedings-level DOI — no single PDF exists. Hitting
+            # /doi/pdf/ for these redirects to /doi/abs/ which trips Cloudflare
+            # and poisons the session for subsequent paper requests.
+            logger.info(f"Skipping non-paper ACM DOI (journal/proc-level): {doi}")
+            return None
         if self._ctx is None:
             raise RuntimeError("Downloader not started; use `async with`.")
         if self._circuit_open:
@@ -253,6 +276,10 @@ class ACMBrowserDownloader:
 
     def _record_failure(self) -> None:
         self._consecutive_failures += 1
+        # Cloudflare may have flagged this session and started serving
+        # the "Just a moment..." challenge for subsequent navigations.
+        # Clear the flag so the next call re-warms via the landing page.
+        self._challenge_cleared = False
         if (
             not self._circuit_open
             and self._consecutive_failures >= self._circuit_breaker_threshold
