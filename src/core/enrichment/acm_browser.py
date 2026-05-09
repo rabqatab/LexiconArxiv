@@ -161,28 +161,69 @@ class ACMBrowserDownloader:
         """Visit a landing page to clear the Cloudflare JS challenge.
 
         Only needs to run once per browser context. Subsequent requests reuse
-        the `cf_clearance` cookie automatically.
+        the `cf_clearance` cookie automatically. If the landing page returns
+        403 (Cloudflare flagged the current session — typically after a
+        download failure pattern), recreate the BrowserContext once to get a
+        fresh cookie session. If even a fresh context 403s, surrender —
+        we're rate-limited at the IP level and waiting won't help.
         """
         if self._challenge_cleared:
             return True
         if self._ctx is None:
             raise RuntimeError("Downloader not started; use `async with`.")
 
-        page = await self._ctx.new_page()
-        try:
-            url = _ACM_LANDING.format(doi=doi)
-            resp = await page.goto(url, wait_until="domcontentloaded",
-                                   timeout=self._landing_timeout)
-            if resp and resp.status == 200:
-                self._challenge_cleared = True
-                return True
-            logger.warning(f"ACM landing returned {resp.status if resp else '?'} for {doi}")
-            return False
-        except Exception as e:
-            logger.warning(f"ACM landing visit failed for {doi}: {e}")
-            return False
-        finally:
-            await page.close()
+        for attempt in (1, 2):
+            page = await self._ctx.new_page()
+            try:
+                url = _ACM_LANDING.format(doi=doi)
+                resp = await page.goto(url, wait_until="domcontentloaded",
+                                       timeout=self._landing_timeout)
+                if resp and resp.status == 200:
+                    self._challenge_cleared = True
+                    return True
+                logger.warning(
+                    f"ACM landing returned {resp.status if resp else '?'} "
+                    f"for {doi} (attempt {attempt}/2)"
+                )
+            except Exception as e:
+                logger.warning(
+                    f"ACM landing visit failed for {doi} "
+                    f"(attempt {attempt}/2): {e}"
+                )
+            finally:
+                await page.close()
+
+            # First attempt failed: rebuild context for a fresh CF cookie.
+            if attempt == 1:
+                logger.info(
+                    "Recreating browser context after landing failure to "
+                    "shed Cloudflare flag on the current session."
+                )
+                await self._recreate_context()
+
+        return False
+
+    async def _recreate_context(self) -> None:
+        """Close the current browser context and create a fresh one.
+
+        Resets the Cloudflare cookie session. Useful when the current
+        session has been flagged and continued use just collects 403s.
+        """
+        if self._ctx is not None:
+            try:
+                await self._ctx.close()
+            except Exception:
+                pass
+            self._ctx = None
+        if self._browser is None:
+            return
+        self._ctx = await self._browser.new_context(
+            user_agent=self._user_agent,
+            viewport={"width": 1280, "height": 800},
+            accept_downloads=True,
+            locale="en-US",
+        )
+        self._challenge_cleared = False
 
     async def download_pdf(self, doi: str) -> bytes | None:
         """Download the PDF for an ACM DOI.
@@ -276,10 +317,13 @@ class ACMBrowserDownloader:
 
     def _record_failure(self) -> None:
         self._consecutive_failures += 1
-        # Cloudflare may have flagged this session and started serving
-        # the "Just a moment..." challenge for subsequent navigations.
-        # Clear the flag so the next call re-warms via the landing page.
-        self._challenge_cleared = False
+        # Note: we do NOT eagerly invalidate _challenge_cleared on failure.
+        # Earlier versions did, and that triggered a cascade — every failure
+        # forced a re-warm via landing page, which 403s once Cloudflare has
+        # alarmed the session, which counted as another failure, which
+        # forced another re-warm, ... Better to leave the existing cookie
+        # alone and let _ensure_challenge_cleared handle recovery via
+        # _recreate_context() when it actually sees a 403 landing.
         if (
             not self._circuit_open
             and self._consecutive_failures >= self._circuit_breaker_threshold
