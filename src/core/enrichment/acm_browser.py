@@ -23,9 +23,14 @@ Runtime characteristics
   co-located ML workloads.
 - Single browser context per downloader instance; Cloudflare cookies persist
   for its lifetime. Reuse the instance across many downloads.
-- `accept_downloads=True` + `page.expect_download()` to capture the PDF body
-  (ACM's /doi/pdf/* path triggers a download disposition rather than inline
-  rendering).
+- `accept_downloads=True` + `page.expect_download()` to capture the PDF
+  body. ACM responds with `Content-Disposition: inline` for /doi/pdf/*, but
+  in headless Chromium application/pdf responses are routed to the download
+  stack regardless (no PDF viewer plugin), so the download event fires.
+- Critical: triggering the request must use `page.goto(url)` — JS navigation
+  via `window.location.href = url` does NOT register the response with
+  Playwright's download accounting in headless mode, so `expect_download()`
+  silently times out.
 """
 
 from __future__ import annotations
@@ -85,12 +90,14 @@ class ACMBrowserDownloader:
         user_agent: str = _DEFAULT_UA,
         rate_limit_seconds: float = 2.0,
         landing_timeout_ms: int = 45_000,
-        download_timeout_ms: int = 60_000,
+        download_timeout_ms: int = 30_000,
+        consecutive_failure_circuit_breaker: int = 25,
     ):
         self._user_agent = user_agent
         self._rate_limit = rate_limit_seconds
         self._landing_timeout = landing_timeout_ms
         self._download_timeout = download_timeout_ms
+        self._circuit_breaker_threshold = consecutive_failure_circuit_breaker
 
         self._playwright: Playwright | None = None
         self._browser: Browser | None = None
@@ -98,6 +105,8 @@ class ACMBrowserDownloader:
         self._challenge_cleared: bool = False
         self._last_request_at: float = 0.0
         self._lock = asyncio.Lock()
+        self._consecutive_failures: int = 0
+        self._circuit_open: bool = False
 
     async def __aenter__(self) -> "ACMBrowserDownloader":
         from playwright.async_api import async_playwright
@@ -164,33 +173,51 @@ class ACMBrowserDownloader:
         Returns PDF bytes, or None on any failure (bot challenge not cleared,
         404, timeout, non-PDF body, etc.). Callers should treat None as "try
         the next source" rather than a fatal error.
+
+        Circuit breaker: after `consecutive_failure_circuit_breaker` failures
+        in a row, all subsequent calls return None immediately without
+        touching the network — protects against silently burning hours when
+        ACM changes its page UX.
         """
         if not is_acm_doi(doi):
             logger.warning(f"Not an ACM DOI: {doi}")
             return None
         if self._ctx is None:
             raise RuntimeError("Downloader not started; use `async with`.")
+        if self._circuit_open:
+            return None
 
         async with self._lock:
             await self._throttle()
 
             if not await self._ensure_challenge_cleared(doi):
+                self._record_failure()
                 return None
 
             pdf_url = _ACM_PDF.format(doi=doi)
             page = await self._ctx.new_page()
             tmp_path: Path | None = None
             try:
-                async with page.expect_download(timeout=self._download_timeout) as dl_info:
-                    # JS navigation avoids Playwright's "not a page" error
-                    # when the response is a download disposition.
-                    await page.evaluate(
-                        "url => window.location.href = url", pdf_url
-                    )
+                async with page.expect_download(
+                    timeout=self._download_timeout
+                ) as dl_info:
+                    # page.goto() is what makes Playwright fire `download` —
+                    # JS-driven navigation does not register with the download
+                    # accounting in headless mode. The goto itself raises
+                    # "Download is starting"; that exception is expected and
+                    # arrives concurrently with the download event firing.
+                    try:
+                        await page.goto(
+                            pdf_url,
+                            wait_until="domcontentloaded",
+                            timeout=self._landing_timeout,
+                        )
+                    except Exception as e:
+                        if "Download is starting" not in str(e):
+                            raise
+
                 download = await dl_info.value
 
-                # Stream to a temp file, then read bytes (Playwright's
-                # download API is file-oriented, not bytes-oriented).
                 with tempfile.NamedTemporaryFile(
                     suffix=".pdf", delete=False
                 ) as tmp:
@@ -203,13 +230,37 @@ class ACMBrowserDownloader:
                         f"ACM response for {doi} is not a PDF "
                         f"(first bytes: {data[:8]!r})"
                     )
+                    self._record_failure()
                     return None
+                self._consecutive_failures = 0
                 return data
 
+            except asyncio.TimeoutError:
+                logger.warning(
+                    f"ACM PDF download failed for {doi}: timed out after "
+                    f"{self._download_timeout}ms waiting for download event"
+                )
+                self._record_failure()
+                return None
             except Exception as e:
                 logger.warning(f"ACM PDF download failed for {doi}: {e}")
+                self._record_failure()
                 return None
             finally:
                 if tmp_path is not None and tmp_path.exists():
                     tmp_path.unlink(missing_ok=True)
                 await page.close()
+
+    def _record_failure(self) -> None:
+        self._consecutive_failures += 1
+        if (
+            not self._circuit_open
+            and self._consecutive_failures >= self._circuit_breaker_threshold
+        ):
+            self._circuit_open = True
+            logger.error(
+                f"ACM browser circuit breaker tripped after "
+                f"{self._consecutive_failures} consecutive failures — "
+                f"remaining ACM requests will short-circuit to None. "
+                f"Investigate page UX change (ACM may have moved to a viewer iframe)."
+            )
