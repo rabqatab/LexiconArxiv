@@ -261,26 +261,57 @@ class ACMBrowserDownloader:
             pdf_url = _ACM_PDF.format(doi=doi)
             page = await self._ctx.new_page()
             tmp_path: Path | None = None
-            try:
-                async with page.expect_download(
-                    timeout=self._download_timeout
-                ) as dl_info:
-                    # page.goto() is what makes Playwright fire `download` —
-                    # JS-driven navigation does not register with the download
-                    # accounting in headless mode. The goto itself raises
-                    # "Download is starting"; that exception is expected and
-                    # arrives concurrently with the download event firing.
-                    try:
-                        await page.goto(
-                            pdf_url,
-                            wait_until="domcontentloaded",
-                            timeout=self._landing_timeout,
-                        )
-                    except Exception as e:
-                        if "Download is starting" not in str(e):
-                            raise
+            download_future: asyncio.Future = (
+                asyncio.get_event_loop().create_future()
+            )
 
-                download = await dl_info.value
+            def _on_download(d) -> None:  # noqa: ANN001 (Playwright Download)
+                if not download_future.done():
+                    download_future.set_result(d)
+
+            page.on("download", _on_download)
+            try:
+                # page.goto() either:
+                #  (a) raises "Download is starting" — Chromium recognized the
+                #      response as a download. The `download` event has already
+                #      fired (or fires concurrently). Wait briefly for the
+                #      Playwright Download object via `download_future`.
+                #  (b) returns a Response normally — the page rendered HTML
+                #      (most commonly: ACM redirected /doi/pdf/* to /doi/abs/*
+                #      because the paper has no free full-text PDF). Bail out
+                #      immediately without waiting on a download that won't
+                #      happen.
+                started_download = False
+                try:
+                    response = await page.goto(
+                        pdf_url,
+                        wait_until="domcontentloaded",
+                        timeout=self._landing_timeout,
+                    )
+                    # If we reach here, page rendered HTML (no download).
+                    # This is NOT a system failure — most commonly the paper
+                    # is paywalled or has no free PDF, so /doi/pdf/* redirects
+                    # to /doi/abs/*. Don't count this toward the circuit
+                    # breaker; reset consecutive_failures because a clean
+                    # render proves the browser+session are healthy.
+                    final_url = page.url or (response.url if response else "")
+                    logger.info(
+                        f"No free PDF for {doi}: page rendered "
+                        f"{final_url!r} (likely paywalled or no public PDF)"
+                    )
+                    self._consecutive_failures = 0
+                    return None
+                except Exception as e:
+                    if "Download is starting" not in str(e):
+                        raise
+                    started_download = True
+
+                if not started_download:
+                    return None  # unreachable, but defensive
+
+                download = await asyncio.wait_for(
+                    download_future, timeout=self._download_timeout / 1000.0
+                )
 
                 with tempfile.NamedTemporaryFile(
                     suffix=".pdf", delete=False
@@ -302,7 +333,7 @@ class ACMBrowserDownloader:
             except asyncio.TimeoutError:
                 logger.warning(
                     f"ACM PDF download failed for {doi}: timed out after "
-                    f"{self._download_timeout}ms waiting for download event"
+                    f"{self._download_timeout}ms waiting for download body"
                 )
                 self._record_failure()
                 return None
@@ -313,6 +344,7 @@ class ACMBrowserDownloader:
             finally:
                 if tmp_path is not None and tmp_path.exists():
                     tmp_path.unlink(missing_ok=True)
+                page.remove_listener("download", _on_download)
                 await page.close()
 
     def _record_failure(self) -> None:
