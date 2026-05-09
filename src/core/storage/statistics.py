@@ -639,6 +639,7 @@ class StorageStatistics:
         # Phase 3: For each cited paper, read current cited_by and append new citers
         max_retries = 3
         updated = 0
+        skipped_missing = 0
         cited_paper_ids = list(reverse_index.keys())
 
         for i in range(0, len(cited_paper_ids), batch_size):
@@ -649,18 +650,25 @@ class StorageStatistics:
                     for cited_id in batch_ids:
                         new_citers = reverse_index[cited_id]
 
-                        # Read current cited_by
+                        # Read current cited_by; skip if cited point doesn't exist.
+                        # resolve-refs can leave dangling IDs when a stub couldn't be
+                        # created (e.g., ref had no DOI/arXiv/usable title). Updating
+                        # cited_by on a nonexistent point would 404; skipping is safe
+                        # because the back-reference would be unreachable anyway.
                         try:
                             points = self.client.retrieve(
                                 collection_name=self.collection_name,
                                 ids=[cited_id],
                                 with_payload=["cited_by"],
                             )
-                            current_cited_by = (
-                                points[0].payload.get("cited_by", []) if points else []
-                            )
                         except Exception:
-                            current_cited_by = []
+                            points = []
+
+                        if not points:
+                            skipped_missing += 1
+                            continue
+
+                        current_cited_by = points[0].payload.get("cited_by", [])
 
                         # Merge (deduplicate)
                         existing_set = set(current_cited_by)
@@ -712,11 +720,13 @@ class StorageStatistics:
 
         logger.info(
             f"Incremental cited_by complete: {len(unindexed_papers)} papers processed, "
-            f"{total_new_edges} new edges, {updated} cited papers updated"
+            f"{total_new_edges} new edges, {updated} cited papers updated, "
+            f"{skipped_missing} skipped (cited point not in Qdrant)"
         )
 
         return {
             "new_papers_processed": len(unindexed_papers),
             "new_edges": total_new_edges,
             "papers_updated": updated,
+            "skipped_missing": skipped_missing,
         }
