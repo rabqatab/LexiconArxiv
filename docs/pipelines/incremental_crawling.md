@@ -133,44 +133,51 @@ DBLP provides XML dumps rather than an incremental API.
 
 ## 3. Full Incremental Pipeline
 
-The incremental pipeline includes all post-crawling steps (enrichment, keywords, labeling, resolution, graph).
+The incremental pipeline runs all post-crawling steps (enrichment, keywords, labeling, resolution, graph, **embedding**), plus optional weekly maintenance (similarity graph, graph analysis) and quarterly topic re-clustering.
 
 ### 3.1 Pipeline Script
 
 Use the provided script for complete incremental updates:
 
 ```bash
-# Daily update (default: 1 day)
+# Daily update (default: 1 day) — collect + enrich + keywords + labeling + graph + embed
 ./scripts/run_incremental_pipeline.sh
 
-# Weekly update
-./scripts/run_incremental_pipeline.sh --days 7
+# Weekly update + maintenance (recompute similarity graph + graph analysis)
+./scripts/run_incremental_pipeline.sh --days 7 --weekly
 
-# Monthly update
-./scripts/run_incremental_pipeline.sh --days 30
+# Quarterly update + maintenance + topic re-clustering
+./scripts/run_incremental_pipeline.sh --days 90 --weekly --cluster
 
-# Quarterly update (3 months)
-./scripts/run_incremental_pipeline.sh --days 90
+# Skip graph rebuild and/or embedding (faster)
+./scripts/run_incremental_pipeline.sh --days 7 --skip-graph --skip-embed
 
-# Skip graph rebuild (faster)
-./scripts/run_incremental_pipeline.sh --days 90 --skip-graph
-
-# Dry run (preview only)
-./scripts/run_incremental_pipeline.sh --days 90 --dry-run
+# Dry run (preview steps only, no execution)
+./scripts/run_incremental_pipeline.sh --days 90 --weekly --dry-run
 ```
 
 **Pipeline Steps:**
-1. `collect-incremental` - Collect new papers from all sources
-2. `enrich-6-abstracts-by-doi-via-openalex` - Fill missing abstracts via OpenAlex
-3. `enrich-4-refs-by-doi-via-s2` - Enrich citations via Semantic Scholar
-4. `enrich-2-refs-by-doi-via-crossref` - Enrich citations via CrossRef (fallback)
-5. `extract-keywords` - Extract keywords for BM25 search
-6. `label-abstracts` - Label abstract sentences with rhetorical roles
-7. `resolve-refs` - Resolve references and create stubs
-8. `enrich-8-metadata-by-stub-via-openalex` - Enrich stub paper metadata
-9. `build-cited-by` - Rebuild the citation graph
+1. `collect-incremental --days N` — Collect new papers from all sources
+2. `enrich-6-abstracts-by-doi-via-openalex` — Fill missing abstracts via OpenAlex
+3. `enrich-4-refs-by-doi-via-s2 --recent-days N` — Enrich citations via Semantic Scholar (recent papers only; with `--weekly` the full backlog also runs in the background)
+4. `enrich-2-refs-by-doi-via-crossref` — Enrich citations via CrossRef (papers S2 missed)
+5. `extract-keywords` — Extract keywords for BM25 search *(runs in parallel with step 6)*
+6. `label-abstracts` — Label abstract sentences with rhetorical roles *(parallel; skip with `--skip-labeling`)*
+7. `resolve-refs --create-stubs` — Resolve references and create stub papers
+8. `enrich-8-metadata-by-stub-via-openalex` — Enrich stub paper metadata
+9. `build-cited-by --incremental` — Update the cited_by citation graph *(skip with `--skip-graph`)*
+10. `embed-papers` — Embed new papers: dense + section-level + BM25 vectors *(skip with `--skip-embed`)*
 
-All steps are **incremental** - they only process new/unenriched papers.
+**Weekly maintenance** (`--weekly`):
+
+11. `compute-similarity` — Recompute the semantic similarity graph (typed section-level edges)
+12. `analyze-graph --store` — Recompute graph analysis (PageRank, HITS, communities)
+
+**Quarterly** (`--cluster`):
+
+13. `compute-topics` — Recompute UMAP + HDBSCAN topic clusters
+
+All steps are **incremental** — they only process new/unenriched papers. Flags: `--days N`, `--parallel N`, `--weekly`, `--cluster`, `--skip-graph`, `--skip-labeling`, `--skip-embed`, `--dry-run`.
 
 ---
 
@@ -180,24 +187,24 @@ All steps are **incremental** - they only process new/unenriched papers.
 
 ```bash
 # /etc/cron.d/lexiconarxiv-daily
-# Daily at 2 AM - full pipeline
-0 2 * * * cd /path/to/LexiconArxiv && ./scripts/run_incremental_pipeline.sh >> logs/cron_daily.log 2>&1
+# Mon-Sat at 2 AM - collect + enrich + embed (Sunday reserved for the weekly run)
+0 2 * * 1-6 cd /path/to/LexiconArxiv && ./scripts/run_incremental_pipeline.sh >> logs/cron_daily.log 2>&1
 ```
 
 ### 4.2 Weekly Updates
 
 ```bash
 # /etc/cron.d/lexiconarxiv-weekly
-# Weekly on Sunday at 3 AM
-0 3 * * 0 cd /path/to/LexiconArxiv && ./scripts/run_incremental_pipeline.sh --days 7 >> logs/cron_weekly.log 2>&1
+# Weekly on Sunday at 2 AM - includes similarity graph + graph analysis maintenance
+0 2 * * 0 cd /path/to/LexiconArxiv && ./scripts/run_incremental_pipeline.sh --days 7 --weekly >> logs/cron_weekly.log 2>&1
 ```
 
 ### 4.3 Quarterly Updates (Recommended for Low-Maintenance)
 
 ```bash
 # /etc/cron.d/lexiconarxiv-quarterly
-# Quarterly: 1st of Jan, Apr, Jul, Oct at 2 AM
-0 2 1 1,4,7,10 * cd /path/to/LexiconArxiv && ./scripts/run_incremental_pipeline.sh --days 90 >> logs/cron_quarterly.log 2>&1
+# Quarterly: 1st of Jan, Apr, Jul, Oct at 2 AM - includes topic re-clustering
+0 2 1 1,4,7,10 * cd /path/to/LexiconArxiv && ./scripts/run_incremental_pipeline.sh --days 90 --weekly --cluster >> logs/cron_quarterly.log 2>&1
 ```
 
 ### 4.4 Setting Up Crontab
@@ -222,7 +229,7 @@ SHELL=/bin/bash
 PATH=/usr/local/bin:/usr/bin:/bin
 MAILTO=your-email@example.com
 
-0 2 1 1,4,7,10 * cd /home/user/LexiconArxiv && ./scripts/run_incremental_pipeline.sh --days 90 >> logs/cron.log 2>&1
+0 2 1 1,4,7,10 * cd /home/user/LexiconArxiv && ./scripts/run_incremental_pipeline.sh --days 90 --weekly --cluster >> logs/cron.log 2>&1
 ```
 
 ### 4.5 Post-Conference Collection
