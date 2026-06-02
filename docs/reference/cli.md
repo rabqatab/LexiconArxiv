@@ -195,6 +195,18 @@ uv run python -m src.cli.core_collect deduplicate
 uv run python -m src.cli.core_collect deduplicate --collection my_collection
 ```
 
+### dedup-cleanup
+
+Remove duplicates already in the corpus. Scrolls all non-stub papers, groups by DOI (or OpenAlex ID when no DOI), and for each group keeps the richest paper (has abstract/keywords/vectors), deleting the rest. Use this to clean up duplicates that slipped past collection-time dedup; `deduplicate` prevents them, `dedup-cleanup` removes existing ones.
+
+```bash
+# Preview duplicate groups
+uv run python -m src.cli.core_collect dedup-cleanup --dry-run
+
+# Remove duplicates
+uv run python -m src.cli.core_collect dedup-cleanup
+```
+
 ---
 
 ## Enrichment Commands
@@ -352,6 +364,40 @@ uv run python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid \
 | `--doi-prefix TEXT` | Filter by DOI prefix (e.g. `10.1145/` for ACM) |
 | `--retry-incomplete` | Clear checkpoint, re-process papers still missing refs |
 | `--grobid-url URL` | GROBID server URL (default `http://localhost:8070`) |
+
+### enrich-7-abstracts-by-pdf-via-grobid
+
+Extract abstracts from PDFs via GROBID — a fallback for papers still missing abstracts after OpenAlex enrichment. Only processes papers with direct PDF URLs (ending in `.pdf`); requires a running GROBID server.
+
+```bash
+# Count papers needing PDF abstract extraction
+uv run python -m src.cli.core_collect enrich-7-abstracts-by-pdf-via-grobid --dry-run
+
+# Extract abstracts
+uv run python -m src.cli.core_collect enrich-7-abstracts-by-pdf-via-grobid --parallel 5
+
+# Target a specific venue
+uv run python -m src.cli.core_collect enrich-7-abstracts-by-pdf-via-grobid -v "PACLIC"
+```
+
+Options: `--dry-run`, `--limit N`, `--batch-size N`, `--parallel N`, `--venue TEXT`, `--grobid-url URL` (default `http://localhost:8070`).
+
+### enrich-9-resolve-title-refs-via-openalex
+
+Resolve `TITLE:xxx` references to proper `DOI:xxx`/`Wxxx` identifiers. When GROBID extracts a reference with only a title (no DOI/arXiv ID), it stores `TITLE:<title>` in `referenced_works`; this command searches OpenAlex and fuzzy-matches titles to resolve them, improving citation-graph completeness.
+
+```bash
+# Count papers with TITLE: refs
+uv run python -m src.cli.core_collect enrich-9-resolve-title-refs-via-openalex --dry-run
+
+# Resolve all (parallel)
+uv run python -m src.cli.core_collect enrich-9-resolve-title-refs-via-openalex --parallel 5
+
+# Re-process papers still missing data
+uv run python -m src.cli.core_collect enrich-9-resolve-title-refs-via-openalex --retry-incomplete
+```
+
+Options: `--dry-run`, `--limit N`, `--batch-size N`, `--delay FLOAT`, `--parallel N`, `--retry-incomplete`.
 
 ### enrich-10-code-repos
 
@@ -629,6 +675,30 @@ uv run python -m src.cli.core_collect clear-keywords --confirm
 
 ---
 
+## Abstract Labeling Commands
+
+### label-abstracts
+
+Classify each sentence of a paper's abstract into 7 rhetorical roles: task, domain, background, approach, method, result, contribution. Results are stored in `abstract_structure`. Backed by Gemini (default) or Ollama.
+
+```bash
+# Preview with Gemini (default)
+uv run python -m src.cli.core_collect label-abstracts --dry-run --limit 5
+
+# Label unlabeled papers
+uv run python -m src.cli.core_collect label-abstracts --limit 100
+
+# Use Ollama backend
+uv run python -m src.cli.core_collect label-abstracts --llm-backend ollama
+
+# Re-label papers that already have abstract_structure
+uv run python -m src.cli.core_collect label-abstracts --force --limit 50
+```
+
+Options: `--dry-run`, `--limit N`, `--batch-size N` (default 500), `--force`, `--llm-backend [gemini|ollama]`, `--gemini-model TEXT`, `--ollama-model TEXT`, `--ollama-timeout FLOAT`.
+
+---
+
 ## Embedding Commands
 
 ### migrate-collection
@@ -888,6 +958,14 @@ Clear checkpoint for enrich-7 (abstracts-by-pdf-via-grobid).
 
 ```bash
 uv run python -m src.cli.core_collect clear-enrich-7-checkpoint
+```
+
+### clear-enrich-9-checkpoint
+
+Clear checkpoint for enrich-9 (resolve-title-refs-via-openalex).
+
+```bash
+uv run python -m src.cli.core_collect clear-enrich-9-checkpoint
 ```
 
 ### clear-enrich-10-checkpoint
