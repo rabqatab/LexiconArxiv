@@ -149,7 +149,7 @@ lexiconarxiv/
 
 ```
 Backend:     Python 3.12+ / FastAPI / uvicorn
-Databases:   PostgreSQL / Qdrant (vector + BM25)
+Databases:   Qdrant (vector + server-side BM25)
 ML/NLP:      sentence-transformers / KeyBERT / Gemini API / Ollama
 Graph:       NetworkX (citation graph) / D3.js (visualization)
 Infra:       Docker / Kubernetes
