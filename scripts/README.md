@@ -1,6 +1,6 @@
 # LexiconArxiv Scripts
 
-Shell scripts for running the 7-stage data pipeline.
+Shell scripts for the LexiconArxiv pipelines: the 7-stage payload-only data pipeline (`run_full_pipeline.sh`), the post-payload embedding + analytics stages, and the 10-stage incremental orchestrator (`run_incremental_pipeline.sh`).
 
 ## Quick Start
 
@@ -24,7 +24,9 @@ Shell scripts for running the 7-stage data pipeline.
 
 ```
 scripts/
-├── run_full_pipeline.sh              # Orchestrator: 7-stage pipeline
+├── run_full_pipeline.sh              # Orchestrator: 7-stage full pipeline (payload-only)
+├── run_incremental_pipeline.sh       # Orchestrator: 10-stage incremental + weekly/quarterly maintenance
+├── mcp_server.sh                     # Launch the MCP server (stdio transport)
 │
 ├── crawler/                          # Stage 1: Collection
 │   ├── run_full_collection.sh        # Orchestrator: all sources
@@ -39,8 +41,9 @@ scripts/
 │   ├── count_papers.sh               # Estimate papers
 │   └── setup_crontab.sh              # Crontab helper
 │
-├── maintenance/                      # Stage 2: Deduplication
-│   └── run_deduplication.sh
+├── maintenance/                      # Stage 2: Deduplication + snapshots
+│   ├── run_deduplication.sh
+│   └── qdrant_snapshot.sh            # Snapshot Qdrant collection (pre-pipeline backup)
 │
 ├── enrichment/                       # Stage 3: Enrichment
 │   ├── run_enrichment.sh             # Orchestrator: all enrichment
@@ -69,8 +72,16 @@ scripts/
 ├── keywords/                         # Stage 6: Keywords
 │   └── run_keywords.sh               # Extract keywords and acronyms
 │
-└── labeling/                         # Stage 7: Labeling
-    └── run_labeling.sh               # Label abstract sentences
+├── labeling/                         # Stage 7: Labeling
+│   └── run_labeling.sh               # Label abstract sentences
+│
+├── embedding/                        # Post-payload: vectors + BM25 (full & incremental)
+│   ├── migrate_collection.sh         # Add vector config to the collection
+│   └── run_embedding.sh              # Embed papers (dense + section-level + BM25)
+│
+└── analytics/                        # Post-payload: trends & similarity
+    ├── run_similarity.sh             # Semantic similarity graph (typed edges)
+    └── run_clustering.sh             # UMAP + HDBSCAN topic clustering
 ```
 
 ---
@@ -89,7 +100,9 @@ Runs all 7 stages in sequence (payload-only, no vectors required):
 | 6 | Keywords | Extract keywords and acronyms for BM25 search |
 | 7 | Labeling | Label abstract sentences with rhetorical roles |
 
-> **Note**: These stages use **payload-only storage** (points upserted with `vector={}`). Vectors can be added later using Qdrant's named vectors feature. See [Data Model](../docs/architecture/data_model.md#5-qdrant-collection-schema) for details.
+> **Note**: These stages use **payload-only storage** (points upserted with `vector={}`). Vectors are added afterward by the embedding stage (`scripts/embedding/run_embedding.sh`) via Qdrant's named vectors feature. See [Data Model](../docs/architecture/data_model.md#5-qdrant-collection-schema) for details.
+>
+> Before Stage 1, the orchestrator takes a Qdrant snapshot (`maintenance/qdrant_snapshot.sh`) as a backup; skip it with `--skip-snapshot`.
 
 ```bash
 ./scripts/run_full_pipeline.sh [OPTIONS]
@@ -97,6 +110,7 @@ Runs all 7 stages in sequence (payload-only, no vectors required):
 Options:
   --since-year YEAR     Start year (default: 2020)
   --include-workshops   Include ACL workshop papers
+  --skip-snapshot       Skip the pre-pipeline Qdrant snapshot
   --skip-collection     Skip Stage 1
   --skip-dedup          Skip Stage 2
   --skip-enrichment     Skip Stage 3
