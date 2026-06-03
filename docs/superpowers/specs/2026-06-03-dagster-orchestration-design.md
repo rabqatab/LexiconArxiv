@@ -79,8 +79,8 @@ SPARKQ ASSETS (submit cmd → poll status → success/fail)
 
 - **`DailyPartitionsDefinition`** keyed by date identifies each run for backfill/history. Each daily run uses a **7-day rolling collection lookback** (`--days 7`), not a single day — overlapping windows plus the collector's dedup make collection **self-healing**: a missed or failed day is automatically re-covered by the next run, and late-arriving source updates within the window are caught. Overlap is harmless (dedup discards already-stored DOIs/IDs).
 - Two schedules (quarterly tier removed — topics moved to weekly):
-  - **Daily (Mon–Sat)** → core assets `collect_papers … embed_papers`, each run with a 7-day lookback
-  - **Weekly (Sun)** → core (7-day lookback) + `compute_similarity`, `analyze_graph`, `compute_topics`
+  - **Daily (Mon–Sun, all 7 days)** → core assets `collect_papers … embed_papers`, each run with a 7-day lookback
+  - **Weekly (Sun)** → maintenance assets only: `compute_similarity`, `analyze_graph`, `compute_topics`. These depend on the latest core materialization and run after Sunday's core. So Sunday = core + maintenance; every other day = core only (no duplicate core run on Sunday).
 - **Run-failure / check-failure sensor** → alert (Slack/email) on ERROR check or asset failure.
 
 ## 6. Migration (incremental; bash orchestrator stays as fallback until the final phase)
