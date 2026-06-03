@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import networkx as nx
+from qdrant_client.http.exceptions import UnexpectedResponse
 
 from src.core.storage import QdrantStorage
 
@@ -365,19 +366,31 @@ class GraphAnalyzer:
 
         # Apply updates in batches
         updated = 0
+        skipped = 0
         for i in range(0, len(updates), batch_size):
             batch = updates[i : i + batch_size]
             for point_id, payload in batch:
-                self.storage.client.set_payload(
-                    collection_name=self.storage.collection_name,
-                    payload=payload,
-                    points=[point_id],
-                )
-            updated += len(batch)
+                try:
+                    self.storage.client.set_payload(
+                        collection_name=self.storage.collection_name,
+                        payload=payload,
+                        points=[point_id],
+                    )
+                    updated += 1
+                except UnexpectedResponse as e:
+                    # The graph includes dangling citation targets (node IDs that
+                    # were never stored as points). set_payload 404s on those;
+                    # skip them rather than aborting the whole run.
+                    if e.status_code == 404:
+                        skipped += 1
+                        continue
+                    raise
 
-            if updated % 1000 == 0:
+            if updated and updated % 1000 == 0:
                 logger.info(f"  Updated {updated} papers...")
 
+        if skipped:
+            logger.info(f"Skipped {skipped} dangling node(s) not present in Qdrant")
         logger.info(f"Stored metrics for {updated} papers")
         return updated
 
