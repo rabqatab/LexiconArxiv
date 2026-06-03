@@ -233,7 +233,7 @@ def register_commands(cli: click.Group):
             top_papers = analyzer.get_top_papers("pagerank", n=top_n, scores=pagerank)
             click.echo(f"Top {top_n} papers by PageRank:\n")
             for i, (paper_id, score, metadata) in enumerate(top_papers, 1):
-                title = (metadata.get("title", "")[:60] + "...") if metadata else paper_id[:30]
+                title = ((metadata.get("title") or "")[:60] + "...") if metadata else paper_id[:30]
                 year = metadata.get("year", "") if metadata else ""
                 click.echo(f"  {i:3}. [{year}] {title}")
                 click.echo(f"       PageRank: {score:.6f}  ID: {paper_id[:20]}...")
@@ -246,13 +246,13 @@ def register_commands(cli: click.Group):
             click.echo(f"Top {top_n} Hub papers (cite many important papers):\n")
             top_hubs = analyzer.get_top_papers("hub", n=top_n, scores=hubs)
             for i, (paper_id, score, metadata) in enumerate(top_hubs, 1):
-                title = (metadata.get("title", "")[:60] + "...") if metadata else paper_id[:30]
+                title = ((metadata.get("title") or "")[:60] + "...") if metadata else paper_id[:30]
                 click.echo(f"  {i:3}. Hub: {score:.6f}  {title}")
 
             click.echo(f"\nTop {top_n} Authority papers (cited by many hubs):\n")
             top_auths = analyzer.get_top_papers("authority", n=top_n, scores=authorities)
             for i, (paper_id, score, metadata) in enumerate(top_auths, 1):
-                title = (metadata.get("title", "")[:60] + "...") if metadata else paper_id[:30]
+                title = ((metadata.get("title") or "")[:60] + "...") if metadata else paper_id[:30]
                 click.echo(f"  {i:3}. Authority: {score:.6f}  {title}")
 
         # Compute communities
@@ -452,9 +452,9 @@ def register_commands(cli: click.Group):
         for i, citing_id in enumerate(citing_ids[:limit], 1):
             metadata = index.get_paper_metadata(citing_id)
             if metadata:
-                title = metadata.get("title", "")[:70]
+                title = (metadata.get("title") or "")[:70]
                 year = metadata.get("year", "")
-                venue = metadata.get("venue", "")[:20]
+                venue = (metadata.get("venue") or "")[:20]
                 click.echo(f"{i:3}. [{year}] {title}")
                 click.echo(f"     Venue: {venue}  ID: {citing_id[:30]}...")
             else:
