@@ -171,7 +171,7 @@ Use the provided script for complete incremental updates:
 **Weekly maintenance** (`--weekly`):
 
 11. `compute-similarity` — Recompute the semantic similarity graph (typed section-level edges)
-12. `analyze-graph --store` — Recompute graph analysis (PageRank, HITS, communities)
+12. `analyze-citation-graph --all --store` — Recompute graph analysis (PageRank, HITS, communities)
 
 **Quarterly** (`--cluster`):
 

@@ -152,7 +152,7 @@ if [ "$DRY_RUN" = true ]; then
     fi
     if [ "$WEEKLY" = true ]; then
         echo " 11. compute-similarity (semantic similarity graph)"
-        echo " 12. analyze-graph (PageRank, HITS, communities)"
+        echo " 12. analyze-citation-graph --all --store (PageRank, HITS, communities)"
     fi
     if [ "$CLUSTER" = true ]; then
         echo " 13. compute-topics (UMAP + HDBSCAN clustering)"
@@ -261,7 +261,7 @@ if [ "$WEEKLY" = true ]; then
 
     echo ""
     echo "[Weekly] Recomputing graph analysis (PageRank, HITS, communities)..."
-    uv run python -m src.cli.core_collect analyze-graph --store
+    uv run python -m src.cli.core_collect analyze-citation-graph --all --store
 fi
 
 # Quarterly clustering
