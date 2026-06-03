@@ -77,15 +77,15 @@ SPARKQ ASSETS (submit cmd → poll status → success/fail)
 
 ## 5. Scheduling & partitions
 
-- **`DailyPartitionsDefinition`** keyed by date → each day's incremental is a partition; enables backfills and per-day surge attribution.
+- **`DailyPartitionsDefinition`** keyed by date identifies each run for backfill/history. Each daily run uses a **7-day rolling collection lookback** (`--days 7`), not a single day — overlapping windows plus the collector's dedup make collection **self-healing**: a missed or failed day is automatically re-covered by the next run, and late-arriving source updates within the window are caught. Overlap is harmless (dedup discards already-stored DOIs/IDs).
 - Two schedules (quarterly tier removed — topics moved to weekly):
-  - **Daily (Mon–Sat)** → core assets `collect_papers … embed_papers`
-  - **Weekly (Sun)** → + `compute_similarity`, `analyze_graph`, `compute_topics`
+  - **Daily (Mon–Sat)** → core assets `collect_papers … embed_papers`, each run with a 7-day lookback
+  - **Weekly (Sun)** → core (7-day lookback) + `compute_similarity`, `analyze_graph`, `compute_topics`
 - **Run-failure / check-failure sensor** → alert (Slack/email) on ERROR check or asset failure.
 
 ## 6. Migration (incremental; bash orchestrator stays as fallback until the final phase)
 
-1. **Stand up Dagster** alongside (Docker: webserver + daemon, **SQLite** run store to start; Postgres only if scaling). No cutover.
+1. **Stand up Dagster** alongside (Docker: webserver + daemon). Dagster's internal run/event store is **SQLite** (a local file Dagster manages — zero setup). This is orthogonal to Qdrant, which remains the corpus data store (see §8). No cutover.
 2. **Port CPU/IO stages** as native assets → run one full incremental for a known date via Dagster, diff results against a bash run.
 3. **Add DQ checks** in *warn-only* first to calibrate thresholds, then flip search-critical checks (#3, #6, #7) to ERROR + flagging.
 4. **Route GPU assets** (embed/similarity/topics) through the `sparkq` resource.
@@ -102,5 +102,5 @@ Phases 1–2 deliver observability + DQ value before any GPU/sparkq work.
 ## 8. Deferred decisions (resolve in the implementation plan)
 
 - **GPU need for `compute_similarity` / `compute_topics`** — similarity is Qdrant-search-bound (likely native); topics' UMAP could be CPU or cuML-GPU. Decides native-vs-sparkq for those two. `embed_papers` is unambiguously sparkq/GPU.
-- **Run store**: SQLite (single-box default) vs Postgres (if/when scaling).
+- **Dagster run store** (orchestration metadata only — run history, asset-materialization events, asset-check results, schedule ticks, log index): **SQLite** by default (a local file, zero setup), Postgres only if we later need many concurrent runs. This is **not** Qdrant and not a corpus store — Dagster has no Qdrant backend, and a vector DB can't serve relational run-history queries. Qdrant remains the sole store for papers/vectors/payloads.
 - **Alert channel** for the failure sensor (Slack vs email).
