@@ -7,6 +7,7 @@ a small structured result (counts), not paper data. Paper data lives in Qdrant.
 import datetime
 
 from src.core.storage import QdrantStorage
+from src.core.enrichment.openalex import PaperEnricher
 from src.core.crawler import (
     CoreCorpusCollector,
     ACLAnthologyCollector,
@@ -80,3 +81,23 @@ async def collect_incremental_stage(days: int = 3, source: str = "all") -> dict[
 
     results["total"] = sum(v for k, v in results.items() if k != "total")
     return results
+
+
+async def enrich_abstracts_stage(
+    limit: int | None = None, batch_size: int = 100, delay: float = 0.1, parallel: int = 10
+) -> dict[str, int]:
+    """Fill missing abstracts via OpenAlex for papers that have a DOI.
+
+    Returns processed/enriched/not_found/errors counts.
+    """
+    storage = QdrantStorage()
+    async with PaperEnricher(
+        storage=storage, batch_size=batch_size, delay=delay, max_concurrent=parallel
+    ) as enricher:
+        progress = await enricher.enrich_abstracts(dry_run=False, limit=limit)
+    return {
+        "processed": progress.processed,
+        "enriched": progress.enriched,
+        "not_found": progress.not_found,
+        "errors": progress.errors,
+    }

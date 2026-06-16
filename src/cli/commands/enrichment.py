@@ -109,29 +109,36 @@ def register_commands(cli: click.Group):
           python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --limit 100
         """
         from src.core.enrichment.openalex import EnrichmentType, PaperEnricher
+        from src.core.pipeline.stages import enrich_abstracts_stage
 
         async def run_enrichment():
-            storage = QdrantStorage()
-            async with PaperEnricher(
-                storage=storage,
-                batch_size=batch_size,
-                delay=delay,
-                max_concurrent=parallel,
-            ) as enricher:
-                if retry_incomplete:
-                    enricher.clear_checkpoint(EnrichmentType.ABSTRACTS)
-                    click.echo("Checkpoint cleared — retrying papers still missing abstracts.")
-                progress = await enricher.enrich_abstracts(dry_run=dry_run, limit=limit)
+            if not dry_run and not retry_incomplete:
+                counts = await enrich_abstracts_stage(
+                    limit=limit, batch_size=batch_size, delay=delay, parallel=parallel
+                )
+                click.echo(f"\nAbstract Enrichment Results: {counts}")
+            else:
+                storage = QdrantStorage()
+                async with PaperEnricher(
+                    storage=storage,
+                    batch_size=batch_size,
+                    delay=delay,
+                    max_concurrent=parallel,
+                ) as enricher:
+                    if retry_incomplete:
+                        enricher.clear_checkpoint(EnrichmentType.ABSTRACTS)
+                        click.echo("Checkpoint cleared — retrying papers still missing abstracts.")
+                    progress = await enricher.enrich_abstracts(dry_run=dry_run, limit=limit)
 
-                click.echo(f"\nAbstract Enrichment Results:")
-                click.echo(f"  Processed: {progress.processed}")
-                click.echo(f"  Enriched:  {progress.enriched}")
-                click.echo(f"  Not found: {progress.not_found}")
-                click.echo(f"  Errors:    {progress.errors}")
+                    click.echo(f"\nAbstract Enrichment Results:")
+                    click.echo(f"  Processed: {progress.processed}")
+                    click.echo(f"  Enriched:  {progress.enriched}")
+                    click.echo(f"  Not found: {progress.not_found}")
+                    click.echo(f"  Errors:    {progress.errors}")
 
-                if dry_run:
-                    click.echo(f"\n  Total papers to enrich: {progress.total_to_process}")
-                    click.echo("  (Dry run - no changes made)")
+                    if dry_run:
+                        click.echo(f"\n  Total papers to enrich: {progress.total_to_process}")
+                        click.echo("  (Dry run - no changes made)")
 
         asyncio.run(run_enrichment())
 
