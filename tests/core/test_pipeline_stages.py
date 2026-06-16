@@ -127,3 +127,12 @@ def test_enrich_stubs_stage_returns_counts():
          patch.object(stages, "QdrantStorage"):
         result = asyncio.run(stages.enrich_stubs_stage(limit=100, parallel=10))
     assert result == {"processed": 5, "enriched": 3, "merged": 1, "not_found": 1, "errors": 0}
+
+
+def test_build_cited_by_stage_returns_counts():
+    storage = MagicMock()
+    storage.build_cited_by_incremental.return_value = {
+        "new_papers_processed": 12, "new_edges": 30, "papers_updated": 9}
+    with patch.object(stages, "QdrantStorage", return_value=storage):
+        result = asyncio.run(stages.build_cited_by_stage())
+    assert result == {"new_papers_processed": 12, "new_edges": 30, "papers_updated": 9}

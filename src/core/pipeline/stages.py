@@ -307,3 +307,14 @@ async def enrich_stubs_stage(
         )
     return {"processed": p.processed, "enriched": p.enriched, "merged": p.merged,
             "not_found": p.not_found, "errors": p.errors}
+
+
+async def build_cited_by_stage() -> dict[str, int]:
+    """Incrementally build reverse-citation (cited_by) edges."""
+    storage = QdrantStorage()
+    result = storage.build_cited_by_incremental()
+    return {
+        "new_papers_processed": result.get("new_papers_processed", 0),
+        "new_edges": result.get("new_edges", 0),
+        "papers_updated": result.get("papers_updated", 0),
+    }
