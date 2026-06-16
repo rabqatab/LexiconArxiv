@@ -161,3 +161,23 @@ def test_compute_similarity_stage_returns_counts():
         result = asyncio.run(stages.compute_similarity_stage(k=10, batch_size=50))
     assert result == {"processed": 100, "updated": 95}
     assert csb.called
+
+
+def test_compute_topics_stage_returns_counts():
+    storage = MagicMock()
+    with patch.object(stages, "QdrantStorage", return_value=storage), \
+         patch.object(stages, "compute_clusters",
+                      return_value={"num_papers": 100, "num_clusters": 8, "noise_count": 12}), \
+         patch.object(stages, "store_cluster_results", return_value=100):
+        result = asyncio.run(stages.compute_topics_stage())
+    assert result == {"papers": 100, "clusters": 8, "noise": 12, "stored": 100}
+
+
+def test_compute_topics_stage_handles_error():
+    storage = MagicMock()
+    with patch.object(stages, "QdrantStorage", return_value=storage), \
+         patch.object(stages, "compute_clusters", return_value={"error": "too few", "count": 3}), \
+         patch.object(stages, "store_cluster_results") as scr:
+        result = asyncio.run(stages.compute_topics_stage())
+    assert result == {"papers": 0, "clusters": 0, "noise": 0, "stored": 0}
+    assert not scr.called

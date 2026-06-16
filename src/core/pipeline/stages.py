@@ -19,6 +19,7 @@ from src.core.resolution.resolver import ReferenceResolver
 from src.core.enrichment import StubEnricher
 from src.core.citation_graph import CitationGraphBuilder, GraphAnalyzer
 from src.core.analytics.similarity import compute_similarity_batch
+from src.core.analytics.clustering import compute_clusters, store_cluster_results
 from src.core.crawler import (
     CoreCorpusCollector,
     ACLAnthologyCollector,
@@ -344,3 +345,20 @@ async def compute_similarity_stage(
     storage = QdrantStorage()
     stats = compute_similarity_batch(storage=storage, k=k, batch_size=batch_size, limit=limit)
     return {"processed": stats.get("processed", 0), "updated": stats.get("updated", 0)}
+
+
+async def compute_topics_stage(
+    umap_n_components: int = 50, umap_n_neighbors: int = 15,
+    hdbscan_min_cluster_size: int = 50, hdbscan_min_samples: int = 10,
+) -> dict[str, int]:
+    """Cluster papers into topics (UMAP + HDBSCAN; CPU-bound)."""
+    storage = QdrantStorage()
+    results = compute_clusters(
+        storage, umap_n_components=umap_n_components, umap_n_neighbors=umap_n_neighbors,
+        hdbscan_min_cluster_size=hdbscan_min_cluster_size, hdbscan_min_samples=hdbscan_min_samples,
+    )
+    if "error" in results:
+        return {"papers": 0, "clusters": 0, "noise": 0, "stored": 0}
+    stored = store_cluster_results(storage, results)
+    return {"papers": results.get("num_papers", 0), "clusters": results.get("num_clusters", 0),
+            "noise": results.get("noise_count", 0), "stored": stored}
