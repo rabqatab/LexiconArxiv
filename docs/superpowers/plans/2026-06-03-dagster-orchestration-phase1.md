@@ -2,29 +2,39 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Stand up Dagster alongside the existing pipeline and prove all three architectural patterns end-to-end with three exemplar assets — a simple native asset (`collect_papers`), a native asset chained through Qdrant (`enrich_abstracts`), and a GPU asset dispatched via `sparkq` (`embed_papers`).
+**Goal:** Stand up Dagster alongside the existing pipeline and prove the native-asset patterns end-to-end with three exemplar assets — a simple native asset (`collect_papers`), a native asset chained through Qdrant (`enrich_abstracts`), and a service-delegated GPU native asset (`embed_papers`, which calls the local Ollama embedding service).
 
-**Architecture:** Stage logic is extracted from the CLI commands into shared `src/core/pipeline/stages.py` functions; both the CLI and the Dagster assets call them (DRY). CPU/IO assets run in-process; GPU assets submit the existing CLI command to the DGX Sparks via a `SparkqJobResource`. Qdrant remains the shared data store; assets return lightweight counts, not data. Dagster keeps its own SQLite metadata store (orthogonal to Qdrant).
+**Architecture:** Stage logic is extracted from the CLI commands into shared `src/core/pipeline/stages.py` functions; both the CLI and the Dagster assets call them (DRY). All three Plan-1 assets run **in-process**. `embed_papers` is GPU work, but the GPU is held by the local **Ollama** service (`qwen3-embedding:8b` on the GB10) and the asset only makes HTTP calls to `/api/embed` — so it stays a lightweight native asset, no GPU-job dispatch needed in Plan 1. Qdrant remains the shared data store; assets return lightweight counts, not data. Dagster keeps its own SQLite metadata store (orthogonal to Qdrant).
 
-**Tech Stack:** Python 3.12, uv, Dagster (`dagster`, `dagster-webserver`), Qdrant, `sparkq` CLI, pytest.
+**Tech Stack:** Python 3.12, uv, Dagster (`dagster`, `dagster-webserver`), Qdrant, Ollama (`qwen3-embedding:8b`), pytest. (No `sparkq` in Plan 1 — see Revision note.)
 
-**Scope note:** This is Plan 1 of the migration (spec §6 phases 1–2). It ports 3 exemplar assets that exercise every pattern. The remaining ~10 assets, DQ asset-checks (§3), schedules (§5), and full sparkq routing land in subsequent plans once this foundation is validated. Spec: `docs/superpowers/specs/2026-06-03-dagster-orchestration-design.md`.
+**Scope note:** This is Plan 1 of the migration (spec §6 phases 1–2). It ports 3 exemplar assets that exercise the native patterns. The remaining ~10 assets, DQ asset-checks (§3), schedules (§5), and GPU-job dispatch via `sparkq` land in subsequent plans once this foundation is validated. Spec: `docs/superpowers/specs/2026-06-03-dagster-orchestration-design.md`.
+
+---
+
+## Revision (2026-06-16) — verified against the current environment
+
+This plan was verified against the live codebase and DGX environment on 2026-06-16. Two changes vs. the original 2026-06-03 draft:
+
+1. **Collector import paths corrected (Task 2).** The collectors and venue getters are re-exported from the **`src.core.crawler`** package (matching `src/cli/commands/collection.py`), **not** `src.core.config`. The AAAI collector class is **`AAOJSCollector`**, not `AAAIOJSCollector`. The original plan's flagged "execution note" guess was wrong; this revision bakes in the verified paths.
+
+2. **`embed_papers` is a native asset, not a sparkq asset.** Verification showed `embed-papers` computes embeddings via **local Ollama `/api/embed` HTTP calls** (`src/core/embedding/embedder.py`), and the GB10 GPU + Ollama run on Node 1 (`localhost`). The original premise "GPU work can't run in-process → dispatch via sparkq" does not hold for this service-delegated embedding architecture; routing it through sparkq would also double-count GPU memory (Ollama is an untracked GPU tenant from sparkq's view). Per the user's decision, `embed_papers` is implemented as a **native asset calling `embed_papers_stage()`**. The `SparkqJobResource` and the sparkq asset are **removed from Plan 1** and deferred (see "Out of scope") to the first plan that introduces a genuinely CUDA-bound, single-shot stage. When that resource is eventually built, it must be **JSON-first** (`sparkq submit --json`, `sparkq wait <id> --json`, decide on the `success`/`terminal` booleans) per the sparkq skill — never regex human output or hand-roll a poll loop.
+
+Stable & confirmed (no change): Python 3.12.3 / uv 0.9.27; Dagster not yet installed; `CoreCorpusCollector.collect_incremental(days_back=)`; `PaperEnricher(storage, batch_size, delay, max_concurrent).enrich_abstracts(dry_run, limit) -> EnrichmentProgress(processed/enriched/not_found/errors)`; CLI commands `enrich-6-abstracts-by-doi-via-openalex` and `embed-papers --batch-size/--embed-batch-size`.
 
 ---
 
 ## File Structure
 
 - Create `src/core/pipeline/__init__.py` — package marker
-- Create `src/core/pipeline/stages.py` — extracted, importable stage functions (called by CLI + Dagster)
+- Create `src/core/pipeline/stages.py` — extracted, importable stage functions (called by CLI + Dagster): `collect_incremental_stage`, `enrich_abstracts_stage`, `embed_papers_stage`
 - Create `src/orchestration/__init__.py` — package marker
-- Create `src/orchestration/resources.py` — `SparkqJobResource`
 - Create `src/orchestration/assets/__init__.py` — package marker
 - Create `src/orchestration/assets/collection.py` — `collect_papers` asset
 - Create `src/orchestration/assets/enrichment.py` — `enrich_abstracts` asset
-- Create `src/orchestration/assets/embedding.py` — `embed_papers` sparkq asset
-- Create `src/orchestration/definitions.py` — Dagster `Definitions` (assets + resources)
+- Create `src/orchestration/assets/embedding.py` — `embed_papers` native asset
+- Create `src/orchestration/definitions.py` — Dagster `Definitions` (assets only)
 - Create `tests/orchestration/__init__.py`
-- Create `tests/orchestration/test_resources.py`
 - Create `tests/orchestration/test_assets.py`
 - Create `tests/core/test_pipeline_stages.py`
 - Modify `pyproject.toml` — add dagster deps
@@ -69,14 +79,14 @@ git commit -m "build: add dagster + dagster-webserver"
 - Create: `src/core/pipeline/stages.py`
 - Test: `tests/core/test_pipeline_stages.py`
 
-The collect logic currently lives inline in `src/cli/commands/collection.py::collect_incremental` (the `run_incremental` async closure, lines ~338+). Extract its source-dispatch into a reusable function that returns the per-source counts dict.
+The collect logic currently lives inline in `src/cli/commands/collection.py::collect_incremental` (the `run_incremental` async closure, lines ~338+). Extract its source-dispatch into a reusable function that returns the per-source counts dict. **The import paths below are verified against `src/cli/commands/collection.py` (2026-06-16): collectors and venue getters come from `src.core.crawler`, and the AAAI class is `AAOJSCollector`.**
 
 - [ ] **Step 1: Write the failing test** (mock the collectors so no network)
 
 Create `tests/core/test_pipeline_stages.py`:
 ```python
 import asyncio
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from src.core.pipeline import stages
 
 
@@ -115,15 +125,15 @@ a small structured result (counts), not paper data. Paper data lives in Qdrant.
 import datetime
 
 from src.core.storage import QdrantStorage
-from src.core.crawler.openalex import CoreCorpusCollector
-from src.core.crawler.acl_anthology import ACLAnthologyCollector
-from src.core.crawler.dblp import DBLPCollector
-from src.core.crawler.openreview import OpenReviewCollector
-from src.core.crawler.aaai_ojs import AAAIOJSCollector
-from src.core.config import (
+from src.core.crawler import (
+    CoreCorpusCollector,
+    ACLAnthologyCollector,
     get_acl_venues,
+    DBLPCollector,
     get_dblp_venues,
+    OpenReviewCollector,
     get_openreview_venues,
+    AAOJSCollector,
     get_aaai_venues,
 )
 
@@ -177,7 +187,7 @@ async def collect_incremental_stage(days: int = 3, source: str = "all") -> dict[
             results["openreview"] = count
 
     if source in ("all", "aaai"):
-        async with AAAIOJSCollector(storage=storage) as collector:
+        async with AAOJSCollector(storage=storage) as collector:
             count = 0
             for venue in get_aaai_venues():
                 async for batch in collector.collect_venue(
@@ -189,8 +199,6 @@ async def collect_incremental_stage(days: int = 3, source: str = "all") -> dict[
     results["total"] = sum(v for k, v in results.items() if k != "total")
     return results
 ```
-
-> **Execution note:** the exact import paths/class names above (`CoreCorpusCollector`, `ACLAnthologyCollector`, `get_acl_venues`, …) are taken from `src/cli/commands/collection.py`. Before writing, open that file and confirm each symbol's import path; adjust if the CLI imports them from a different module.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -270,10 +278,10 @@ Expected: PASS.
 
 - [ ] **Step 5: Refactor the CLI command to call the shared stage (prove DRY)**
 
-In `src/cli/commands/enrichment.py`, inside `enrich_6_abstracts_by_doi_via_openalex`, replace the body of the non-dry-run path's `run_enrichment` enrichment call so it delegates to the stage when not a dry run. Minimal change — keep the dry-run/`--retry-incomplete` paths as-is, but for the standard enrich path call:
+In `src/cli/commands/enrichment.py`, inside `enrich_6_abstracts_by_doi_via_openalex`, replace the body of the non-dry-run path's enrichment call so it delegates to the stage when not a dry run. Minimal change — keep the dry-run/`--retry-incomplete` paths as-is, but for the standard enrich path call:
 ```python
 from src.core.pipeline.stages import enrich_abstracts_stage
-# ... in run_enrichment(), replacing the enrich_abstracts call when not dry_run and not retry_incomplete:
+# ... in the enrich runner, replacing the enrich_abstracts call when not dry_run and not retry_incomplete:
 counts = await enrich_abstracts_stage(
     limit=limit, batch_size=batch_size, delay=delay, parallel=parallel
 )
@@ -296,157 +304,98 @@ git commit -m "feat(pipeline): extract enrich_abstracts_stage, route CLI through
 
 ---
 
-## Task 4: `SparkqJobResource` (submit → poll → map status)
+## Task 4: Extract the embed-papers stage (native, local Ollama)
 
 **Files:**
-- Create: `src/orchestration/__init__.py`
-- Create: `src/orchestration/resources.py`
-- Test: `tests/orchestration/__init__.py`, `tests/orchestration/test_resources.py`
+- Modify: `src/core/pipeline/stages.py` (add function)
+- Test: `tests/core/test_pipeline_stages.py` (add test)
 
-- [ ] **Step 1: Confirm sparkq stdout format (one cheap real call)**
+The embed logic currently lives inline in `src/cli/commands/embedding.py::embed_papers`. It loops `storage.get_papers_for_embedding(...)` → `embedder.embed_and_upsert_batch(...)` where `embedder` is `PaperEmbedder` (HTTP calls to local Ollama). Extract the loop into a stage that returns the embedded count.
 
-Run:
-```bash
-sparkq submit "echo dagster-probe" --tag dagster-probe --eta 1m --if-not-running
-sparkq status --all
-```
-Expected: note the exact wording of the submit line (job id location) and the `status` field token (`queued`/`running`/`completed`). Use these to set the regexes in Step 3. (This is a 0-GPU job; cancel with `sparkq cancel <id>` if needed.)
+- [ ] **Step 1: Write the failing test**
 
-- [ ] **Step 2: Write the failing test** (mock the sparkq CLI via the injectable runner)
-
-Create `tests/orchestration/__init__.py` (empty).
-
-Create `tests/orchestration/test_resources.py`:
+Append to `tests/core/test_pipeline_stages.py`:
 ```python
-import pytest
-from src.orchestration.resources import SparkqJobResource, SparkqError
+def test_embed_papers_stage_returns_embedded_count():
+    embedder = AsyncMock()
+    embedder.__aenter__.return_value = embedder
+    embedder.__aexit__.return_value = False
+    embedder.check_model_available.return_value = True
+    embedder.embed_and_upsert_batch.return_value = 2
 
+    storage = MagicMock()
+    # one batch of two papers, then no more (next_offset=None)
+    storage.get_papers_for_embedding.return_value = ([{"id": "a"}, {"id": "b"}], None)
 
-def make_resource(outputs):
-    """outputs: list of stdout strings returned by successive _run calls."""
-    calls = []
+    with patch.object(stages, "PaperEmbedder", return_value=embedder), \
+         patch.object(stages, "QdrantStorage", return_value=storage):
+        result = asyncio.run(stages.embed_papers_stage(batch_size=2))
 
-    class R(SparkqJobResource):
-        def _run(self, args):
-            calls.append(args)
-            return outputs[len(calls) - 1]
-
-    return R(poll_interval_seconds=0), calls
-
-
-def test_submit_and_wait_success():
-    res, calls = make_resource([
-        "Submitted job abc123 (position 1)\n",   # submit
-        "id: abc123\nstatus: completed\n",        # status poll 1
-    ])
-    job_id = res.submit_and_wait("uv run python -m x", tag="t", gpu_mem="8G", eta="1h")
-    assert job_id == "abc123"
-    assert calls[0][0] == "submit"
-    assert calls[1] == ["status", "abc123"]
-
-
-def test_submit_and_wait_raises_on_failure():
-    res, _ = make_resource([
-        "Submitted job def456 (position 1)\n",
-        "id: def456\nstatus: failed_final\n",
-        "...log tail...\n",                        # log fetch on failure
-    ])
-    with pytest.raises(SparkqError, match="def456"):
-        res.submit_and_wait("cmd", tag="t")
+    assert result == {"embedded": 2}
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run pytest tests/orchestration/test_resources.py -v`
-Expected: FAIL — `ModuleNotFoundError: src.orchestration.resources`.
+Run: `uv run pytest tests/core/test_pipeline_stages.py::test_embed_papers_stage_returns_embedded_count -v`
+Expected: FAIL — `AttributeError: module ... has no attribute 'PaperEmbedder'`.
 
-- [ ] **Step 4: Implement the resource**
+- [ ] **Step 3: Add the stage function**
 
-Create `src/orchestration/__init__.py` (empty).
-
-Create `src/orchestration/resources.py`:
+Append to `src/core/pipeline/stages.py`:
 ```python
-"""Dagster resource for dispatching GPU work to the DGX Sparks via sparkq."""
-
-import re
-import subprocess
-import time
-
-from dagster import ConfigurableResource
-
-_TERMINAL_OK = {"completed"}
-_TERMINAL_FAIL = {"failed_final", "cancelled", "killed"}
+from src.core.embedding.embedder import PaperEmbedder
 
 
-class SparkqError(Exception):
-    pass
+async def embed_papers_stage(
+    batch_size: int = 8,
+    embed_batch_size: int = 64,
+    concurrency: int = 4,
+    limit: int | None = None,
+    resume: bool = True,
+) -> dict[str, int]:
+    """Embed new papers (section + structured-abstract + BM25 vectors) via Ollama.
 
-
-class SparkqJobResource(ConfigurableResource):
-    """Submit a command to sparkq and block until it reaches a terminal state.
-
-    GPU stages can't run in-process; this submits the existing CLI command to a
-    Spark node and polls to completion. `--if-not-running` makes retries idempotent.
+    The GPU work is delegated to the local Ollama service (qwen3-embedding:8b);
+    this function only makes HTTP calls, so it runs in-process. `resume=True`
+    skips papers that already have dense vectors. Returns {"embedded": N}.
     """
-
-    workdir: str = "/home/alphabridge/LexiconArxiv"
-    poll_interval_seconds: int = 30
-
-    def _run(self, args: list[str]) -> str:
-        """Run a sparkq subcommand and return stdout. Isolated for testability."""
-        result = subprocess.run(
-            ["sparkq", *args], capture_output=True, text=True, check=True
-        )
-        return result.stdout
-
-    def _parse_job_id(self, submit_output: str) -> str:
-        m = re.search(r"\bjob\s+(\S+)", submit_output)
-        if not m:
-            raise SparkqError(f"Could not parse job id from: {submit_output!r}")
-        return m.group(1)
-
-    def _parse_status(self, status_output: str) -> str:
-        m = re.search(r"status[:\s]+(\w+)", status_output)
-        if not m:
-            raise SparkqError(f"Could not parse status from: {status_output!r}")
-        return m.group(1)
-
-    def submit_and_wait(
-        self, cmd: str, tag: str, gpu_mem: str = "16G", eta: str = "1h"
-    ) -> str:
-        out = self._run([
-            "submit", cmd,
-            "--workdir", self.workdir,
-            "--tag", tag,
-            "--gpu-mem", gpu_mem,
-            "--eta", eta,
-            "--if-not-running",
-        ])
-        job_id = self._parse_job_id(out)
+    storage = QdrantStorage()
+    embedder = PaperEmbedder(max_concurrent=concurrency)
+    total_embedded = 0
+    async with embedder:
+        if not await embedder.check_model_available():
+            raise RuntimeError(
+                "Embedding model not available in Ollama "
+                "(run: ollama pull qwen3-embedding:8b)"
+            )
+        offset = None
         while True:
-            status = self._parse_status(self._run(["status", job_id]))
-            if status in _TERMINAL_OK:
-                return job_id
-            if status in _TERMINAL_FAIL:
-                log_tail = self._run(["log", job_id, "--lines", "50"])
-                raise SparkqError(
-                    f"sparkq job {job_id} ended '{status}'. Log tail:\n{log_tail}"
-                )
-            time.sleep(self.poll_interval_seconds)
+            papers, next_offset = storage.get_papers_for_embedding(
+                limit=batch_size, offset=offset, skip_embedded=resume
+            )
+            if not papers:
+                break
+            total_embedded += await embedder.embed_and_upsert_batch(
+                papers=papers, storage=storage, embed_batch_size=embed_batch_size
+            )
+            if limit and total_embedded >= limit:
+                break
+            if next_offset is None:
+                break
+            offset = next_offset
+    return {"embedded": total_embedded}
 ```
 
-> **Execution note:** adjust `_parse_job_id` / `_parse_status` regexes to match the real output captured in Step 1.
+- [ ] **Step 4: Run test to verify it passes**
 
-- [ ] **Step 5: Run test to verify it passes**
+Run: `uv run pytest tests/core/test_pipeline_stages.py::test_embed_papers_stage_returns_embedded_count -v`
+Expected: PASS.
 
-Run: `uv run pytest tests/orchestration/test_resources.py -v`
-Expected: PASS (both tests).
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add src/orchestration/__init__.py src/orchestration/resources.py tests/orchestration/__init__.py tests/orchestration/test_resources.py
-git commit -m "feat(orchestration): SparkqJobResource submit/poll/map"
+git add src/core/pipeline/stages.py tests/core/test_pipeline_stages.py
+git commit -m "feat(pipeline): extract embed_papers_stage shared function"
 ```
 
 ---
@@ -454,18 +403,20 @@ git commit -m "feat(orchestration): SparkqJobResource submit/poll/map"
 ## Task 5: `collect_papers` and `enrich_abstracts` native assets
 
 **Files:**
+- Create: `src/orchestration/__init__.py`
 - Create: `src/orchestration/assets/__init__.py`
 - Create: `src/orchestration/assets/collection.py`
 - Create: `src/orchestration/assets/enrichment.py`
-- Test: `tests/orchestration/test_assets.py`
+- Test: `tests/orchestration/__init__.py`, `tests/orchestration/test_assets.py`
 
-- [ ] **Step 1: Write the failing test** (materialize assets with stages mocked)
+- [ ] **Step 1: Write the failing test** (materialize/unit-call assets with stages mocked)
+
+Create `tests/orchestration/__init__.py` (empty).
 
 Create `tests/orchestration/test_assets.py`:
 ```python
-import asyncio
 from unittest.mock import patch
-from dagster import materialize
+from dagster import materialize, build_asset_context
 from src.orchestration.assets.collection import collect_papers
 from src.orchestration.assets.enrichment import enrich_abstracts
 
@@ -482,23 +433,13 @@ def test_collect_papers_asset_records_total():
     assert mat.metadata["total"].value == 6
 
 
-def test_enrich_abstracts_asset_runs_after_collect():
+def test_enrich_abstracts_asset_records_enriched():
     async def fake_enrich(limit=None, batch_size=100, delay=0.1, parallel=10):
         return {"processed": 4, "enriched": 3, "not_found": 1, "errors": 0}
 
     with patch("src.orchestration.assets.enrichment.enrich_abstracts_stage",
                side_effect=fake_enrich):
-        # enrich_abstracts depends on collect_papers; provide the upstream value
-        result = materialize(
-            [collect_papers, enrich_abstracts],
-            selection=["enrich_abstracts"],
-            partition_key=None,
-        ) if False else None
-    # Direct unit call instead of full graph wiring (kept simple):
-    from dagster import build_asset_context
-    with patch("src.orchestration.assets.enrichment.enrich_abstracts_stage",
-               side_effect=fake_enrich):
-        out = enrich_abstracts(build_asset_context(), {"total": 6})
+        out = enrich_abstracts(build_asset_context())
     assert out.metadata["enriched"].value == 3
 ```
 
@@ -509,6 +450,7 @@ Expected: FAIL — `ModuleNotFoundError: src.orchestration.assets.collection`.
 
 - [ ] **Step 3: Implement the assets**
 
+Create `src/orchestration/__init__.py` (empty).
 Create `src/orchestration/assets/__init__.py` (empty).
 
 Create `src/orchestration/assets/collection.py`:
@@ -542,8 +484,8 @@ from src.core.pipeline.stages import enrich_abstracts_stage
 
 
 @asset(deps=["collect_papers"])
-def enrich_abstracts(context: AssetExecutionContext, collect_papers=None) -> MaterializeResult:
-    """Fill missing abstracts via OpenAlex. Depends on collect_papers."""
+def enrich_abstracts(context: AssetExecutionContext) -> MaterializeResult:
+    """Fill missing abstracts via OpenAlex. Depends on collect_papers (state via Qdrant)."""
     counts = asyncio.run(enrich_abstracts_stage())
     context.log.info(f"Abstract enrichment: {counts}")
     return MaterializeResult(
@@ -551,7 +493,7 @@ def enrich_abstracts(context: AssetExecutionContext, collect_papers=None) -> Mat
     )
 ```
 
-> **Execution note:** the `enrich_abstracts` dependency on `collect_papers` is declared via `deps=[...]` (no data passed — state flows through Qdrant). Adjust the test's direct-call signature to match the final asset signature; the `if False` branch in the test is a guard so only the direct unit call runs.
+> **Execution note:** the `enrich_abstracts` dependency on `collect_papers` is declared via `deps=[...]` — no data is passed between assets; state flows through Qdrant. The asset signature takes only `context`.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -561,13 +503,13 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/orchestration/assets/ tests/orchestration/test_assets.py
+git add src/orchestration/__init__.py src/orchestration/assets/ tests/orchestration/__init__.py tests/orchestration/test_assets.py
 git commit -m "feat(orchestration): collect_papers + enrich_abstracts native assets"
 ```
 
 ---
 
-## Task 6: `embed_papers` sparkq asset
+## Task 6: `embed_papers` native asset
 
 **Files:**
 - Create: `src/orchestration/assets/embedding.py`
@@ -577,64 +519,58 @@ git commit -m "feat(orchestration): collect_papers + enrich_abstracts native ass
 
 Append to `tests/orchestration/test_assets.py`:
 ```python
-def test_embed_papers_asset_submits_via_sparkq():
-    from dagster import build_asset_context
+def test_embed_papers_asset_records_embedded():
     from src.orchestration.assets.embedding import embed_papers
 
-    class FakeSparkq:
-        def __init__(self):
-            self.submitted = None
-        def submit_and_wait(self, cmd, tag, gpu_mem="16G", eta="1h"):
-            self.submitted = (cmd, tag)
-            return "job999"
+    async def fake_embed(**kwargs):
+        return {"embedded": 5}
 
-    fake = FakeSparkq()
-    out = embed_papers(build_asset_context(), sparkq=fake)
-    assert "embed-papers" in fake.submitted[0]
-    assert out.metadata["sparkq_job_id"].value == "job999"
+    with patch("src.orchestration.assets.embedding.embed_papers_stage",
+               side_effect=fake_embed):
+        out = embed_papers(build_asset_context())
+    assert out.metadata["embedded"].value == 5
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run pytest tests/orchestration/test_assets.py::test_embed_papers_asset_submits_via_sparkq -v`
+Run: `uv run pytest tests/orchestration/test_assets.py::test_embed_papers_asset_records_embedded -v`
 Expected: FAIL — `ModuleNotFoundError: src.orchestration.assets.embedding`.
 
 - [ ] **Step 3: Implement the asset**
 
 Create `src/orchestration/assets/embedding.py`:
 ```python
+import asyncio
+
 from dagster import AssetExecutionContext, MaterializeResult, MetadataValue, asset
 
-from src.orchestration.resources import SparkqJobResource
-
-EMBED_CMD = (
-    "uv run python -m src.cli.core_collect embed-papers "
-    "--batch-size 16 --embed-batch-size 128"
-)
+from src.core.pipeline.stages import embed_papers_stage
 
 
 @asset(deps=["enrich_abstracts"])
-def embed_papers(
-    context: AssetExecutionContext, sparkq: SparkqJobResource
-) -> MaterializeResult:
-    """Embed new papers on the DGX Sparks via sparkq (GPU: Qwen3-Embedding-8B)."""
-    job_id = sparkq.submit_and_wait(
-        EMBED_CMD, tag="lexicon-embed", gpu_mem="16G", eta="2h"
+def embed_papers(context: AssetExecutionContext) -> MaterializeResult:
+    """Embed new papers via the local Ollama service (GPU: qwen3-embedding:8b).
+
+    Service-delegated GPU work: the asset only issues HTTP calls to Ollama, so it
+    runs in-process. Depends on enrich_abstracts (state via Qdrant).
+    """
+    counts = asyncio.run(embed_papers_stage())
+    context.log.info(f"Embedding: {counts}")
+    return MaterializeResult(
+        metadata={k: MetadataValue.int(v) for k, v in counts.items()}
     )
-    context.log.info(f"Embedding completed via sparkq job {job_id}")
-    return MaterializeResult(metadata={"sparkq_job_id": MetadataValue.text(job_id)})
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run pytest tests/orchestration/test_assets.py::test_embed_papers_asset_submits_via_sparkq -v`
+Run: `uv run pytest tests/orchestration/test_assets.py::test_embed_papers_asset_records_embedded -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add src/orchestration/assets/embedding.py tests/orchestration/test_assets.py
-git commit -m "feat(orchestration): embed_papers sparkq GPU asset"
+git commit -m "feat(orchestration): embed_papers native asset (local Ollama)"
 ```
 
 ---
@@ -654,11 +590,9 @@ from dagster import Definitions
 from src.orchestration.assets.collection import collect_papers
 from src.orchestration.assets.enrichment import enrich_abstracts
 from src.orchestration.assets.embedding import embed_papers
-from src.orchestration.resources import SparkqJobResource
 
 defs = Definitions(
     assets=[collect_papers, enrich_abstracts, embed_papers],
-    resources={"sparkq": SparkqJobResource()},
 )
 ```
 
@@ -668,7 +602,7 @@ Run:
 ```bash
 uv run dagster definitions validate -m src.orchestration.definitions
 ```
-Expected: "Validation successful" (all 3 assets + resource load, DAG `collect_papers → enrich_abstracts → embed_papers` resolves), exit 0.
+Expected: "Validation successful" (all 3 assets load, DAG `collect_papers → enrich_abstracts → embed_papers` resolves), exit 0.
 
 - [ ] **Step 3: Run the full test suite**
 
@@ -688,6 +622,8 @@ git commit -m "feat(orchestration): wire Definitions for phase-1 assets"
 
 **Files:** none (validation only)
 
+**Precondition:** Qdrant up (`localhost:6333`) and Ollama serving `qwen3-embedding:8b` (warm it once: `curl localhost:11434/api/embed -d '{"model":"qwen3-embedding:8b","input":["x"]}'`). See `MEMORY.md` → `lexiconarxiv-bringup-sequence`.
+
 - [ ] **Step 1: Launch the Dagster UI**
 
 Run (background):
@@ -696,23 +632,23 @@ uv run dagster dev -m src.orchestration.definitions
 ```
 Expected: webserver on `http://localhost:3000`, the 3-asset graph visible.
 
-- [ ] **Step 2: Materialize the CPU assets against a tiny window**
+- [ ] **Step 2: Materialize the assets against a tiny window**
 
-In the UI (or CLI), materialize `collect_papers` then `enrich_abstracts`. For a fast check, temporarily set `DAYS_LOOKBACK = 1`.
+In the UI (or CLI), materialize `collect_papers` → `enrich_abstracts` → `embed_papers`. For a fast check, temporarily set `DAYS_LOOKBACK = 1`.
 Run (CLI alternative):
 ```bash
 uv run dagster asset materialize --select collect_papers -m src.orchestration.definitions
 ```
 Expected: run succeeds; `collect_papers` materialization metadata shows per-source counts; new/updated papers visible in Qdrant via `uv run python -m src.cli.core_collect status`.
 
-- [ ] **Step 3: Validate embed_papers dispatches to sparkq**
+- [ ] **Step 3: Validate embed_papers runs locally via Ollama**
 
-Materialize `embed_papers`; confirm a `lexicon-embed` job appears in `sparkq status --all` and the asset blocks until it completes, then records the job id.
-Expected: asset run succeeds; `sparkq history --like lexicon-embed` shows the completed job.
+Materialize `embed_papers`; confirm the asset succeeds and records an `embedded` count, and that the papers gain dense vectors (e.g. a `search_papers` MCP call returns `hybrid`, not `bm25_only`).
+Expected: asset run succeeds; embedded count > 0 on a window with new papers (or 0 if all already embedded with `resume=True`).
 
 - [ ] **Step 4: Confirm results match the bash path**
 
-Compare counts/coverage with a `scripts/run_incremental_pipeline.sh --days 1 --dry-run` projection and `status` output — Dagster path should produce equivalent collection + embedding outcomes.
+Compare counts/coverage with a `scripts/run_incremental_pipeline.sh --days 1 --dry-run` projection and `status` output — the Dagster path should produce equivalent collection + embedding outcomes.
 
 - [ ] **Step 5: Restore `DAYS_LOOKBACK = 3` and commit any tweaks**
 
@@ -724,11 +660,11 @@ git add -A && git commit -m "chore(orchestration): phase-1 validation tweaks" ||
 
 ## Self-Review
 
-- **Spec coverage (phases 1–2):** Dagster stood up (Tasks 1,7,8); stage logic ported to shared functions (Tasks 2,3); native CPU assets (Task 5); sparkq GPU asset + resource (Tasks 4,6); validation vs bash (Task 8). DQ checks (§3), schedules (§5), and the remaining ~10 assets are explicitly out of scope for Plan 1 → follow-up plans.
-- **Placeholder scan:** no TODO/TBD; every code step has complete code. The two "Execution notes" are concrete verification instructions (confirm import paths; confirm sparkq output format), not deferred implementation.
-- **Type consistency:** stage functions return `dict[str,int]`; assets wrap them in `MaterializeResult`/`MetadataValue`; `SparkqJobResource.submit_and_wait(cmd, tag, gpu_mem, eta) -> str` used identically in Task 6 and its test. `deps=[...]` used consistently (state via Qdrant, not data passing).
+- **Spec coverage (phases 1–2):** Dagster stood up (Tasks 1,7,8); stage logic ported to shared functions (Tasks 2,3,4); native CPU assets (Task 5); native service-delegated GPU asset (Task 6); validation vs bash (Task 8). GPU-job dispatch via sparkq (spec §2 "sparkq assets"), DQ checks (§3), schedules (§5), and the remaining ~10 assets are explicitly out of scope for Plan 1 → follow-up plans.
+- **Placeholder scan:** no TODO/TBD; every code step has complete code verified against the current codebase (2026-06-16). The one "Execution note" (Task 3) is a concrete verification instruction (keep dry-run/`--retry-incomplete` branches), not deferred implementation.
+- **Type consistency:** stage functions return `dict[str,int]` (`collect_incremental_stage` → per-source + total; `enrich_abstracts_stage` → processed/enriched/not_found/errors; `embed_papers_stage` → embedded); assets wrap them in `MaterializeResult`/`MetadataValue`; every asset signature is `(context: AssetExecutionContext) -> MaterializeResult` with cross-asset order via `deps=[...]` (state through Qdrant, no data passing). Verified symbols: `src.core.crawler.{CoreCorpusCollector, ACLAnthologyCollector, DBLPCollector, OpenReviewCollector, AAOJSCollector, get_acl_venues, get_dblp_venues, get_openreview_venues, get_aaai_venues}`; `PaperEnricher`; `PaperEmbedder`.
 
 ## Out of scope → next plans
-- **Plan 2:** remaining native assets (enrich_refs_s2/crossref, extract_keywords, label_abstracts, resolve_refs, enrich_stubs, build_cited_by, analyze_graph) + compute_similarity/compute_topics (native-vs-sparkq decided here).
+- **Plan 2:** remaining native assets (enrich_refs_s2/crossref, extract_keywords, label_abstracts, resolve_refs, enrich_stubs, build_cited_by, analyze_graph) + compute_similarity/compute_topics. **`compute_topics` (UMAP+HDBSCAN) is the first candidate for a genuinely CUDA-bound stage** — if it moves to cuML-GPU, this is where the `SparkqJobResource` (JSON-first: `sparkq submit --json` / `sparkq wait <id> --json`, decide on `success`/`terminal` booleans) gets introduced. Otherwise it stays native.
 - **Plan 3:** DQ asset-checks (spec §3) in warn-only then block+flag, with the `dq_flags` payload field.
 - **Plan 4:** daily/weekly schedules + partitions + failure sensor (spec §5); retire bash orchestrator.
