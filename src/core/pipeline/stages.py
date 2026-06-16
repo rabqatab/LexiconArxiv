@@ -16,6 +16,7 @@ from src.core.labeling import AbstractLabeler
 from src.core.embedding.embedder import PaperEmbedder
 from src.core.constants import ALL_DENSE_VECTORS
 from src.core.resolution.resolver import ReferenceResolver
+from src.core.enrichment import StubEnricher
 from src.core.crawler import (
     CoreCorpusCollector,
     ACLAnthologyCollector,
@@ -291,3 +292,18 @@ async def resolve_refs_stage(
         out["stubs_created"] += getattr(step, "stubs_created", 0)
         out["errors"] += getattr(step, "errors", 0)
     return out
+
+
+async def enrich_stubs_stage(
+    limit: int = 100, parallel: int = 10, identifier_type: str | None = None,
+    min_citations: int = 1,
+) -> dict[str, int]:
+    """Enrich most-cited stub papers with metadata via OpenAlex."""
+    storage = QdrantStorage()
+    async with StubEnricher(storage=storage, max_concurrent=parallel) as enricher:
+        p = await enricher.enrich_stubs(
+            limit=limit, identifier_type=identifier_type,
+            min_citations=min_citations, dry_run=False,
+        )
+    return {"processed": p.processed, "enriched": p.enriched, "merged": p.merged,
+            "not_found": p.not_found, "errors": p.errors}

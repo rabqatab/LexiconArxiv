@@ -115,3 +115,15 @@ def test_resolve_refs_stage_returns_counts():
         result = asyncio.run(stages.resolve_refs_stage())
     assert result["stubs_created"] == 9   # summed across 3 steps
     assert result["updated"] == 12
+
+
+def test_enrich_stubs_stage_returns_counts():
+    enricher = AsyncMock()
+    enricher.__aenter__.return_value = enricher
+    enricher.__aexit__.return_value = False
+    enricher.enrich_stubs.return_value = type("SP", (), {
+        "processed": 5, "enriched": 3, "merged": 1, "not_found": 1, "errors": 0})()
+    with patch.object(stages, "StubEnricher", return_value=enricher), \
+         patch.object(stages, "QdrantStorage"):
+        result = asyncio.run(stages.enrich_stubs_stage(limit=100, parallel=10))
+    assert result == {"processed": 5, "enriched": 3, "merged": 1, "not_found": 1, "errors": 0}
