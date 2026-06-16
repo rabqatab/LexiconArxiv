@@ -8,6 +8,8 @@ import datetime
 
 from src.core.storage import QdrantStorage
 from src.core.enrichment.openalex import PaperEnricher
+from src.core.enrichment.semantic_scholar import SemanticScholarEnricher
+from src.core.enrichment.crossref import CrossRefEnricher
 from src.core.embedding.embedder import PaperEmbedder
 from src.core.constants import ALL_DENSE_VECTORS
 from src.core.crawler import (
@@ -157,3 +159,35 @@ async def embed_papers_stage(
                 break
             offset = next_offset
     return {"embedded": total_embedded}
+
+
+async def enrich_refs_s2_stage(
+    limit: int | None = None, batch_size: int = 100, delay: float = 0.1,
+    parallel: int = 10, recent_days: int | None = None,
+) -> dict[str, int]:
+    """Fill referenced_works via Semantic Scholar for DOI papers missing refs."""
+    fetched_since = None
+    if recent_days is not None:
+        fetched_since = (
+            datetime.datetime.now(datetime.timezone.utc)
+            - datetime.timedelta(days=recent_days)
+        ).isoformat()
+    storage = QdrantStorage()
+    async with SemanticScholarEnricher(
+        storage=storage, batch_size=batch_size, delay=delay, max_concurrent=parallel
+    ) as enricher:
+        p = await enricher.enrich_by_doi(dry_run=False, limit=limit, fetched_since=fetched_since)
+    return {"processed": p.processed, "enriched": p.enriched,
+            "not_found": p.not_found, "no_refs": p.no_refs, "errors": p.errors}
+
+
+async def enrich_refs_crossref_stage(
+    limit: int | None = None, batch_size: int = 100, delay: float = 0.1, parallel: int = 10,
+) -> dict[str, int]:
+    """Fill referenced_works via CrossRef for DOI papers missing refs."""
+    async with CrossRefEnricher(
+        batch_size=batch_size, delay=delay, max_concurrent=parallel
+    ) as enricher:
+        p = await enricher.enrich_by_doi(dry_run=False, limit=limit)
+    return {"processed": p.processed, "enriched": p.enriched,
+            "not_found": p.not_found, "no_refs": p.no_refs, "errors": p.errors}

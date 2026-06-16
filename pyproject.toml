@@ -34,6 +34,7 @@ dependencies = [
     "crawl4ai>=0.8.6",
     "dagster>=1.13.9",
     "dagster-webserver>=1.13.9",
+    "pysbd>=0.3.4",
 ]
 
 [project.optional-dependencies]

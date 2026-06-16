@@ -52,3 +52,26 @@ def test_embed_papers_stage_returns_embedded_count():
         result = asyncio.run(stages.embed_papers_stage(batch_size=2))
 
     assert result == {"embedded": 2}
+
+
+def test_enrich_refs_s2_stage_returns_counts():
+    enricher = AsyncMock()
+    enricher.__aenter__.return_value = enricher
+    enricher.__aexit__.return_value = False
+    enricher.enrich_by_doi.return_value = type("P", (), {
+        "processed": 8, "enriched": 5, "not_found": 2, "no_refs": 1, "errors": 0})()
+    with patch.object(stages, "SemanticScholarEnricher", return_value=enricher), \
+         patch.object(stages, "QdrantStorage"):
+        result = asyncio.run(stages.enrich_refs_s2_stage(limit=None, parallel=10))
+    assert result == {"processed": 8, "enriched": 5, "not_found": 2, "no_refs": 1, "errors": 0}
+
+
+def test_enrich_refs_crossref_stage_returns_counts():
+    enricher = AsyncMock()
+    enricher.__aenter__.return_value = enricher
+    enricher.__aexit__.return_value = False
+    enricher.enrich_by_doi.return_value = type("P", (), {
+        "processed": 4, "enriched": 3, "not_found": 1, "no_refs": 0, "errors": 0})()
+    with patch.object(stages, "CrossRefEnricher", return_value=enricher):
+        result = asyncio.run(stages.enrich_refs_crossref_stage(limit=None, parallel=10))
+    assert result == {"processed": 4, "enriched": 3, "not_found": 1, "no_refs": 0, "errors": 0}
