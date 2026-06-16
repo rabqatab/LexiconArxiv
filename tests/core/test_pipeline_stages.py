@@ -136,3 +136,18 @@ def test_build_cited_by_stage_returns_counts():
     with patch.object(stages, "QdrantStorage", return_value=storage):
         result = asyncio.run(stages.build_cited_by_stage())
     assert result == {"new_papers_processed": 12, "new_edges": 30, "papers_updated": 9}
+
+
+def test_analyze_graph_stage_returns_counts():
+    builder = MagicMock()
+    builder.build_graph.return_value = MagicMock()  # nx.DiGraph stand-in
+    analyzer = MagicMock()
+    analyzer.compute_pagerank.return_value = {"a": 0.5}
+    analyzer.compute_hits.return_value = ({"a": 0.1}, {"a": 0.2})
+    analyzer.compute_communities.return_value = {"a": 0}
+    analyzer.store_metrics_to_qdrant.return_value = 1
+    with patch.object(stages, "CitationGraphBuilder", return_value=builder), \
+         patch.object(stages, "GraphAnalyzer", return_value=analyzer), \
+         patch.object(stages, "QdrantStorage"):
+        result = asyncio.run(stages.analyze_graph_stage())
+    assert result == {"metrics_stored": 1}

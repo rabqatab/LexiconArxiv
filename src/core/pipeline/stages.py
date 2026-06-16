@@ -17,6 +17,7 @@ from src.core.embedding.embedder import PaperEmbedder
 from src.core.constants import ALL_DENSE_VECTORS
 from src.core.resolution.resolver import ReferenceResolver
 from src.core.enrichment import StubEnricher
+from src.core.citation_graph import CitationGraphBuilder, GraphAnalyzer
 from src.core.crawler import (
     CoreCorpusCollector,
     ACLAnthologyCollector,
@@ -318,3 +319,18 @@ async def build_cited_by_stage() -> dict[str, int]:
         "new_edges": result.get("new_edges", 0),
         "papers_updated": result.get("papers_updated", 0),
     }
+
+
+async def analyze_graph_stage(
+    pagerank_alpha: float = 0.85, community_resolution: float = 1.0,
+) -> dict[str, int]:
+    """Build the citation graph and store PageRank/HITS/community metrics to Qdrant."""
+    storage = QdrantStorage()
+    builder = CitationGraphBuilder(storage=storage)
+    graph = builder.build_graph(include_metadata=True)
+    analyzer = GraphAnalyzer(graph, storage=storage)
+    pagerank = analyzer.compute_pagerank(alpha=pagerank_alpha)
+    hubs, authorities = analyzer.compute_hits()
+    communities = analyzer.compute_communities(resolution=community_resolution)
+    updated = analyzer.store_metrics_to_qdrant(pagerank, hubs, authorities, communities)
+    return {"metrics_stored": updated}
