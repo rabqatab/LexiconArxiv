@@ -33,6 +33,8 @@ def test_enrich_abstracts_stage_returns_progress_counts():
 
 
 def test_embed_papers_stage_returns_embedded_count():
+    from src.core.constants import ALL_DENSE_VECTORS
+
     embedder = AsyncMock()
     embedder.__aenter__.return_value = embedder
     embedder.__aexit__.return_value = False
@@ -42,6 +44,8 @@ def test_embed_papers_stage_returns_embedded_count():
     storage = MagicMock()
     # one batch of two papers, then no more (next_offset=None)
     storage.get_papers_for_embedding.return_value = ([{"id": "a"}, {"id": "b"}], None)
+    # Satisfy the vector pre-flight check: return a dict containing all required dense vectors.
+    storage.client.get_collection.return_value.config.params.vectors = {v: MagicMock() for v in ALL_DENSE_VECTORS}
 
     with patch.object(stages, "PaperEmbedder", return_value=embedder), \
          patch.object(stages, "QdrantStorage", return_value=storage):

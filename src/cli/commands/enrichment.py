@@ -11,6 +11,15 @@ from src.core.storage import QdrantStorage
 logger = logging.getLogger(__name__)
 
 
+def _echo_enrichment_counts(counts: dict) -> None:
+    """Print labelled enrichment result lines from a counts dict."""
+    click.echo(f"\nAbstract Enrichment Results:")
+    click.echo(f"  Processed: {counts['processed']}")
+    click.echo(f"  Enriched:  {counts['enriched']}")
+    click.echo(f"  Not found: {counts['not_found']}")
+    click.echo(f"  Errors:    {counts['errors']}")
+
+
 def register_commands(cli: click.Group):
 
     @cli.command("enrich-1-refs-and-abstracts-by-doi-via-openalex")
@@ -116,7 +125,7 @@ def register_commands(cli: click.Group):
                 counts = await enrich_abstracts_stage(
                     limit=limit, batch_size=batch_size, delay=delay, parallel=parallel
                 )
-                click.echo(f"\nAbstract Enrichment Results: {counts}")
+                _echo_enrichment_counts(counts)
             else:
                 storage = QdrantStorage()
                 async with PaperEnricher(

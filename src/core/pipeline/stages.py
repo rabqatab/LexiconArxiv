@@ -9,6 +9,7 @@ import datetime
 from src.core.storage import QdrantStorage
 from src.core.enrichment.openalex import PaperEnricher
 from src.core.embedding.embedder import PaperEmbedder
+from src.core.constants import ALL_DENSE_VECTORS
 from src.core.crawler import (
     CoreCorpusCollector,
     ACLAnthologyCollector,
@@ -90,6 +91,9 @@ async def enrich_abstracts_stage(
     """Fill missing abstracts via OpenAlex for papers that have a DOI.
 
     Returns processed/enriched/not_found/errors counts.
+
+    Note: `parallel` defaults to 10 here (vs. 1 in the CLI) intentionally —
+    Dagster batch runs benefit from higher concurrency than an interactive CLI default.
     """
     storage = QdrantStorage()
     async with PaperEnricher(
@@ -118,6 +122,17 @@ async def embed_papers_stage(
     skips papers that already have dense vectors. Returns {"embedded": N}.
     """
     storage = QdrantStorage()
+
+    # Pre-flight: verify the collection has the required dense vector configs.
+    info = storage.client.get_collection(storage.collection_name)
+    vectors = info.config.params.vectors or {}
+    missing = [v for v in ALL_DENSE_VECTORS if v not in vectors]
+    if missing:
+        raise RuntimeError(
+            f"Collection missing vector configs: {missing}. "
+            "Run: uv run python -m src.cli.core_collect migrate-collection"
+        )
+
     embedder = PaperEmbedder(max_concurrent=concurrency)
     total_embedded = 0
     async with embedder:
