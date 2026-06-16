@@ -24,3 +24,15 @@ def test_enrich_abstracts_asset_records_enriched():
                side_effect=fake_enrich):
         out = enrich_abstracts(build_asset_context())
     assert out.metadata["enriched"].value == 3
+
+
+def test_embed_papers_asset_records_embedded():
+    from src.orchestration.assets.embedding import embed_papers
+
+    async def fake_embed(**kwargs):
+        return {"embedded": 5}
+
+    with patch("src.orchestration.assets.embedding.embed_papers_stage",
+               side_effect=fake_embed):
+        out = embed_papers(build_asset_context())
+    assert out.metadata["embedded"].value == 5
