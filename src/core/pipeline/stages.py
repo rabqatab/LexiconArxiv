@@ -4,6 +4,7 @@ Each stage is a thin, side-effecting orchestration over src.core.* that returns
 a small structured result (counts), not paper data. Paper data lives in Qdrant.
 """
 
+import asyncio
 import datetime
 
 from src.core.storage import QdrantStorage
@@ -11,6 +12,7 @@ from src.core.enrichment.openalex import PaperEnricher
 from src.core.enrichment.semantic_scholar import SemanticScholarEnricher
 from src.core.enrichment.crossref import CrossRefEnricher
 from src.core.keyword import KeywordExtractor
+from src.core.labeling import AbstractLabeler
 from src.core.embedding.embedder import PaperEmbedder
 from src.core.constants import ALL_DENSE_VECTORS
 from src.core.crawler import (
@@ -228,3 +230,41 @@ async def extract_keywords_stage(
         offset = next_offset
     return {"processed": processed, "with_keywords": with_keywords,
             "total_keywords": total_keywords}
+
+
+async def label_abstracts_stage(
+    limit: int | None = None, batch_size: int = 500, force: bool = False,
+    llm_backend: str = "gemini",
+) -> dict[str, int]:
+    """Label abstract sentences (rhetorical roles -> abstract_structure)."""
+    storage = QdrantStorage()
+    labeler = AbstractLabeler(llm_backend=llm_backend)
+    processed = labeled = 0
+    offset = None
+    try:
+        while True:
+            papers, next_offset = storage.get_papers_for_abstract_labeling(
+                limit=batch_size, offset=offset, skip_existing=not force
+            )
+            if not papers:
+                break
+            results = await asyncio.gather(*[
+                labeler.label_abstract(p.get("title") or "", p.get("abstract") or "")
+                for _, p in papers
+            ])
+            updates = []
+            for (point_id, _), (structure, source) in zip(papers, results):
+                processed += 1
+                if structure:
+                    labeled += 1
+                    updates.append((point_id, structure, source))
+            if updates:
+                storage.batch_update_abstract_structure(updates)
+            if limit and processed >= limit:
+                break
+            if next_offset is None:
+                break
+            offset = next_offset
+    finally:
+        await labeler.close()
+    return {"processed": processed, "labeled": labeled}

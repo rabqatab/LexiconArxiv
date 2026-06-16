@@ -89,3 +89,16 @@ def test_extract_keywords_stage_returns_counts():
         result = asyncio.run(stages.extract_keywords_stage(batch_size=10))
     assert result["processed"] == 1
     assert result["with_keywords"] == 1
+
+
+def test_label_abstracts_stage_returns_counts():
+    labeler = AsyncMock()
+    labeler.label_abstract.return_value = ({"task": "x"}, "gemini")
+    labeler.close.return_value = None
+    storage = MagicMock()
+    storage.get_papers_for_abstract_labeling.return_value = (
+        [("id1", {"title": "T", "abstract": "A"})], None)
+    with patch.object(stages, "AbstractLabeler", return_value=labeler), \
+         patch.object(stages, "QdrantStorage", return_value=storage):
+        result = asyncio.run(stages.label_abstracts_stage(batch_size=10))
+    assert result == {"processed": 1, "labeled": 1}
