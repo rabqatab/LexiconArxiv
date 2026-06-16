@@ -8,6 +8,7 @@ import datetime
 
 from src.core.storage import QdrantStorage
 from src.core.enrichment.openalex import PaperEnricher
+from src.core.embedding.embedder import PaperEmbedder
 from src.core.crawler import (
     CoreCorpusCollector,
     ACLAnthologyCollector,
@@ -101,3 +102,43 @@ async def enrich_abstracts_stage(
         "not_found": progress.not_found,
         "errors": progress.errors,
     }
+
+
+async def embed_papers_stage(
+    batch_size: int = 8,
+    embed_batch_size: int = 64,
+    concurrency: int = 4,
+    limit: int | None = None,
+    resume: bool = True,
+) -> dict[str, int]:
+    """Embed new papers (section + structured-abstract + BM25 vectors) via Ollama.
+
+    The GPU work is delegated to the local Ollama service (qwen3-embedding:8b);
+    this function only makes HTTP calls, so it runs in-process. `resume=True`
+    skips papers that already have dense vectors. Returns {"embedded": N}.
+    """
+    storage = QdrantStorage()
+    embedder = PaperEmbedder(max_concurrent=concurrency)
+    total_embedded = 0
+    async with embedder:
+        if not await embedder.check_model_available():
+            raise RuntimeError(
+                "Embedding model not available in Ollama "
+                "(run: ollama pull qwen3-embedding:8b)"
+            )
+        offset = None
+        while True:
+            papers, next_offset = storage.get_papers_for_embedding(
+                limit=batch_size, offset=offset, skip_embedded=resume
+            )
+            if not papers:
+                break
+            total_embedded += await embedder.embed_and_upsert_batch(
+                papers=papers, storage=storage, embed_batch_size=embed_batch_size
+            )
+            if limit and total_embedded >= limit:
+                break
+            if next_offset is None:
+                break
+            offset = next_offset
+    return {"embedded": total_embedded}
