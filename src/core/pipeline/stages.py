@@ -10,6 +10,7 @@ from src.core.storage import QdrantStorage
 from src.core.enrichment.openalex import PaperEnricher
 from src.core.enrichment.semantic_scholar import SemanticScholarEnricher
 from src.core.enrichment.crossref import CrossRefEnricher
+from src.core.keyword import KeywordExtractor
 from src.core.embedding.embedder import PaperEmbedder
 from src.core.constants import ALL_DENSE_VECTORS
 from src.core.crawler import (
@@ -191,3 +192,39 @@ async def enrich_refs_crossref_stage(
         p = await enricher.enrich_by_doi(dry_run=False, limit=limit)
     return {"processed": p.processed, "enriched": p.enriched,
             "not_found": p.not_found, "no_refs": p.no_refs, "errors": p.errors}
+
+
+async def extract_keywords_stage(
+    limit: int | None = None, batch_size: int = 100, force: bool = False,
+    use_keybert: bool = True,
+) -> dict[str, int]:
+    """Extract BM25/display keywords (sync KeyBERT path) for papers missing them."""
+    storage = QdrantStorage()
+    extractor = KeywordExtractor(use_keybert=use_keybert)
+    processed = with_keywords = total_keywords = 0
+    offset = None
+    while True:
+        papers, next_offset = storage.get_papers_for_keyword_extraction(
+            limit=batch_size, offset=offset, skip_existing=not force
+        )
+        if not papers:
+            break
+        updates = []
+        for point_id, payload in papers:
+            title = payload.get("title") or ""
+            abstract = payload.get("abstract") or ""
+            keywords = extractor.extract(title, abstract)
+            source = extractor.get_extraction_source(title, abstract)
+            processed += 1
+            if keywords:
+                with_keywords += 1
+                total_keywords += len(keywords)
+            updates.append((point_id, keywords, source, None))
+        storage.batch_update_keywords_with_source(updates)
+        if limit and processed >= limit:
+            break
+        if next_offset is None:
+            break
+        offset = next_offset
+    return {"processed": processed, "with_keywords": with_keywords,
+            "total_keywords": total_keywords}

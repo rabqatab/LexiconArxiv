@@ -75,3 +75,17 @@ def test_enrich_refs_crossref_stage_returns_counts():
     with patch.object(stages, "CrossRefEnricher", return_value=enricher):
         result = asyncio.run(stages.enrich_refs_crossref_stage(limit=None, parallel=10))
     assert result == {"processed": 4, "enriched": 3, "not_found": 1, "no_refs": 0, "errors": 0}
+
+
+def test_extract_keywords_stage_returns_counts():
+    extractor = MagicMock()
+    extractor.extract.return_value = ["kw1", "kw2"]
+    extractor.get_extraction_source.return_value = "keybert"
+    storage = MagicMock()
+    storage.get_papers_for_keyword_extraction.return_value = (
+        [("id1", {"title": "T", "abstract": "A"})], None)
+    with patch.object(stages, "KeywordExtractor", return_value=extractor), \
+         patch.object(stages, "QdrantStorage", return_value=storage):
+        result = asyncio.run(stages.extract_keywords_stage(batch_size=10))
+    assert result["processed"] == 1
+    assert result["with_keywords"] == 1
