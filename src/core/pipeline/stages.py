@@ -18,6 +18,7 @@ from src.core.constants import ALL_DENSE_VECTORS
 from src.core.resolution.resolver import ReferenceResolver
 from src.core.enrichment import StubEnricher
 from src.core.citation_graph import CitationGraphBuilder, GraphAnalyzer
+from src.core.analytics.similarity import compute_similarity_batch
 from src.core.crawler import (
     CoreCorpusCollector,
     ACLAnthologyCollector,
@@ -334,3 +335,12 @@ async def analyze_graph_stage(
     communities = analyzer.compute_communities(resolution=community_resolution)
     updated = analyzer.store_metrics_to_qdrant(pagerank, hubs, authorities, communities)
     return {"metrics_stored": updated}
+
+
+async def compute_similarity_stage(
+    k: int = 10, batch_size: int = 20, limit: int | None = None,
+) -> dict[str, int]:
+    """Compute the semantic similarity graph (Qdrant ANN; CPU-bound)."""
+    storage = QdrantStorage()
+    stats = compute_similarity_batch(storage=storage, k=k, batch_size=batch_size, limit=limit)
+    return {"processed": stats.get("processed", 0), "updated": stats.get("updated", 0)}

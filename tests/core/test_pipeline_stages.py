@@ -151,3 +151,13 @@ def test_analyze_graph_stage_returns_counts():
          patch.object(stages, "QdrantStorage"):
         result = asyncio.run(stages.analyze_graph_stage())
     assert result == {"metrics_stored": 1}
+
+
+def test_compute_similarity_stage_returns_counts():
+    storage = MagicMock()
+    with patch.object(stages, "QdrantStorage", return_value=storage), \
+         patch.object(stages, "compute_similarity_batch",
+                      return_value={"processed": 100, "updated": 95}) as csb:
+        result = asyncio.run(stages.compute_similarity_stage(k=10, batch_size=50))
+    assert result == {"processed": 100, "updated": 95}
+    assert csb.called
