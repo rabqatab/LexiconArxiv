@@ -102,3 +102,16 @@ def test_label_abstracts_stage_returns_counts():
          patch.object(stages, "QdrantStorage", return_value=storage):
         result = asyncio.run(stages.label_abstracts_stage(batch_size=10))
     assert result == {"processed": 1, "labeled": 1}
+
+
+def test_resolve_refs_stage_returns_counts():
+    resolver = AsyncMock()
+    resolver.__aenter__.return_value = resolver
+    resolver.__aexit__.return_value = False
+    step = type("RP", (), {"processed": 6, "updated": 4, "stubs_created": 3, "errors": 0})()
+    resolver.run_full_pipeline.return_value = {"normalize": step, "arxiv": step, "internal": step}
+    with patch.object(stages, "ReferenceResolver", return_value=resolver), \
+         patch.object(stages, "QdrantStorage"):
+        result = asyncio.run(stages.resolve_refs_stage())
+    assert result["stubs_created"] == 9   # summed across 3 steps
+    assert result["updated"] == 12

@@ -15,6 +15,7 @@ from src.core.keyword import KeywordExtractor
 from src.core.labeling import AbstractLabeler
 from src.core.embedding.embedder import PaperEmbedder
 from src.core.constants import ALL_DENSE_VECTORS
+from src.core.resolution.resolver import ReferenceResolver
 from src.core.crawler import (
     CoreCorpusCollector,
     ACLAnthologyCollector,
@@ -268,3 +269,25 @@ async def label_abstracts_stage(
     finally:
         await labeler.close()
     return {"processed": processed, "labeled": labeled}
+
+
+async def resolve_refs_stage(
+    limit: int | None = None, batch_size: int = 100, parallel: int = 10,
+    create_stubs: bool = True, fuzzy_matching: bool = True, external_search: bool = False,
+) -> dict[str, int]:
+    """Normalize/resolve references and (optionally) create stub papers."""
+    storage = QdrantStorage()
+    async with ReferenceResolver(
+        storage=storage, batch_size=batch_size, max_concurrent=parallel
+    ) as resolver:
+        results = await resolver.run_full_pipeline(
+            dry_run=False, limit=limit, fuzzy_matching=fuzzy_matching,
+            external_search=external_search, create_stubs=create_stubs,
+        )
+    out = {"processed": 0, "updated": 0, "stubs_created": 0, "errors": 0}
+    for step in results.values():
+        out["processed"] += getattr(step, "processed", 0)
+        out["updated"] += getattr(step, "updated", 0)
+        out["stubs_created"] += getattr(step, "stubs_created", 0)
+        out["errors"] += getattr(step, "errors", 0)
+    return out
