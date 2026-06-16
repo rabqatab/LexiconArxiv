@@ -8,9 +8,9 @@
 #        stealth browser downloader (src/core/enrichment/acm_browser.py)
 #
 # Requires:
-#   - GROBID running at http://localhost:8070
-#     docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.0
 #   - Qdrant at the configured URL
+#   - GROBID — auto-started if not already running (scripts/lib/ensure_grobid.sh)
+#     and stopped on exit if this script started it
 #
 # Environment:
 #   PARALLEL      default 5      # ACM browser downloader is self-serializing
@@ -26,6 +26,9 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$PROJECT_ROOT"
+
+# GROBID auto-start helper (defines ensure_grobid / stop_grobid_if_started).
+source "$SCRIPT_DIR/../lib/ensure_grobid.sh"
 
 PARALLEL="${PARALLEL:-5}"
 BATCH_SIZE="${BATCH_SIZE:-50}"
@@ -68,6 +71,10 @@ else
 fi
 
 # -- Step 2: run the reference extraction scoped to 10.1145/
+# Bring GROBID up before extraction (dry-run only counts, so skip the spin-up).
+if [[ "$DRY_RUN" != "1" ]]; then
+  ensure_grobid
+fi
 log "--- Step 2/2: enrich-5-refs-by-pdf-via-grobid --doi-prefix 10.1145/ ---"
 
 CMD=(uv run python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid

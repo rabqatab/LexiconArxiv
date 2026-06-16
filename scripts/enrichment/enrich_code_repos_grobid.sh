@@ -1,7 +1,7 @@
 #!/bin/bash
 # Step 3.9: Extract GitHub code repo URLs from paper PDFs via GROBID
-# Requires GROBID server running:
-#   docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.0
+# GROBID is started automatically if not already running (see
+# scripts/lib/ensure_grobid.sh) and stopped on exit if this script started it.
 
 set -e
 
@@ -53,8 +53,8 @@ while [[ $# -gt 0 ]]; do
             echo "Downloads PDFs, extracts full-text via GROBID, finds and"
             echo "classifies GitHub URLs using section/context heuristics."
             echo ""
-            echo "Requires GROBID server:"
-            echo "  docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.0"
+            echo "GROBID is auto-started if not already running, and stopped"
+            echo "on exit if this script started it."
             echo ""
             echo "Options:"
             echo "  --parallel N         Concurrent extractions (default: 5)"
@@ -75,12 +75,12 @@ done
 
 echo "[GROBID Code Repos] Extracting GitHub URLs from paper PDFs..."
 
-# Check if GROBID is running
-if ! curl -s --connect-timeout 5 "$GROBID_URL/api/isalive" > /dev/null 2>&1; then
-    echo "[GROBID Code Repos] WARNING: GROBID server not responding at $GROBID_URL"
-    echo "[GROBID Code Repos] Start GROBID with: docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.0"
-    echo "[GROBID Code Repos] Skipping GROBID code repo extraction."
-    exit 0
+# Ensure GROBID is up — auto-starts a container if needed and stops it on exit
+# only if we started it (a pre-existing GROBID is left running). Honors the
+# GROBID_URL parsed above. Dry-run only counts, so skip the spin-up.
+source "$SCRIPT_DIR/../lib/ensure_grobid.sh"
+if [ "$DRY_RUN" != true ]; then
+    ensure_grobid
 fi
 
 CMD="uv run python -m src.cli.core_collect enrich-11-code-repos-via-grobid --parallel $PARALLEL --batch-size $BATCH_SIZE --grobid-url $GROBID_URL"
