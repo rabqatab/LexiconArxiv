@@ -60,7 +60,6 @@ logs_outdated/
 htmlcov/
 .tox/
 .nox/
-tests/
 
 # Jupyter & notebooks
 .ipynb_checkpoints/
