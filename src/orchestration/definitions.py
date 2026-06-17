@@ -9,6 +9,7 @@ from src.orchestration.assets.resolution import resolve_refs, enrich_stubs
 from src.orchestration.assets.graph import build_cited_by, analyze_graph
 from src.orchestration.assets.embedding import embed_papers
 from src.orchestration.assets.analytics import compute_similarity, compute_topics
+from src.orchestration.checks import ALL_CHECKS
 
 defs = Definitions(
     assets=[
@@ -16,4 +17,5 @@ defs = Definitions(
         extract_keywords, label_abstracts, resolve_refs, enrich_stubs,
         build_cited_by, analyze_graph, embed_papers, compute_similarity, compute_topics,
     ],
+    asset_checks=ALL_CHECKS,
 )
