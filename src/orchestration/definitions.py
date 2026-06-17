@@ -10,6 +10,9 @@ from src.orchestration.assets.graph import build_cited_by, analyze_graph
 from src.orchestration.assets.embedding import embed_papers
 from src.orchestration.assets.analytics import compute_similarity, compute_topics
 from src.orchestration.checks import ALL_CHECKS
+from src.orchestration.jobs import core_job, maintenance_job
+from src.orchestration.schedules import daily_core_schedule, weekly_maintenance_schedule
+from src.orchestration.sensors import run_failure_alert_sensor
 
 defs = Definitions(
     assets=[
@@ -18,4 +21,7 @@ defs = Definitions(
         build_cited_by, analyze_graph, embed_papers, compute_similarity, compute_topics,
     ],
     asset_checks=ALL_CHECKS,
+    jobs=[core_job, maintenance_job],
+    schedules=[daily_core_schedule, weekly_maintenance_schedule],
+    sensors=[run_failure_alert_sensor],
 )
