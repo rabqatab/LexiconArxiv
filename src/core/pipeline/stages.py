@@ -8,8 +8,6 @@ import asyncio
 import datetime
 import logging
 
-logger = logging.getLogger(__name__)
-
 from src.core.storage import QdrantStorage
 from src.core.enrichment.openalex import PaperEnricher
 from src.core.enrichment.semantic_scholar import SemanticScholarEnricher
@@ -34,6 +32,8 @@ from src.core.crawler import (
     AAOJSCollector,
     get_aaai_venues,
 )
+
+logger = logging.getLogger(__name__)
 
 
 async def collect_incremental_stage(days: int = 3, source: str = "all") -> dict[str, int]:
