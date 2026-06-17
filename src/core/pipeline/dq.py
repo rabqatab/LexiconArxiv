@@ -25,10 +25,13 @@ _STUB = models.FieldCondition(key="is_stub", match=models.MatchValue(value=True)
 
 
 def _count(storage, must=None, must_not=None) -> int:
+    # exact=False: approximate count. exact=True times out on the multi-million
+    # point collection (esp. under concurrent writes), and warn-only coverage
+    # checks tolerate approximate counts. Phase 3b ERROR gating may revisit this.
     return storage.client.count(
         collection_name=storage.collection_name,
         count_filter=models.Filter(must=must, must_not=must_not),
-        exact=True,
+        exact=False,
     ).count
 
 
