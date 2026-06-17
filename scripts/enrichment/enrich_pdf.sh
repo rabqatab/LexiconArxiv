@@ -6,8 +6,8 @@
 #   enrich-5: Extract references from PDFs
 #   enrich-7: Extract abstracts from PDFs
 #
-# Requires GROBID server running:
-#   docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.0
+# GROBID is started automatically if not already running (see
+# scripts/lib/ensure_grobid.sh) and stopped on exit if this script started it.
 
 set -e
 
@@ -54,8 +54,8 @@ while [[ $# -gt 0 ]]; do
             echo "This is the last-resort fallback for papers where"
             echo "API-based enrichment (OpenAlex, CrossRef) failed."
             echo ""
-            echo "Requires GROBID server:"
-            echo "  docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.0"
+            echo "GROBID is auto-started if not already running, and stopped"
+            echo "on exit if this script started it."
             echo ""
             echo "Options:"
             echo "  --parallel N      Concurrent extractions (default: 2)"
@@ -75,12 +75,12 @@ done
 
 echo "[PDF/GROBID] Extracting references from PDFs..."
 
-# Check if GROBID is running
-if ! curl -s --connect-timeout 5 "$GROBID_URL/api/isalive" > /dev/null 2>&1; then
-    echo "[PDF/GROBID] WARNING: GROBID server not responding at $GROBID_URL"
-    echo "[PDF/GROBID] Start GROBID with: docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.0"
-    echo "[PDF/GROBID] Skipping PDF extraction."
-    exit 0
+# Ensure GROBID is up — auto-starts a container if needed and stops it on exit
+# only if we started it (a pre-existing GROBID is left running). Dry-run only
+# counts, so skip the spin-up.
+source "$SCRIPT_DIR/../lib/ensure_grobid.sh"
+if [ "$DRY_RUN" != true ]; then
+    ensure_grobid
 fi
 
 CMD="uv run python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid --parallel $PARALLEL --batch-size $BATCH_SIZE --grobid-url $GROBID_URL"
