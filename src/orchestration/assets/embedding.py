@@ -5,7 +5,7 @@ from dagster import AssetExecutionContext, MaterializeResult, MetadataValue, ass
 from src.core.pipeline.stages import embed_papers_stage
 
 
-@asset(deps=["enrich_abstracts"])
+@asset(deps=["label_abstracts"])
 def embed_papers(context: AssetExecutionContext) -> MaterializeResult:
     """Embed new papers via the local Ollama service (GPU: qwen3-embedding:8b).
 
