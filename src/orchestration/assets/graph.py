@@ -17,7 +17,10 @@ def build_cited_by(context: AssetExecutionContext) -> MaterializeResult:
 
 @asset(deps=["build_cited_by"])
 def analyze_graph(context: AssetExecutionContext) -> MaterializeResult:
-    """Compute and store citation graph metrics (PageRank/HITS/communities). Depends on build_cited_by (state via Qdrant)."""
+    """Compute and store citation graph metrics (PageRank/HITS/communities).
+
+    Depends on build_cited_by (state via Qdrant).
+    """
     counts = asyncio.run(analyze_graph_stage())
     context.log.info(f"Graph analysis: {counts}")
     return MaterializeResult(

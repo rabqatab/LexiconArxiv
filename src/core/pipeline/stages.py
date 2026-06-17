@@ -6,6 +6,9 @@ a small structured result (counts), not paper data. Paper data lives in Qdrant.
 
 import asyncio
 import datetime
+import logging
+
+logger = logging.getLogger(__name__)
 
 from src.core.storage import QdrantStorage
 from src.core.enrichment.openalex import PaperEnricher
@@ -161,7 +164,7 @@ async def embed_papers_stage(
             total_embedded += await embedder.embed_and_upsert_batch(
                 papers=papers, storage=storage, embed_batch_size=embed_batch_size
             )
-            if limit and total_embedded >= limit:
+            if limit is not None and total_embedded >= limit:
                 break
             if next_offset is None:
                 break
@@ -193,8 +196,9 @@ async def enrich_refs_crossref_stage(
     limit: int | None = None, batch_size: int = 100, delay: float = 0.1, parallel: int = 10,
 ) -> dict[str, int]:
     """Fill referenced_works via CrossRef for DOI papers missing refs."""
+    storage = QdrantStorage()
     async with CrossRefEnricher(
-        batch_size=batch_size, delay=delay, max_concurrent=parallel
+        storage=storage, batch_size=batch_size, delay=delay, max_concurrent=parallel
     ) as enricher:
         p = await enricher.enrich_by_doi(dry_run=False, limit=limit)
     return {"processed": p.processed, "enriched": p.enriched,
@@ -228,7 +232,7 @@ async def extract_keywords_stage(
                 total_keywords += len(keywords)
             updates.append((point_id, keywords, source, None))
         storage.batch_update_keywords_with_source(updates)
-        if limit and processed >= limit:
+        if limit is not None and processed >= limit:
             break
         if next_offset is None:
             break
@@ -244,7 +248,7 @@ async def label_abstracts_stage(
     """Label abstract sentences (rhetorical roles -> abstract_structure)."""
     storage = QdrantStorage()
     labeler = AbstractLabeler(llm_backend=llm_backend)
-    processed = labeled = 0
+    processed = labeled = errors = 0
     offset = None
     try:
         while True:
@@ -256,23 +260,28 @@ async def label_abstracts_stage(
             results = await asyncio.gather(*[
                 labeler.label_abstract(p.get("title") or "", p.get("abstract") or "")
                 for _, p in papers
-            ])
+            ], return_exceptions=True)
             updates = []
-            for (point_id, _), (structure, source) in zip(papers, results):
+            for (point_id, _), result in zip(papers, results):
+                if isinstance(result, Exception):
+                    errors += 1
+                    logger.warning("label_abstract failed for %s: %s", point_id, result)
+                    continue
                 processed += 1
+                structure, source = result
                 if structure:
                     labeled += 1
                     updates.append((point_id, structure, source))
             if updates:
                 storage.batch_update_abstract_structure(updates)
-            if limit and processed >= limit:
+            if limit is not None and processed >= limit:
                 break
             if next_offset is None:
                 break
             offset = next_offset
     finally:
         await labeler.close()
-    return {"processed": processed, "labeled": labeled}
+    return {"processed": processed, "labeled": labeled, "errors": errors}
 
 
 async def resolve_refs_stage(
@@ -290,7 +299,7 @@ async def resolve_refs_stage(
         )
     out = {"processed": 0, "updated": 0, "stubs_created": 0, "errors": 0}
     for step in results.values():
-        out["processed"] += getattr(step, "processed", 0)
+        out["processed"] = max(out["processed"], getattr(step, "processed", 0))
         out["updated"] += getattr(step, "updated", 0)
         out["stubs_created"] += getattr(step, "stubs_created", 0)
         out["errors"] += getattr(step, "errors", 0)
@@ -358,7 +367,7 @@ async def compute_topics_stage(
         hdbscan_min_cluster_size=hdbscan_min_cluster_size, hdbscan_min_samples=hdbscan_min_samples,
     )
     if "error" in results:
-        return {"papers": 0, "clusters": 0, "noise": 0, "stored": 0}
+        raise RuntimeError(results["error"])
     stored = store_cluster_results(storage, results)
     return {"papers": results.get("num_papers", 0), "clusters": results.get("num_clusters", 0),
             "noise": results.get("noise_count", 0), "stored": stored}

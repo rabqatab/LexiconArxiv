@@ -1,4 +1,5 @@
 import asyncio
+import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from src.core.pipeline import stages
 
@@ -101,7 +102,7 @@ def test_label_abstracts_stage_returns_counts():
     with patch.object(stages, "AbstractLabeler", return_value=labeler), \
          patch.object(stages, "QdrantStorage", return_value=storage):
         result = asyncio.run(stages.label_abstracts_stage(batch_size=10))
-    assert result == {"processed": 1, "labeled": 1}
+    assert result == {"processed": 1, "labeled": 1, "errors": 0}
 
 
 def test_resolve_refs_stage_returns_counts():
@@ -113,6 +114,7 @@ def test_resolve_refs_stage_returns_counts():
     with patch.object(stages, "ReferenceResolver", return_value=resolver), \
          patch.object(stages, "QdrantStorage"):
         result = asyncio.run(stages.resolve_refs_stage())
+    assert result["processed"] == 6    # max across 3 steps (same corpus counted once)
     assert result["stubs_created"] == 9   # summed across 3 steps
     assert result["updated"] == 12
 
@@ -178,6 +180,6 @@ def test_compute_topics_stage_handles_error():
     with patch.object(stages, "QdrantStorage", return_value=storage), \
          patch.object(stages, "compute_clusters", return_value={"error": "too few", "count": 3}), \
          patch.object(stages, "store_cluster_results") as scr:
-        result = asyncio.run(stages.compute_topics_stage())
-    assert result == {"papers": 0, "clusters": 0, "noise": 0, "stored": 0}
+        with pytest.raises(RuntimeError):
+            asyncio.run(stages.compute_topics_stage())
     assert not scr.called

@@ -7,7 +7,10 @@ from src.core.pipeline.stages import resolve_refs_stage, enrich_stubs_stage
 
 @asset(deps=["enrich_refs_crossref"])
 def resolve_refs(context: AssetExecutionContext) -> MaterializeResult:
-    """Normalize/resolve references and create stubs. Depends on enrich_refs_crossref (state via Qdrant)."""
+    """Normalize/resolve references and create stubs.
+
+    Depends on enrich_refs_crossref (state via Qdrant).
+    """
     counts = asyncio.run(resolve_refs_stage())
     context.log.info(f"Reference resolution: {counts}")
     return MaterializeResult(

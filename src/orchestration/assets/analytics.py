@@ -7,7 +7,10 @@ from src.core.pipeline.stages import compute_similarity_stage, compute_topics_st
 
 @asset(deps=["embed_papers"])
 def compute_similarity(context: AssetExecutionContext) -> MaterializeResult:
-    """Compute semantic similarity graph via Qdrant ANN. Depends on embed_papers (state via Qdrant)."""
+    """Compute semantic similarity graph via Qdrant ANN.
+
+    Depends on embed_papers (state via Qdrant).
+    """
     counts = asyncio.run(compute_similarity_stage())
     context.log.info(f"Similarity: {counts}")
     return MaterializeResult(
