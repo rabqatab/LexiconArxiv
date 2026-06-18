@@ -11,6 +11,21 @@ from qdrant_client.http import models
 logger = logging.getLogger(__name__)
 
 
+def _first_author_surname(payload: dict) -> str | None:
+    """Extract first author's surname from a stored paper payload.
+
+    Stored payloads use ``authors: list[str]`` (display names), e.g.
+    ``["Jane Doe", "John Smith"]``.  Returns the last token of the first
+    name, lower-cased, for loose corroboration matching.
+    """
+    authors = payload.get("authors") or []
+    if not authors:
+        return None
+    name = authors[0] if isinstance(authors[0], str) else ""
+    parts = name.strip().split()
+    return parts[-1].lower() if parts else None
+
+
 class PaperReader:
     """Handles bulk paper reading with filtering."""
 
@@ -671,3 +686,56 @@ class PaperReader:
                 break
 
         return papers
+
+    def iter_enrichment_candidates(self, batch_size: int = 1000):
+        """Yield non-stub papers missing an abstract and/or referenced_works.
+
+        Scrolls Qdrant for real (non-stub) papers where the abstract is empty
+        OR referenced_works is empty, using ``should`` (OR) semantics.
+
+        Yields dicts: {point_id, doi, title, year, first_author,
+                       missing_abstract, missing_refs}.
+        """
+        flt = models.Filter(
+            must_not=[
+                models.FieldCondition(
+                    key="is_stub", match=models.MatchValue(value=True)
+                ),
+            ],
+            should=[
+                models.IsEmptyCondition(
+                    is_empty=models.PayloadField(key="abstract")
+                ),
+                models.IsEmptyCondition(
+                    is_empty=models.PayloadField(key="referenced_works")
+                ),
+            ],
+        )
+        offset = None
+        while True:
+            points, offset = self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=flt,
+                limit=batch_size,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False,
+            )
+            if not points:
+                break
+            for pt in points:
+                p = pt.payload or {}
+                abstract = p.get("abstract") or ""
+                refs = p.get("referenced_works") or []
+                first_author = _first_author_surname(p)
+                yield {
+                    "point_id": str(pt.id),
+                    "doi": p.get("doi") or None,
+                    "title": p.get("title") or "",
+                    "year": p.get("year") or p.get("publication_year"),
+                    "first_author": first_author,
+                    "missing_abstract": not abstract,
+                    "missing_refs": not refs,
+                }
+            if offset is None:
+                break
