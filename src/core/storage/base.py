@@ -326,6 +326,9 @@ class QdrantStorage:
     ) -> tuple[list[tuple[str, dict]], str | None]:
         return self.readers.get_papers_missing_abstracts(has_doi, limit, offset)
 
+    def iter_enrichment_candidates(self, batch_size: int = 1000):
+        return self.readers.iter_enrichment_candidates(batch_size=batch_size)
+
     def get_papers_without_doi_missing_references(
         self,
         limit: int = 100,
@@ -465,6 +468,9 @@ class QdrantStorage:
         updates: list[tuple[str, str]],
     ) -> int:
         return self.writers.batch_update_abstracts(updates)
+
+    def batch_apply_snapshot_enrichment(self, updates: list[tuple[str, dict]]) -> int:
+        return self.writers.batch_apply_snapshot_enrichment(updates)
 
     def update_paper_with_doi_and_refs(
         self,

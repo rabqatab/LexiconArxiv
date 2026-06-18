@@ -57,3 +57,12 @@ def test_extract_enrichment_fill_flags():
     out = extract_enrichment(work, cand)
     assert out["abstract"] == "Hi there"
     assert out["referenced_works"] == ["https://openalex.org/W1", "https://openalex.org/W2"]
+
+
+def test_title_match_corroborated_by_author_only():
+    # year far off, but first-author surname matches -> accept
+    doi_map, title_map = build_candidate_index(_cands())
+    work = {"doi": None, "title": "Graph Models", "publication_year": 1990,
+            "authorships": [{"author": {"display_name": "A. Lee"}}]}
+    m = match_work(work, doi_map, title_map)
+    assert m is not None and m.candidate.point_id == "t1" and m.source == "title"

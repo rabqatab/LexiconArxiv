@@ -345,7 +345,9 @@ class BatchWriter:
         for point_id, fields in updates:
             if not fields:
                 continue
-            payload = {**fields, "enrichment_source": "openalex_snapshot"}
+            # Dedicated provenance flag (does NOT clobber any existing
+            # `enrichment_source` from a prior enricher).
+            payload = {**fields, "openalex_snapshot_enriched": True}
             self.client.set_payload(
                 collection_name=self.collection_name,
                 payload=payload,

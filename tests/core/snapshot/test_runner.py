@@ -35,7 +35,15 @@ def test_batch_apply_snapshot_enrichment_sets_payload_and_provenance():
     # each call set_payload with the field + provenance
     calls = storage.client.set_payload.call_args_list
     assert any("abstract" in c.kwargs["payload"] for c in calls)
-    assert all(c.kwargs["payload"].get("enrichment_source") == "openalex_snapshot" for c in calls)
+    assert all(c.kwargs["payload"].get("openalex_snapshot_enriched") is True for c in calls)
+
+
+def test_qdrantstorage_exposes_snapshot_methods():
+    # Regression: the QdrantStorage facade must delegate the new methods, else the
+    # CLI (which uses a real QdrantStorage) AttributeErrors at runtime.
+    from src.core.storage import QdrantStorage
+    assert hasattr(QdrantStorage, "iter_enrichment_candidates")
+    assert hasattr(QdrantStorage, "batch_apply_snapshot_enrichment")
 
 
 def _write_gz(tmp_path, works):
