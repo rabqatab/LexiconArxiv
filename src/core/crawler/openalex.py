@@ -34,6 +34,21 @@ load_dotenv()
 DEFAULT_PER_PAGE = 200  # Max allowed by OpenAlex
 
 
+def reconstruct_abstract(inverted_index: dict | None) -> str | None:
+    """Reconstruct plain-text abstract from an OpenAlex abstract_inverted_index."""
+    if not inverted_index:
+        return None
+    try:
+        word_positions = []
+        for word, positions in inverted_index.items():
+            for pos in positions:
+                word_positions.append((pos, word))
+        word_positions.sort(key=lambda x: x[0])
+        return " ".join(word for _, word in word_positions)
+    except Exception:
+        return None
+
+
 class CoreCorpusCollector:
     """Collector for Core Corpus papers from OpenAlex.
 
@@ -691,19 +706,7 @@ class CoreCorpusCollector:
 
     def _reconstruct_abstract(self, inverted_index: dict | None) -> str | None:
         """Reconstruct abstract from OpenAlex inverted index format."""
-        if not inverted_index:
-            return None
-
-        try:
-            word_positions = []
-            for word, positions in inverted_index.items():
-                for pos in positions:
-                    word_positions.append((pos, word))
-
-            word_positions.sort(key=lambda x: x[0])
-            return " ".join(word for _, word in word_positions)
-        except Exception:
-            return None
+        return reconstruct_abstract(inverted_index)
 
     def _map_paper_type(self, work_type: str | None) -> PaperType:
         """Map OpenAlex work type to PaperType enum."""
