@@ -2,7 +2,7 @@
 
 Classifies each sentence in paper abstracts into structured rhetorical roles
 (task, domain, background, approach, method, result, contribution) using
-LLM-based labeling via Gemini or Ollama.
+LLM-based labeling via Ollama.
 """
 
 from src.core.labeling.labeler import AbstractLabeler

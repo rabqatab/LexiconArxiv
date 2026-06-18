@@ -267,9 +267,8 @@ class TestLabelerInit:
 
     def test_default_init(self):
         labeler = AbstractLabeler()
-        assert labeler.llm_backend == "gemini"
-        assert labeler.gemini_model == "gemini-3-flash-preview"
-        assert labeler.ollama_model == "llama3.1:8b"
+        assert labeler.llm_backend == "ollama"
+        assert labeler.ollama_model == "qwen3.5:27b"
         assert labeler.ollama_timeout == 180.0
 
     def test_ollama_backend(self):
@@ -278,10 +277,8 @@ class TestLabelerInit:
 
     def test_custom_models(self):
         labeler = AbstractLabeler(
-            gemini_model="gemini-1.5-pro",
             ollama_model="mistral:7b",
         )
-        assert labeler.gemini_model == "gemini-1.5-pro"
         assert labeler.ollama_model == "mistral:7b"
 
 
@@ -294,7 +291,7 @@ class TestSourceTracking:
     """Tests for labeling source tracking."""
 
     def test_successful_labeling_returns_dict_and_source(self):
-        labeler = AbstractLabeler(llm_backend="gemini")
+        labeler = AbstractLabeler(llm_backend="ollama")
         labeler._llm_labeler = _MockAbstractLabeler(
             SentenceLabels(labels=[
                 SentenceLabel(index=0, labels=["task"]),
@@ -310,7 +307,7 @@ class TestSourceTracking:
             )
         )
         assert structure is not None
-        assert source == "gemini"
+        assert source == "ollama"
         assert "We address NER." in structure["task"]
         assert "We propose a CRF layer." in structure["approach"]
         assert "We achieve 92 F1." in structure["result"]
@@ -351,38 +348,6 @@ class TestClose:
 # =============================================================================
 # Integration Tests (require API keys / running services)
 # =============================================================================
-
-
-@pytest.mark.integration
-class TestGeminiLabeling:
-    """Integration tests for Gemini labeling (requires GEMINI_API_KEY)."""
-
-    def test_gemini_label_abstract(self):
-        labeler = AbstractLabeler(llm_backend="gemini")
-
-        structure, source = asyncio.get_event_loop().run_until_complete(
-            labeler.label_abstract(
-                "Attention Is All You Need",
-                "The dominant sequence transduction models are based on complex "
-                "recurrent or convolutional neural networks. We propose a new "
-                "simple network architecture, the Transformer, based solely on "
-                "attention mechanisms.",
-            )
-        )
-        assert structure is not None
-        assert source == "gemini"
-        # At least one role should have content
-        assert any(len(v) > 0 for v in structure.values())
-        # All sentences should be verbatim from the abstract
-        abstract = (
-            "The dominant sequence transduction models are based on complex "
-            "recurrent or convolutional neural networks. We propose a new "
-            "simple network architecture, the Transformer, based solely on "
-            "attention mechanisms."
-        )
-        for role_sentences in structure.values():
-            for sent in role_sentences:
-                assert sent in abstract, f"Sentence not verbatim: {sent}"
 
 
 @pytest.mark.integration

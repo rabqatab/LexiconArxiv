@@ -18,20 +18,9 @@ def register_commands(cli: click.Group):
     @click.option("--batch-size", default=500, help="Papers per batch (default: 500)")
     @click.option("--force", is_flag=True, help="Re-label papers that already have abstract_structure")
     @click.option(
-        "--llm-backend",
-        type=click.Choice(["gemini", "ollama"]),
-        default="gemini",
-        help="LLM backend (default: gemini)",
-    )
-    @click.option(
-        "--gemini-model",
-        default="gemini-3-flash-preview",
-        help="Gemini model name (default: gemini-3-flash-preview)",
-    )
-    @click.option(
         "--ollama-model",
-        default="llama3.1:8b",
-        help="Ollama model name (default: llama3.1:8b)",
+        default="qwen3.5:27b",
+        help="Ollama model name (default: qwen3.5:27b)",
     )
     @click.option(
         "--ollama-timeout",
@@ -44,8 +33,6 @@ def register_commands(cli: click.Group):
         limit: int | None,
         batch_size: int,
         force: bool,
-        llm_backend: str,
-        gemini_model: str,
         ollama_model: str,
         ollama_timeout: float,
     ) -> None:
@@ -53,14 +40,12 @@ def register_commands(cli: click.Group):
 
         Labels each sentence in paper abstracts into 7 roles:
         task, domain, background, approach, method, result, contribution.
+        Uses the local Ollama backend (qwen3.5:27b by default).
 
         Examples:
 
-          # Dry run with Gemini (default)
+          # Dry run
           uv run python -m src.cli.core_collect label-abstracts --dry-run --limit 5
-
-          # Dry run with Ollama
-          uv run python -m src.cli.core_collect label-abstracts --llm-backend ollama --dry-run --limit 5
 
           # Label all unlabeled papers
           uv run python -m src.cli.core_collect label-abstracts --limit 100
@@ -74,8 +59,6 @@ def register_commands(cli: click.Group):
                 limit=limit,
                 batch_size=batch_size,
                 force=force,
-                llm_backend=llm_backend,
-                gemini_model=gemini_model,
                 ollama_model=ollama_model,
                 ollama_timeout=ollama_timeout,
             )
@@ -87,8 +70,6 @@ async def _label_abstracts_async(
     limit: int | None,
     batch_size: int,
     force: bool,
-    llm_backend: str,
-    gemini_model: str,
     ollama_model: str,
     ollama_timeout: float,
 ) -> None:
@@ -97,13 +78,11 @@ async def _label_abstracts_async(
 
     storage = QdrantStorage()
     labeler = AbstractLabeler(
-        llm_backend=llm_backend,
-        gemini_model=gemini_model,
         ollama_model=ollama_model,
         ollama_timeout=ollama_timeout,
     )
 
-    click.echo(f"Abstract labeling mode: LLM ({llm_backend})")
+    click.echo(f"Abstract labeling mode: LLM (ollama/{ollama_model})")
 
     if dry_run:
         click.echo("DRY RUN - changes will not be saved\n")

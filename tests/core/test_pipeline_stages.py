@@ -94,7 +94,7 @@ def test_extract_keywords_stage_returns_counts():
 
 def test_label_abstracts_stage_returns_counts():
     labeler = AsyncMock()
-    labeler.label_abstract.return_value = ({"task": "x"}, "gemini")
+    labeler.label_abstract.return_value = ({"task": "x"}, "ollama")
     labeler.close.return_value = None
     storage = MagicMock()
     storage.get_papers_for_abstract_labeling.return_value = (

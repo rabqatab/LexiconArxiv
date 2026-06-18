@@ -243,7 +243,7 @@ async def extract_keywords_stage(
 
 async def label_abstracts_stage(
     limit: int | None = None, batch_size: int = 500, force: bool = False,
-    llm_backend: str = "gemini",
+    llm_backend: str = "ollama",
 ) -> dict[str, int]:
     """Label abstract sentences (rhetorical roles -> abstract_structure)."""
     storage = QdrantStorage()

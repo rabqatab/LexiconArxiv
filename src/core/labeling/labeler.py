@@ -1,7 +1,7 @@
 """Main abstract labeling class using LLM backends.
 
 LLM-only pipeline: split abstract with pysbd, classify sentences by index
-via Gemini or Ollama, map labels back to verbatim sentences.
+via Ollama, map labels back to verbatim sentences.
 """
 
 import logging
@@ -31,7 +31,7 @@ class AbstractLabeler:
     index-based label assignments. Sentences are guaranteed verbatim.
 
     Example:
-        >>> labeler = AbstractLabeler(llm_backend="gemini")
+        >>> labeler = AbstractLabeler(llm_backend="ollama")
         >>> structure, source = await labeler.label_abstract(
         ...     title="Attention Is All You Need",
         ...     abstract="We propose a new simple network architecture..."
@@ -42,14 +42,12 @@ class AbstractLabeler:
 
     def __init__(
         self,
-        llm_backend: str = "gemini",
-        ollama_model: str = "llama3.1:8b",
-        gemini_model: str = "gemini-3-flash-preview",
+        llm_backend: str = "ollama",
+        ollama_model: str = "qwen3.5:27b",
         ollama_timeout: float = 180.0,
     ):
         self.llm_backend = llm_backend
         self.ollama_model = ollama_model
-        self.gemini_model = gemini_model
         self.ollama_timeout = ollama_timeout
 
         self._llm_labeler: "BaseAbstractLabeler | None" = None
@@ -60,16 +58,15 @@ class AbstractLabeler:
             return self._llm_labeler
 
         try:
-            if self.llm_backend == "gemini":
-                from src.core.labeling.gemini import GeminiAbstractLabeler
-                self._llm_labeler = GeminiAbstractLabeler(model=self.gemini_model)
-            elif self.llm_backend == "ollama":
+            if self.llm_backend == "ollama":
                 from src.core.labeling.ollama import OllamaAbstractLabeler
                 self._llm_labeler = OllamaAbstractLabeler(
                     model=self.ollama_model, timeout=self.ollama_timeout
                 )
             else:
-                logger.warning(f"Unknown LLM backend: {self.llm_backend}")
+                logger.warning(
+                    f"Unsupported LLM backend '{self.llm_backend}' (only 'ollama' is supported)"
+                )
                 return None
 
             logger.info(f"Abstract labeler initialized ({self.llm_backend})")
@@ -95,7 +92,7 @@ class AbstractLabeler:
 
         Returns:
             Tuple of (structure_dict, source) where source is
-            "gemini", "ollama", or "none".
+            "ollama" or "none".
         """
         labeler = self._ensure_llm_labeler()
         if labeler is None:
