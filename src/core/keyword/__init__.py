@@ -3,7 +3,7 @@
 Provides multi-phase keyword extraction:
 1. Regex-based acronym extraction from title/abstract
 2. KeyBERT-based semantic keyword extraction from abstract
-3. LLM-based extraction via Gemini or Ollama (optional)
+3. LLM-based extraction via Ollama (optional)
 4. LLM judge validation (optional)
 """
 

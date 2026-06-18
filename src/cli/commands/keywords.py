@@ -25,29 +25,12 @@ def register_commands(cli: click.Group):
         default="all-MiniLM-L6-v2",
         help="Sentence-transformers model for KeyBERT (default: all-MiniLM-L6-v2)",
     )
-    @click.option("--llm", "use_llm", is_flag=True, help="Enable LLM keyword extraction")
-    @click.option(
-        "--llm-backend",
-        type=click.Choice(["gemini", "ollama"]),
-        default="gemini",
-        help="LLM backend (default: gemini)",
-    )
-    @click.option("--judge", "use_judge", is_flag=True, help="Enable LLM judge validation")
-    @click.option(
-        "--judge-backend",
-        type=click.Choice(["gemini", "ollama"]),
-        default=None,
-        help="Judge backend (default: same as --llm-backend)",
-    )
+    @click.option("--llm", "use_llm", is_flag=True, help="Enable LLM keyword extraction (Ollama)")
+    @click.option("--judge", "use_judge", is_flag=True, help="Enable LLM judge validation (Ollama)")
     @click.option(
         "--ollama-model",
-        default="llama3.1:8b",
-        help="Ollama model name (default: llama3.1:8b)",
-    )
-    @click.option(
-        "--gemini-model",
-        default="gemini-3-flash-preview",
-        help="Gemini model name (default: gemini-3-flash-preview)",
+        default="qwen3.5:27b",
+        help="Ollama model name (default: qwen3.5:27b)",
     )
     @click.option(
         "--ollama-timeout",
@@ -63,30 +46,27 @@ def register_commands(cli: click.Group):
         force: bool,
         embedding_model: str,
         use_llm: bool,
-        llm_backend: str,
         use_judge: bool,
-        judge_backend: str | None,
         ollama_model: str,
-        gemini_model: str,
         ollama_timeout: float,
     ) -> None:
         """Extract keywords from paper titles and abstracts.
 
         LLM-first extraction pipeline:
-        1. LLM extraction via Gemini or Ollama (primary, always attempted)
+        1. LLM extraction via Ollama (primary, always attempted)
         2. Fallback: regex + KeyBERT (only when LLM is unavailable or fails)
-        3. LLM judge validation (optional)
+        3. LLM judge validation (optional, also via Ollama)
 
         Examples:
 
           # Extract keywords for all papers (default: regex + KeyBERT)
           uv run python -m src.cli.core_collect extract-keywords
 
-          # Full pipeline with Gemini LLM + judge
+          # Full Ollama LLM pipeline with judge
           uv run python -m src.cli.core_collect extract-keywords --llm --judge
 
-          # Local Ollama pipeline
-          uv run python -m src.cli.core_collect extract-keywords --llm --judge --llm-backend ollama
+          # Use a different Ollama model
+          uv run python -m src.cli.core_collect extract-keywords --llm --ollama-model llama3.1:8b
 
           # Better embeddings
           uv run python -m src.cli.core_collect extract-keywords --embedding-model all-mpnet-base-v2
@@ -106,11 +86,8 @@ def register_commands(cli: click.Group):
                     force=force,
                     embedding_model=embedding_model,
                     use_llm=use_llm,
-                    llm_backend=llm_backend,
                     use_judge=use_judge,
-                    judge_backend=judge_backend or llm_backend,
                     ollama_model=ollama_model,
-                    gemini_model=gemini_model,
                     ollama_timeout=ollama_timeout,
                 )
             )
@@ -279,14 +256,11 @@ async def _extract_keywords_async(
     force: bool,
     embedding_model: str,
     use_llm: bool,
-    llm_backend: str,
     use_judge: bool,
-    judge_backend: str,
     ollama_model: str,
-    gemini_model: str,
     ollama_timeout: float,
 ) -> None:
-    """Async keyword extraction (with LLM and/or judge)."""
+    """Async keyword extraction (with LLM and/or judge via Ollama)."""
     from src.core.keyword import KeywordExtractor
 
     storage = QdrantStorage()
@@ -294,16 +268,13 @@ async def _extract_keywords_async(
         use_keybert=not no_keybert,
         embedding_model=embedding_model,
         use_llm=use_llm,
-        llm_backend=llm_backend,
         use_judge=use_judge,
-        judge_backend=judge_backend,
         ollama_model=ollama_model,
-        gemini_model=gemini_model,
         ollama_timeout=ollama_timeout,
     )
 
     if use_llm:
-        parts = [f"LLM ({llm_backend})"]
+        parts = ["LLM (ollama)"]
         if not no_keybert:
             parts.append("fallback: regex + KeyBERT")
         else:
@@ -313,7 +284,7 @@ async def _extract_keywords_async(
         if not no_keybert:
             parts.append("KeyBERT")
     if use_judge:
-        parts.append(f"judge ({judge_backend})")
+        parts.append("judge (ollama)")
     click.echo(f"Keyword extraction mode: {' + '.join(parts)}")
 
     if dry_run:

@@ -1,7 +1,7 @@
 """Main keyword extraction class combining regex, KeyBERT, and LLM approaches.
 
 LLM-first extraction pipeline:
-1. LLM: Extract keywords via Gemini or Ollama (primary, always attempted)
+1. LLM: Extract keywords via Ollama (primary, always attempted)
 2. Fallback: Regex + KeyBERT only when LLM is unavailable or produces nothing
 3. Judge: Validate keywords via LLM judge (optional)
 """
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 class KeywordExtractor:
     """LLM-first keyword extractor for academic papers.
 
-    Primary: LLM-based keyword extraction via Gemini or Ollama (always attempted)
+    Primary: LLM-based keyword extraction via Ollama (always attempted)
     Fallback: Regex + KeyBERT only when LLM produces nothing
     Optional: LLM judge validation of extracted keywords
 
@@ -51,11 +51,10 @@ class KeywordExtractor:
         max_keyword_length: int = 15,
         embedding_model: str = "all-MiniLM-L6-v2",
         use_llm: bool = False,
-        llm_backend: str = "gemini",
+        llm_backend: str = "ollama",
         use_judge: bool = False,
         judge_backend: str | None = None,
-        ollama_model: str = "llama3.1:8b",
-        gemini_model: str = "gemini-3-flash-preview",
+        ollama_model: str = "qwen3.5:27b",
         ollama_timeout: float = 180.0,
     ):
         """Initialize keyword extractor.
@@ -69,11 +68,10 @@ class KeywordExtractor:
             max_keyword_length: Maximum keyword character length.
             embedding_model: Sentence-transformers model for KeyBERT.
             use_llm: Whether to use LLM for keyword extraction.
-            llm_backend: LLM backend to use ("gemini" or "ollama").
+            llm_backend: LLM backend to use (only "ollama" is supported).
             use_judge: Whether to use LLM judge for keyword validation.
-            judge_backend: Judge backend ("gemini" or "ollama"). Defaults to llm_backend.
+            judge_backend: Judge backend (only "ollama" is supported). Defaults to llm_backend.
             ollama_model: Ollama model name.
-            gemini_model: Gemini model name.
             ollama_timeout: Ollama request timeout in seconds.
         """
         self.use_keybert = use_keybert
@@ -89,7 +87,6 @@ class KeywordExtractor:
         self.use_judge = use_judge
         self.judge_backend = judge_backend or llm_backend
         self.ollama_model = ollama_model
-        self.gemini_model = gemini_model
         self.ollama_timeout = ollama_timeout
 
         self._kw_model: "KeyBERT | None" = None
@@ -127,16 +124,15 @@ class KeywordExtractor:
             return self._llm_extractor
 
         try:
-            if self.llm_backend == "gemini":
-                from src.core.keyword.gemini import GeminiKeywordExtractor
-                self._llm_extractor = GeminiKeywordExtractor(model=self.gemini_model)
-            elif self.llm_backend == "ollama":
+            if self.llm_backend == "ollama":
                 from src.core.keyword.ollama import OllamaKeywordExtractor
                 self._llm_extractor = OllamaKeywordExtractor(
                     model=self.ollama_model, timeout=self.ollama_timeout
                 )
             else:
-                logger.warning(f"Unknown LLM backend: {self.llm_backend}")
+                logger.warning(
+                    f"Unsupported LLM backend '{self.llm_backend}' (only 'ollama' is supported)"
+                )
                 return None
 
             logger.info(f"LLM extractor initialized ({self.llm_backend})")
@@ -154,16 +150,15 @@ class KeywordExtractor:
         try:
             from src.core.keyword.judge import KeywordJudge
 
-            if self.judge_backend == "gemini":
-                from src.core.keyword.gemini import GeminiJudge
-                backend = GeminiJudge(model=self.gemini_model)
-            elif self.judge_backend == "ollama":
+            if self.judge_backend == "ollama":
                 from src.core.keyword.ollama import OllamaJudge
                 backend = OllamaJudge(
                     model=self.ollama_model, timeout=self.ollama_timeout
                 )
             else:
-                logger.warning(f"Unknown judge backend: {self.judge_backend}")
+                logger.warning(
+                    f"Unsupported judge backend '{self.judge_backend}' (only 'ollama' is supported)"
+                )
                 return None
 
             self._judge = KeywordJudge(backend=backend)

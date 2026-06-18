@@ -13,7 +13,7 @@ from pydantic import BaseModel
 class ExtractedKeywords(BaseModel):
     """Structured output from LLM keyword extraction.
 
-    Used as Gemini response_schema and Ollama format schema.
+    Used as Ollama format schema.
     Categories are research-oriented for academic papers.
     """
 

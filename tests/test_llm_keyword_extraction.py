@@ -191,16 +191,24 @@ class TestExtractorInit:
         assert ext.use_judge is False
         assert ext.embedding_model == "all-MiniLM-L6-v2"
 
+    def test_default_llm_backend_is_ollama(self):
+        ext = KeywordExtractor(use_keybert=False, use_llm=True)
+        assert ext.llm_backend == "ollama"
+
+    def test_default_ollama_model_is_qwen(self):
+        ext = KeywordExtractor(use_keybert=False, use_llm=True)
+        assert ext.ollama_model == "qwen3.5:27b"
+
     def test_init_with_llm_params(self):
         ext = KeywordExtractor(
             use_keybert=False,
             use_llm=True,
-            llm_backend="gemini",
-            gemini_model="gemini-3-flash-preview",
+            llm_backend="ollama",
+            ollama_model="qwen3.5:27b",
         )
         assert ext.use_llm is True
-        assert ext.llm_backend == "gemini"
-        assert ext.gemini_model == "gemini-3-flash-preview"
+        assert ext.llm_backend == "ollama"
+        assert ext.ollama_model == "qwen3.5:27b"
 
     def test_init_with_judge_params(self):
         ext = KeywordExtractor(
@@ -224,9 +232,9 @@ class TestExtractorInit:
         ext = KeywordExtractor(
             use_keybert=False,
             llm_backend="ollama",
-            judge_backend="gemini",
+            judge_backend="ollama",
         )
-        assert ext.judge_backend == "gemini"
+        assert ext.judge_backend == "ollama"
 
     def test_existing_extract_still_works(self):
         ext = KeywordExtractor(
@@ -369,7 +377,7 @@ class TestSourceTracking:
 
     def test_llm_source_tracking(self):
         """When LLM succeeds, it should be primary — regex should NOT run (no fallback)."""
-        ext = KeywordExtractor(use_keybert=False, use_llm=True, llm_backend="gemini")
+        ext = KeywordExtractor(use_keybert=False, use_llm=True, llm_backend="ollama")
         # Inject mock returning ExtractedKeywords
         ext._llm_extractor = _MockLLMExtractor(
             ExtractedKeywords(
@@ -389,9 +397,9 @@ class TestSourceTracking:
             )
         )
         # LLM is primary — regex fallback should NOT run when LLM succeeds
-        assert "gemini" in source
+        assert "ollama" in source
         parts = source.split("|")
-        assert "gemini" in parts
+        assert "ollama" in parts
         assert "regex" not in parts
         assert structured is not None
         assert "method" in structured
@@ -403,7 +411,7 @@ class TestSourceTracking:
         ext = KeywordExtractor(
             use_keybert=False,
             use_judge=True,
-            judge_backend="gemini",
+            judge_backend="ollama",
         )
         # Inject mock judge
         ext._judge = KeywordJudge(backend=_MockLLMJudge(["BERT"]))
@@ -450,7 +458,7 @@ class TestSourceTracking:
 
     def test_fallback_when_llm_fails(self):
         """When LLM returns None, regex + keybert should kick in as fallback."""
-        ext = KeywordExtractor(use_keybert=False, use_llm=True, llm_backend="gemini")
+        ext = KeywordExtractor(use_keybert=False, use_llm=True, llm_backend="ollama")
         # Inject mock that returns None (simulating LLM failure)
         ext._llm_extractor = _MockLLMExtractor(None)
 
@@ -466,7 +474,7 @@ class TestSourceTracking:
 
     def test_llm_with_no_abstract(self):
         """LLM should be called even without abstract (title-only extraction)."""
-        ext = KeywordExtractor(use_keybert=False, use_llm=True, llm_backend="gemini")
+        ext = KeywordExtractor(use_keybert=False, use_llm=True, llm_backend="ollama")
         ext._llm_extractor = _MockLLMExtractor(
             ExtractedKeywords(
                 task=["text classification"],
@@ -485,7 +493,7 @@ class TestSourceTracking:
             )
         )
         assert "BERT" in keywords
-        assert "gemini" in source
+        assert "ollama" in source
         assert structured is not None
         assert "text classification" in structured["task"]
         assert "model" in structured["contribution_type"]
@@ -565,27 +573,8 @@ class TestClose:
 
 
 # =============================================================================
-# Integration Tests (require API keys / running services)
+# Integration Tests (require running Ollama)
 # =============================================================================
-
-
-@pytest.mark.integration
-class TestGeminiExtraction:
-    """Integration tests for Gemini extraction (requires GEMINI_API_KEY)."""
-
-    def test_gemini_extract_keywords(self):
-        from src.core.keyword.gemini import GeminiKeywordExtractor
-
-        extractor = GeminiKeywordExtractor()
-        result = asyncio.get_event_loop().run_until_complete(
-            extractor.extract_keywords(
-                "BERT: Pre-training of Deep Bidirectional Transformers",
-                "We introduce BERT, a new language representation model.",
-            )
-        )
-        assert isinstance(result, ExtractedKeywords)
-        flat = BaseLLMExtractor._flatten_extraction(result)
-        assert len(flat) > 0
 
 
 @pytest.mark.integration
@@ -615,7 +604,7 @@ class TestFullPipeline:
         ext = KeywordExtractor(
             use_keybert=False,
             use_llm=True,
-            llm_backend="gemini",
+            llm_backend="ollama",
             use_judge=True,
         )
 
@@ -627,7 +616,7 @@ class TestFullPipeline:
         )
 
         assert isinstance(keywords, list)
-        assert "gemini" in source
+        assert "ollama" in source
         assert "judge" in source
         assert structured is not None
         assert "task" in structured
