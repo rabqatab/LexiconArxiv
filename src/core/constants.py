@@ -47,11 +47,6 @@ SEMANTIC_SCHOLAR_API_KEY_ENV = "SEMANTIC_SCHOLAR_API_KEY"
 QDRANT_URL_ENV = "QDRANT_URL"
 QDRANT_COLLECTION_ENV = "QDRANT_COLLECTION"
 
-# Gemini
-GEMINI_API_KEYS_ENV = "GEMINI_API_KEYS"
-GEMINI_API_KEY_ENV = "GEMINI_API_KEY"       # fallback (singular)
-GOOGLE_API_KEY_ENV = "GOOGLE_API_KEY"       # fallback (legacy)
-
 # GitHub API
 GITHUB_TOKEN_ENV = "GITHUB_TOKEN"
 
@@ -155,34 +150,6 @@ def get_qdrant_url() -> str:
 def get_qdrant_collection() -> str:
     """Get Qdrant collection name from environment with default."""
     return os.getenv(QDRANT_COLLECTION_ENV, "lexicon_arxiv")
-
-
-def get_gemini_api_key() -> str | None:
-    """Get first Gemini API key from environment.
-
-    Checks GEMINI_API_KEYS, GEMINI_API_KEY, and GOOGLE_API_KEY.
-    For multiple keys, use get_gemini_api_keys().
-    """
-    keys = get_gemini_api_keys()
-    return keys[0] if keys else None
-
-
-def get_gemini_api_keys() -> list[str]:
-    """Get all Gemini API keys from environment.
-
-    Supports comma-separated keys for round-robin rotation.
-    Checks: GEMINI_API_KEYS → GEMINI_API_KEY → GOOGLE_API_KEY.
-
-    Returns:
-        List of API key strings (may be empty).
-    """
-    raw = (
-        os.getenv(GEMINI_API_KEYS_ENV)
-        or os.getenv(GEMINI_API_KEY_ENV)
-        or os.getenv(GOOGLE_API_KEY_ENV)
-        or ""
-    )
-    return [k.strip() for k in raw.split(",") if k.strip()]
 
 
 def get_github_token() -> str | None:
