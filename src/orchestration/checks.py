@@ -1,20 +1,32 @@
-"""Warn-only data-quality asset-checks (spec §3). Thin wrappers over src.core.pipeline.dq."""
+"""Data-quality asset-checks (spec §3). Thin wrappers over src.core.pipeline.dq.
+
+Phase 3b: the search-critical checks the spec marks for gating (#3 doi refs,
+#7 graph metrics) are now BLOCKING ERROR — observed live values pass with margin
+(refs ratio 0.97 vs 0.80 threshold; pagerank stored for the full corpus). The
+remaining checks stay WARN (coverage metrics that legitimately fluctuate).
+
+#6 embedding_coverage_complete is deliberately kept WARN for now: it currently
+flags a real backlog (≈27k abstracted-but-unembedded papers), and as a whole-
+corpus check a historical gap would block every run forever. Flip it to blocking
+only after (a) the backlog is embedded and (b) it is scoped to the run's papers.
+"""
 
 from dagster import AssetCheckResult, AssetCheckSeverity, asset_check
 
 from src.core.pipeline import dq
 
 _WARN = AssetCheckSeverity.WARN
+_ERROR = AssetCheckSeverity.ERROR
 
 
-def _result(payload: dict) -> AssetCheckResult:
-    return AssetCheckResult(passed=payload["passed"], severity=_WARN, metadata=payload["metadata"])
+def _result(payload: dict, severity: AssetCheckSeverity = _WARN) -> AssetCheckResult:
+    return AssetCheckResult(passed=payload["passed"], severity=severity, metadata=payload["metadata"])
 
 
-@asset_check(asset="enrich_refs_crossref", name="doi_papers_have_refs",
-             description="Of DOI papers, fraction with referenced_works (warn-only)")
+@asset_check(asset="enrich_refs_crossref", name="doi_papers_have_refs", blocking=True,
+             description="Of DOI papers, fraction with referenced_works (BLOCKING ERROR, spec #3)")
 def doi_papers_have_refs_check() -> AssetCheckResult:
-    return _result(dq.doi_papers_have_refs())
+    return _result(dq.doi_papers_have_refs(), _ERROR)
 
 
 @asset_check(asset="enrich_abstracts", name="abstract_coverage",
@@ -29,10 +41,10 @@ def embedding_coverage_check() -> AssetCheckResult:
     return _result(dq.embedding_coverage_complete())
 
 
-@asset_check(asset="analyze_graph", name="graph_metrics_stored",
-             description="Papers with stored pagerank (warn-only)")
+@asset_check(asset="analyze_graph", name="graph_metrics_stored", blocking=True,
+             description="Papers with stored pagerank (BLOCKING ERROR, spec #7: 'ran but stored nothing')")
 def graph_metrics_stored_check() -> AssetCheckResult:
-    return _result(dq.graph_metrics_stored())
+    return _result(dq.graph_metrics_stored(), _ERROR)
 
 
 @asset_check(asset="compute_topics", name="cluster_coverage",
