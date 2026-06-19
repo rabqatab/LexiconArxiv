@@ -17,6 +17,18 @@ from src.core.keyword.llm_base import (
 )
 from src.core.keyword.judge import KeywordJudge
 
+# Reuse a single event loop across run_until_complete calls (preserves the old
+# get_event_loop() semantics so an extractor's async client binds to one loop,
+# while avoiding the deprecated implicit get_event_loop()).
+_LOOP: asyncio.AbstractEventLoop | None = None
+
+
+def _run(coro):
+    global _LOOP
+    if _LOOP is None or _LOOP.is_closed():
+        _LOOP = asyncio.new_event_loop()
+    return _LOOP.run_until_complete(coro)
+
 
 # =============================================================================
 # Pydantic Model Tests
@@ -195,9 +207,9 @@ class TestExtractorInit:
         ext = KeywordExtractor(use_keybert=False, use_llm=True)
         assert ext.llm_backend == "ollama"
 
-    def test_default_ollama_model_is_qwen(self):
+    def test_default_ollama_model_is_granite(self):
         ext = KeywordExtractor(use_keybert=False, use_llm=True)
-        assert ext.ollama_model == "qwen3.5:27b"
+        assert ext.ollama_model == "granite4.1:8b"
 
     def test_init_with_llm_params(self):
         ext = KeywordExtractor(
@@ -356,7 +368,7 @@ class TestSourceTracking:
 
     def test_regex_only_source(self):
         ext = KeywordExtractor(use_keybert=False)
-        keywords, source, structured = asyncio.get_event_loop().run_until_complete(
+        keywords, source, structured = _run(
             ext.extract_pipeline_with_source(
                 "BERT: A Model", "We introduce BERT."
             )
@@ -367,7 +379,7 @@ class TestSourceTracking:
 
     def test_no_keywords_source(self):
         ext = KeywordExtractor(use_keybert=False)
-        keywords, source, structured = asyncio.get_event_loop().run_until_complete(
+        keywords, source, structured = _run(
             ext.extract_pipeline_with_source(
                 "A study of methods", "We analyze various approaches."
             )
@@ -391,7 +403,7 @@ class TestSourceTracking:
             )
         )
 
-        keywords, source, structured = asyncio.get_event_loop().run_until_complete(
+        keywords, source, structured = _run(
             ext.extract_pipeline_with_source(
                 "BERT: A Model", "We introduce BERT and transformers."
             )
@@ -416,7 +428,7 @@ class TestSourceTracking:
         # Inject mock judge
         ext._judge = KeywordJudge(backend=_MockLLMJudge(["BERT"]))
 
-        keywords, source, structured = asyncio.get_event_loop().run_until_complete(
+        keywords, source, structured = _run(
             ext.extract_pipeline_with_source(
                 "BERT: A Model", "We introduce BERT."
             )
@@ -445,7 +457,7 @@ class TestSourceTracking:
         )
         ext._judge = KeywordJudge(backend=_MockLLMJudge(["BERT", "attention"]))
 
-        keywords, source, structured = asyncio.get_event_loop().run_until_complete(
+        keywords, source, structured = _run(
             ext.extract_pipeline_with_source(
                 "BERT: A Model", "We introduce BERT with attention."
             )
@@ -462,7 +474,7 @@ class TestSourceTracking:
         # Inject mock that returns None (simulating LLM failure)
         ext._llm_extractor = _MockLLMExtractor(None)
 
-        keywords, source, structured = asyncio.get_event_loop().run_until_complete(
+        keywords, source, structured = _run(
             ext.extract_pipeline_with_source(
                 "BERT: A Model", "We introduce BERT."
             )
@@ -487,7 +499,7 @@ class TestSourceTracking:
             )
         )
 
-        keywords, source, structured = asyncio.get_event_loop().run_until_complete(
+        keywords, source, structured = _run(
             ext.extract_pipeline_with_source(
                 "BERT for Text Classification", None
             )
@@ -510,14 +522,14 @@ class TestJudgeEdgeCases:
 
     def test_empty_keywords(self):
         judge = KeywordJudge(backend=_MockLLMJudge(relevant=[]))
-        result = asyncio.get_event_loop().run_until_complete(
+        result = _run(
             judge.filter_keywords("Title", "Abstract", [])
         )
         assert result == []
 
     def test_missing_abstract(self):
         judge = KeywordJudge(backend=_MockLLMJudge(relevant=["BERT"]))
-        result = asyncio.get_event_loop().run_until_complete(
+        result = _run(
             judge.filter_keywords("BERT: A Model", None, ["BERT", "NLP"])
         )
         # Should return all keywords when no abstract
@@ -532,7 +544,7 @@ class TestJudgeEdgeCases:
                 pass
 
         judge = KeywordJudge(backend=_FailingJudge())
-        result = asyncio.get_event_loop().run_until_complete(
+        result = _run(
             judge.filter_keywords("Title", "Abstract", ["BERT", "NLP"])
         )
         assert result == ["BERT", "NLP"]
@@ -548,7 +560,7 @@ class TestClose:
 
     def test_close_with_no_resources(self):
         ext = KeywordExtractor(use_keybert=False)
-        asyncio.get_event_loop().run_until_complete(ext.close())
+        _run(ext.close())
         # Should not raise
 
     def test_close_cleans_up_llm(self):
@@ -561,14 +573,14 @@ class TestClose:
         )
         ext._llm_extractor = mock_extractor
 
-        asyncio.get_event_loop().run_until_complete(ext.close())
+        _run(ext.close())
         assert ext._llm_extractor is None
 
     def test_close_cleans_up_judge(self):
         ext = KeywordExtractor(use_keybert=False, use_judge=True)
         ext._judge = KeywordJudge(backend=_MockLLMJudge(["test"]))
 
-        asyncio.get_event_loop().run_until_complete(ext.close())
+        _run(ext.close())
         assert ext._judge is None
 
 
@@ -585,7 +597,7 @@ class TestOllamaExtraction:
         from src.core.keyword.ollama import OllamaKeywordExtractor
 
         extractor = OllamaKeywordExtractor()
-        result = asyncio.get_event_loop().run_until_complete(
+        result = _run(
             extractor.extract_keywords(
                 "BERT: Pre-training of Deep Bidirectional Transformers",
                 "We introduce BERT, a new language representation model.",
@@ -608,7 +620,7 @@ class TestFullPipeline:
             use_judge=True,
         )
 
-        keywords, source, structured = asyncio.get_event_loop().run_until_complete(
+        keywords, source, structured = _run(
             ext.extract_pipeline_with_source(
                 "BERT: Pre-training of Deep Bidirectional Transformers",
                 "We introduce BERT, a new language representation model.",
@@ -621,4 +633,4 @@ class TestFullPipeline:
         assert structured is not None
         assert "task" in structured
 
-        asyncio.get_event_loop().run_until_complete(ext.close())
+        _run(ext.close())

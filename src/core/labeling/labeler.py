@@ -43,7 +43,10 @@ class AbstractLabeler:
     def __init__(
         self,
         llm_backend: str = "ollama",
-        ollama_model: str = "qwen3.5:27b",
+        # Selected by the 2026-06-19 labeling LLM benchmark (100% schema-reliable,
+        # 4.7s/abstract, 0.912 agreement). Documented fallback: gemma4:e4b (more
+        # accurate at 0.942 but ~4x slower). See docs/reference/labeling-llm-comparison.md.
+        ollama_model: str = "granite4.1:8b",
         ollama_timeout: float = 180.0,
     ):
         self.llm_backend = llm_backend

@@ -54,7 +54,8 @@ class KeywordExtractor:
         llm_backend: str = "ollama",
         use_judge: bool = False,
         judge_backend: str | None = None,
-        ollama_model: str = "qwen3.5:27b",
+        # See docs/reference/labeling-llm-comparison.md (fallback: gemma4:e4b).
+        ollama_model: str = "granite4.1:8b",
         ollama_timeout: float = 180.0,
     ):
         """Initialize keyword extractor.

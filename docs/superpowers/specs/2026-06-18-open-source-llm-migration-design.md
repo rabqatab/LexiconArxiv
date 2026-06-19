@@ -12,6 +12,11 @@ Scope confirmed by audit: the only closed-source LLM references in `src/` are Ge
 
 ## 2. Model selection
 
+> **Superseded (2026-06-19):** a head-to-head benchmark replaced the interim
+> `qwen3.5:27b` with **`granite4.1:8b`** (active) and **`gemma4:e4b`** (fallback,
+> now pulled). See `docs/reference/labeling-llm-comparison.md` for data + rationale.
+> The original design-time reasoning is kept below for context.
+
 - **Active model:** **`qwen3.5:27b`** — the latest Qwen family model installed in the local Ollama (`qwen2.5` → `qwen3` → `qwen3.5`; no newer Qwen is installed/runnable as of 2026-06-18). Highest local quality, closest to the prior `gemini-3-flash` for structured rhetorical-role labeling; heavier/slower on the shared GB10 than smaller models — an accepted quality-over-throughput tradeoff. Configurable via the existing `--ollama-model` option / a constant.
 - **Documented fallback:** **Gemma 4** (e.g. `gemma4:27b`). NOT currently pulled — requires `ollama pull <gemma4-tag>` before use; documentation-only alternative, does not affect the active path. (Prior gemma3:27b is also available if needed.)
 

@@ -19,8 +19,8 @@ def register_commands(cli: click.Group):
     @click.option("--force", is_flag=True, help="Re-label papers that already have abstract_structure")
     @click.option(
         "--ollama-model",
-        default="qwen3.5:27b",
-        help="Ollama model name (default: qwen3.5:27b)",
+        default="granite4.1:8b",
+        help="Ollama model name (default: granite4.1:8b; fallback: gemma4:e4b)",
     )
     @click.option(
         "--ollama-timeout",
@@ -40,7 +40,7 @@ def register_commands(cli: click.Group):
 
         Labels each sentence in paper abstracts into 7 roles:
         task, domain, background, approach, method, result, contribution.
-        Uses the local Ollama backend (qwen3.5:27b by default).
+        Uses the local Ollama backend (granite4.1:8b by default).
 
         Examples:
 

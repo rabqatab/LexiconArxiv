@@ -29,8 +29,8 @@ def register_commands(cli: click.Group):
     @click.option("--judge", "use_judge", is_flag=True, help="Enable LLM judge validation (Ollama)")
     @click.option(
         "--ollama-model",
-        default="qwen3.5:27b",
-        help="Ollama model name (default: qwen3.5:27b)",
+        default="granite4.1:8b",
+        help="Ollama model name (default: granite4.1:8b; fallback: gemma4:e4b)",
     )
     @click.option(
         "--ollama-timeout",

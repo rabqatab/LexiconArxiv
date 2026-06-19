@@ -16,6 +16,18 @@ from src.core.labeling.llm_base import (
     format_numbered_sentences,
 )
 
+# Reuse a single event loop across run_until_complete calls (preserves the old
+# get_event_loop() semantics so a labeler's async client binds to one loop, while
+# avoiding the deprecated implicit get_event_loop()).
+_LOOP: asyncio.AbstractEventLoop | None = None
+
+
+def _run(coro):
+    global _LOOP
+    if _LOOP is None or _LOOP.is_closed():
+        _LOOP = asyncio.new_event_loop()
+    return _LOOP.run_until_complete(coro)
+
 
 # =============================================================================
 # Mock Backend
@@ -268,7 +280,7 @@ class TestLabelerInit:
     def test_default_init(self):
         labeler = AbstractLabeler()
         assert labeler.llm_backend == "ollama"
-        assert labeler.ollama_model == "qwen3.5:27b"
+        assert labeler.ollama_model == "granite4.1:8b"
         assert labeler.ollama_timeout == 180.0
 
     def test_ollama_backend(self):
@@ -300,7 +312,7 @@ class TestSourceTracking:
             ])
         )
 
-        structure, source = asyncio.get_event_loop().run_until_complete(
+        structure, source = _run(
             labeler.label_abstract(
                 "NER with CRF",
                 "We address NER. We propose a CRF layer. We achieve 92 F1."
@@ -316,7 +328,7 @@ class TestSourceTracking:
         labeler = AbstractLabeler(llm_backend="ollama")
         labeler._llm_labeler = _MockAbstractLabeler(None)
 
-        structure, source = asyncio.get_event_loop().run_until_complete(
+        structure, source = _run(
             labeler.label_abstract("Title", "Abstract text.")
         )
         assert structure is None
@@ -333,7 +345,7 @@ class TestClose:
 
     def test_close_with_no_resources(self):
         labeler = AbstractLabeler()
-        asyncio.get_event_loop().run_until_complete(labeler.close())
+        _run(labeler.close())
         # Should not raise
 
     def test_close_cleans_up_llm_labeler(self):
@@ -341,7 +353,7 @@ class TestClose:
         labeler._llm_labeler = _MockAbstractLabeler(
             SentenceLabels(labels=[])
         )
-        asyncio.get_event_loop().run_until_complete(labeler.close())
+        _run(labeler.close())
         assert labeler._llm_labeler is None
 
 
@@ -357,7 +369,7 @@ class TestOllamaLabeling:
     def test_ollama_label_abstract(self):
         labeler = AbstractLabeler(llm_backend="ollama")
 
-        structure, source = asyncio.get_event_loop().run_until_complete(
+        structure, source = _run(
             labeler.label_abstract(
                 "Attention Is All You Need",
                 "The dominant sequence transduction models are based on complex "
