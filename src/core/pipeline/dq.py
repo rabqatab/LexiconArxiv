@@ -25,13 +25,16 @@ _STUB = models.FieldCondition(key="is_stub", match=models.MatchValue(value=True)
 
 
 def _count(storage, must=None, must_not=None) -> int:
-    # exact=False: approximate count. exact=True times out on the multi-million
-    # point collection (esp. under concurrent writes), and warn-only coverage
-    # checks tolerate approximate counts. Phase 3b ERROR gating may revisit this.
+    # exact=True: the FILTERED counts these checks use are fast even on the
+    # multi-million-point collection. Approximate (exact=False) counts are
+    # badly wrong for IsEmpty/HasVector filters (observed ~50% error — e.g.
+    # real-papers-with-abstract reported 85,095 vs the true 165,954), which
+    # made every coverage metric meaningless. Only an UNFILTERED full count of
+    # the whole 3.6M collection would risk a timeout, and no check does that.
     return storage.client.count(
         collection_name=storage.collection_name,
         count_filter=models.Filter(must=must, must_not=must_not),
-        exact=False,
+        exact=True,
     ).count
 
 
