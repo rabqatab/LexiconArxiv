@@ -22,19 +22,27 @@ MIN_ABSTRACT_COVERAGE = 0.80
 MAX_CLUSTER_NOISE_RATIO = 0.40
 
 _STUB = models.FieldCondition(key="is_stub", match=models.MatchValue(value=True))
+_EMPTY_ABSTRACT = models.FieldCondition(key="abstract", match=models.MatchValue(value=""))
+
+# "No real abstract" = key missing/null (IsEmpty) OR an empty string. Qdrant's
+# IsEmpty does NOT match an empty-string value, so both conditions are needed —
+# this is the same definition the embedder uses to decide embeddability.
+_NO_ABSTRACT = [models.IsEmptyCondition(is_empty=models.PayloadField(key="abstract")),
+                _EMPTY_ABSTRACT]
 
 
-def _count(storage, must=None, must_not=None) -> int:
+def _count(storage, must=None, must_not=None, should=None) -> int:
     # exact=True: the FILTERED counts these checks use are fast even on the
     # multi-million-point collection. Approximate (exact=False) counts are
     # badly wrong for IsEmpty/HasVector filters (observed ~50% error — e.g.
     # real-papers-with-abstract reported 85,095 vs the true 165,954), which
     # made every coverage metric meaningless. Only an UNFILTERED full count of
     # the whole 3.6M collection would risk a timeout, and no check does that.
+    # A Filter with `should` requires at least one should-condition to match
+    # (OR semantics), combined with any must / must_not.
+    flt = models.Filter(must=must, must_not=must_not, should=should)
     return storage.client.count(
-        collection_name=storage.collection_name,
-        count_filter=models.Filter(must=must, must_not=must_not),
-        exact=True,
+        collection_name=storage.collection_name, count_filter=flt, exact=True,
     ).count
 
 
@@ -61,11 +69,8 @@ def abstract_coverage(storage: QdrantStorage | None = None) -> dict:
     """Fraction of non-stub papers with a non-empty abstract."""
     storage = storage or QdrantStorage()
     total = storage.count_real_papers()
-    missing = _count(
-        storage,
-        must=[models.IsEmptyCondition(is_empty=models.PayloadField(key="abstract"))],
-        must_not=[_STUB],
-    )
+    # missing = non-stub AND (abstract null/missing OR empty-string)
+    missing = _count(storage, must_not=[_STUB], should=_NO_ABSTRACT)
     with_abs = total - missing
     ratio = (with_abs / total) if total else 1.0
     return {
@@ -78,12 +83,15 @@ def abstract_coverage(storage: QdrantStorage | None = None) -> dict:
 def embedding_coverage_complete(storage: QdrantStorage | None = None) -> dict:
     """Of non-stub papers WITH an abstract, all should have the dense vector."""
     storage = storage or QdrantStorage()
-    # non-stub, abstract non-empty, but missing the structured-abstract vector
+    # non-stub, has a REAL abstract (not null/missing, not ""), but missing the
+    # structured-abstract vector. Empty-string abstracts are not embeddable, so
+    # they must be excluded (Qdrant IsEmpty alone does not exclude "").
     missing_vec = _count(
         storage,
         must_not=[
             _STUB,
             models.IsEmptyCondition(is_empty=models.PayloadField(key="abstract")),
+            _EMPTY_ABSTRACT,
             models.HasVectorCondition(has_vector=STRUCTURED_VECTOR_NAME),
         ],
     )

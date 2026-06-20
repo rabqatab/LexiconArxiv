@@ -1,14 +1,13 @@
 """Data-quality asset-checks (spec §3). Thin wrappers over src.core.pipeline.dq.
 
-Phase 3b: the search-critical checks the spec marks for gating (#3 doi refs,
-#7 graph metrics) are now BLOCKING ERROR — observed live values pass with margin
-(refs ratio 0.97 vs 0.80 threshold; pagerank stored for the full corpus). The
-remaining checks stay WARN (coverage metrics that legitimately fluctuate).
-
-#6 embedding_coverage_complete is deliberately kept WARN for now: it currently
-flags a real backlog (≈27k abstracted-but-unembedded papers), and as a whole-
-corpus check a historical gap would block every run forever. Flip it to blocking
-only after (a) the backlog is embedded and (b) it is scoped to the run's papers.
+Phase 3b: the three search-critical checks the spec marks for gating are now
+BLOCKING ERROR — observed live values pass cleanly: #3 doi_papers_have_refs=0.97
+(>0.80), #6 embedding_coverage_complete=0 missing, #7 graph_metrics_stored=full
+corpus. The remaining checks stay WARN (coverage metrics that legitimately
+fluctuate). #6 only became trustworthy after fixing the dq filter to treat
+empty-string abstracts as "no abstract" (Qdrant IsEmpty does not match ""); it
+had falsely reported ~27k embeddable-missing-vector papers that are in fact the
+no-abstract floor.
 """
 
 from dagster import AssetCheckResult, AssetCheckSeverity, asset_check
@@ -35,10 +34,10 @@ def abstract_coverage_check() -> AssetCheckResult:
     return _result(dq.abstract_coverage())
 
 
-@asset_check(asset="embed_papers", name="embedding_coverage_complete",
-             description="Embeddable papers missing the dense vector (warn-only)")
+@asset_check(asset="embed_papers", name="embedding_coverage_complete", blocking=True,
+             description="Embeddable papers missing the dense vector (BLOCKING ERROR, spec #6)")
 def embedding_coverage_check() -> AssetCheckResult:
-    return _result(dq.embedding_coverage_complete())
+    return _result(dq.embedding_coverage_complete(), _ERROR)
 
 
 @asset_check(asset="analyze_graph", name="graph_metrics_stored", blocking=True,
