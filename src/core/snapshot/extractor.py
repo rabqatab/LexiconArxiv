@@ -74,3 +74,81 @@ def extract_p1_fields(work: dict, existing_payload: dict | None = None) -> dict[
             out["orcid_map"] = m
 
     return out
+
+
+def _norm_openalex_id(raw: str | None) -> str | None:
+    if not raw:
+        return None
+    return raw.rsplit("/", 1)[-1]
+
+
+def _norm_doi(raw: str | None) -> str | None:
+    if not raw:
+        return None
+    s = raw.lower()
+    for prefix in ("https://doi.org/", "http://doi.org/", "doi:"):
+        if s.startswith(prefix):
+            s = s[len(prefix):]
+    return s
+
+
+def extract_full_record(work: dict) -> dict[str, Any]:
+    """Build a full payload dict suitable for a NEW corpus point.
+
+    P2 (promotion) and P3 (injection) both call this. The caller is
+    responsible for adding provenance keys (promoted_from_stub, etc.).
+    """
+    out: dict[str, Any] = {}
+
+    if title := (work.get("title") or work.get("display_name")):
+        out["title"] = title
+    if doi := _norm_doi(work.get("doi")):
+        out["doi"] = doi
+    if oa := _norm_openalex_id(work.get("id")):
+        out["openalex_id"] = oa
+    if year := work.get("publication_year"):
+        out["year"] = year
+    if pdate := work.get("publication_date"):
+        out["publication_date"] = pdate
+    if t := work.get("type"):
+        out["type"] = t
+    if work.get("is_retracted") is True:
+        out["is_retracted"] = True
+
+    inv = work.get("abstract_inverted_index")
+    if inv:
+        abs_text = reconstruct_abstract(inv)
+        if abs_text:
+            out["abstract"] = abs_text
+
+    authors = [
+        {"display_name": (a.get("author") or {}).get("display_name", "")}
+        for a in (work.get("authorships") or [])
+        if (a.get("author") or {}).get("display_name")
+    ]
+    if authors:
+        out["authors"] = authors
+
+    if venue := ((work.get("primary_location") or {}).get("source") or {}).get("display_name"):
+        out["venue"] = venue
+
+    if refs := work.get("referenced_works"):
+        out["referenced_works"] = list(refs)
+
+    arxiv_id = (work.get("ids") or {}).get("arxiv") or _arxiv_from_doi(out.get("doi"))
+    if arxiv_id:
+        out["arxiv_id"] = arxiv_id
+
+    # fold in all P1 metadata fields
+    out.update(extract_p1_fields(work, existing_payload=None))
+    return out
+
+
+def _arxiv_from_doi(doi: str | None) -> str | None:
+    if not doi:
+        return None
+    # arXiv DOIs look like 10.48550/arXiv.2401.12345
+    marker = "10.48550/arxiv."
+    if doi.startswith(marker):
+        return doi[len(marker):]
+    return None

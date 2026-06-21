@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 import gzip
 
-from src.core.snapshot.extractor import extract_p1_fields
+from src.core.snapshot.extractor import extract_p1_fields, extract_full_record
 
 FIXTURE = Path(__file__).parent / "fixtures" / "works" / "tiny.jsonl.gz"
 
@@ -45,3 +45,23 @@ def test_extract_p1_skips_falsy_but_distinguishes_zero_from_none():
     out = extract_p1_fields(work, existing_payload={})
     assert out["cited_by_count"] == 0
     assert "fwci" not in out  # None means OpenAlex doesn't have it
+
+
+def test_extract_full_record_has_core_keys():
+    work = _load_work(0)
+    out = extract_full_record(work)
+    assert out["title"] == "DOI-Match Corpus Paper"
+    assert out["doi"] == "10.1000/seed-doi-001"
+    assert out["openalex_id"] == "W1000000001"
+    assert out["year"] == 2024
+    assert out["abstract"].startswith("This is an abstract")
+    assert out["authors"] == [{"display_name": "Alice Researcher"}]
+    assert out["referenced_works"] == ["https://openalex.org/W9999999991", "https://openalex.org/W1000000008"]
+    # P1 fields are folded in
+    assert out["cited_by_count"] == 42
+
+
+def test_extract_full_record_missing_abstract_inverted_index():
+    work = _load_work(6)  # Stub Partial — abstract_inverted_index is {}
+    out = extract_full_record(work)
+    assert out.get("abstract") in (None, "")
