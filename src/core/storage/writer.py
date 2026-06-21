@@ -13,6 +13,11 @@ from qdrant_client.http import models
 logger = logging.getLogger(__name__)
 
 
+def _utc_iso_date() -> str:
+    """Return today's date in UTC as YYYY-MM-DD."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
 class BatchWriter:
     """Handles batch update operations for papers."""
 
@@ -385,3 +390,23 @@ class BatchWriter:
                 break
 
         return cleared
+
+    def batch_apply_field_fill(
+        self,
+        updates: list[tuple[str, dict]],
+        *,
+        provenance_key: str = "snapshot_filled_at",
+    ) -> int:
+        """Apply fill-only-missing payload merges with provenance stamp. Returns count applied."""
+        today = _utc_iso_date()
+        n = 0
+        for point_id, fields in updates:
+            if not fields:
+                continue
+            self.client.set_payload(
+                collection_name=self.collection_name,
+                payload={**fields, provenance_key: today},
+                points=[point_id],
+            )
+            n += 1
+        return n

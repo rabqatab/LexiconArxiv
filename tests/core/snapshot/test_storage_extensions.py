@@ -68,3 +68,8 @@ def test_merge_stub_into_real_idempotent(storage):
     # Self-merge: ensure ValueError is raised when called with same id
     with pytest.raises(ValueError):
         storage.merge_stub_into_real("X", "X")
+
+
+def test_batch_apply_field_fill_returns_count(storage):
+    n = storage.batch_apply_field_fill([], provenance_key="snapshot_filled_at")
+    assert n == 0

@@ -484,6 +484,9 @@ class QdrantStorage:
     def batch_apply_snapshot_enrichment(self, updates: list[tuple[str, dict]]) -> int:
         return self.writers.batch_apply_snapshot_enrichment(updates)
 
+    def batch_apply_field_fill(self, updates: list[tuple[str, dict]], *, provenance_key: str = "snapshot_filled_at") -> int:
+        return self.writers.batch_apply_field_fill(updates, provenance_key=provenance_key)
+
     def update_paper_with_doi_and_refs(
         self,
         point_id: str,
