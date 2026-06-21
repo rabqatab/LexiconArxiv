@@ -51,6 +51,7 @@ testpaths = ["tests"]
 pythonpath = ["."]
 markers = [
     "integration: marks tests that require external services (API keys, running Ollama, etc.)",
+    "snapshot_live: requires the real OpenAlex snapshot files on disk (large, slow)",
 ]
 
 [tool.ruff]
