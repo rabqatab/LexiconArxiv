@@ -427,6 +427,9 @@ class QdrantStorage:
     def build_openalex_id_to_point_id_map(self) -> dict[str, str]:
         return self.readers.build_openalex_id_to_point_id_map()
 
+    def build_identifier_index_for_dedup(self) -> dict[str, set[str]]:
+        return self.readers.build_identifier_index_for_dedup()
+
     def count_papers_for_embedding(self) -> int:
         """Count non-stub papers with non-empty abstracts."""
         return self.client.count(

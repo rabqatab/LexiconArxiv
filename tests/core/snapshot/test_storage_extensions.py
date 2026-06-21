@@ -41,3 +41,10 @@ def test_build_openalex_id_to_point_id_map(storage):
     for v in m.values():
         assert isinstance(v, str)
         break
+
+
+def test_build_identifier_index_for_dedup(storage):
+    idx = storage.build_identifier_index_for_dedup()
+    assert {"doi", "openalex_id", "title_norm"} <= idx.keys()
+    for v in idx.values():
+        assert isinstance(v, set)

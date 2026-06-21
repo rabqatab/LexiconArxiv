@@ -822,3 +822,31 @@ class PaperReader:
                     out[oa] = str(p.id)
             if offset is None:
                 return out
+
+    def build_identifier_index_for_dedup(self) -> dict[str, set[str]]:
+        """Return all known identifiers in the corpus (real + stubs) for P3 dedup."""
+        from src.core.deduplication import Deduplicator
+
+        out: dict[str, set[str]] = {"doi": set(), "openalex_id": set(), "title_norm": set()}
+        offset = None
+        while True:
+            pts, offset = self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=None,
+                limit=500,
+                offset=offset,
+                with_payload=["doi", "openalex_id", "title"],
+                with_vectors=False,
+            )
+            for p in pts:
+                pl = p.payload or {}
+                if pl.get("doi"):
+                    out["doi"].add(pl["doi"])
+                if pl.get("openalex_id"):
+                    out["openalex_id"].add(pl["openalex_id"])
+                if pl.get("title"):
+                    n = Deduplicator.normalize_title(pl["title"])
+                    if n:
+                        out["title_norm"].add(n)
+            if offset is None:
+                return out
