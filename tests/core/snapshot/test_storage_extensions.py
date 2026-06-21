@@ -73,3 +73,8 @@ def test_merge_stub_into_real_idempotent(storage):
 def test_batch_apply_field_fill_returns_count(storage):
     n = storage.batch_apply_field_fill([], provenance_key="snapshot_filled_at")
     assert n == 0
+
+
+def test_batch_promote_stubs_empty(storage):
+    out = storage.batch_promote_stubs([])
+    assert out == []

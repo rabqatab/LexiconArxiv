@@ -546,6 +546,9 @@ class QdrantStorage:
     def clear_all_keywords(self) -> int:
         return self.writers.clear_all_keywords()
 
+    def batch_promote_stubs(self, promotions: list[dict]) -> list[dict]:
+        return self.writers.batch_promote_stubs(promotions)
+
     # =========================================================================
     # Stub Facade (delegated to StubManager)
     # =========================================================================

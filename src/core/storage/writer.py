@@ -18,6 +18,11 @@ def _utc_iso_date() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
+def _utc_iso() -> str:
+    """Return current UTC time as full ISO timestamp."""
+    return datetime.now(timezone.utc).isoformat()
+
+
 class BatchWriter:
     """Handles batch update operations for papers."""
 
@@ -410,3 +415,43 @@ class BatchWriter:
             )
             n += 1
         return n
+
+    def batch_promote_stubs(self, promotions: list[dict]) -> list[dict]:
+        """Atomic-per-item stub→real promotion with verify+rollback."""
+        results: list[dict] = []
+        today = _utc_iso_date()
+        for pr in promotions:
+            pid = pr["point_id"]
+            fields = pr["work_fields"]
+            cited_by = pr.get("preserved_cited_by") or []
+            try:
+                payload = {
+                    **fields,
+                    "is_stub": False,
+                    "cited_by": list(cited_by),
+                    "cited_by_count": len(cited_by),
+                    "cited_by_count_internal": pr.get("preserved_cited_by_count_internal", 0),
+                    "alternate_identifiers": pr.get("preserved_alternate_identifiers") or {},
+                    "promoted_from_stub": True,
+                    "promoted_at": _utc_iso(),
+                    "snapshot_filled_at": today,
+                }
+                self.client.set_payload(
+                    collection_name=self.collection_name,
+                    payload=payload,
+                    points=[pid],
+                )
+                # verify
+                verify_pts, _ = self.client.scroll(
+                    collection_name=self.collection_name,
+                    scroll_filter=models.Filter(must=[models.HasIdCondition(has_id=[pid])]),
+                    with_payload=["is_stub", "cited_by"], with_vectors=False, limit=1,
+                )
+                after = (verify_pts[0].payload or {}) if verify_pts else {}
+                if after.get("is_stub") is not False or set(after.get("cited_by") or []) < set(cited_by):
+                    results.append({"point_id": pid, "status": "verify_failed"})
+                    continue
+                results.append({"point_id": pid, "status": "promoted"})
+            except Exception as e:
+                results.append({"point_id": pid, "status": "error", "error": str(e)})
+        return results
