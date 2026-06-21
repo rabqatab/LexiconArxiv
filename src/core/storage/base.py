@@ -329,6 +329,9 @@ class QdrantStorage:
     def iter_enrichment_candidates(self, batch_size: int = 1000):
         return self.readers.iter_enrichment_candidates(batch_size=batch_size)
 
+    def iter_all_real_papers_minimal(self, batch_size: int = 1000):
+        return self.readers.iter_all_real_papers_minimal(batch_size)
+
     def get_papers_without_doi_missing_references(
         self,
         limit: int = 100,
@@ -418,8 +421,14 @@ class QdrantStorage:
         """Get non-stub papers with abstracts for embedding."""
         return self.readers.get_papers_for_embedding(limit, offset, skip_embedded)
 
+    def build_referenced_openalex_id_set(self) -> dict[str, int]:
+        return self.readers.build_referenced_openalex_id_set()
+
     def build_openalex_id_to_point_id_map(self) -> dict[str, str]:
         return self.readers.build_openalex_id_to_point_id_map()
+
+    def build_identifier_index_for_dedup(self) -> dict[str, set[str]]:
+        return self.readers.build_identifier_index_for_dedup()
 
     def count_papers_for_embedding(self) -> int:
         """Count non-stub papers with non-empty abstracts."""
@@ -474,6 +483,9 @@ class QdrantStorage:
 
     def batch_apply_snapshot_enrichment(self, updates: list[tuple[str, dict]]) -> int:
         return self.writers.batch_apply_snapshot_enrichment(updates)
+
+    def batch_apply_field_fill(self, updates: list[tuple[str, dict]], *, provenance_key: str = "snapshot_filled_at") -> int:
+        return self.writers.batch_apply_field_fill(updates, provenance_key=provenance_key)
 
     def update_paper_with_doi_and_refs(
         self,
@@ -533,6 +545,12 @@ class QdrantStorage:
 
     def clear_all_keywords(self) -> int:
         return self.writers.clear_all_keywords()
+
+    def batch_promote_stubs(self, promotions: list[dict]) -> list[dict]:
+        return self.writers.batch_promote_stubs(promotions)
+
+    def batch_inject_papers(self, papers: list[dict]) -> list[dict]:
+        return self.writers.batch_inject_papers(papers)
 
     def batch_extend_external_cited_by(self, updates: dict[str, list[dict]], *, cap: int = 300) -> int:
         return self.writers.batch_extend_external_cited_by(updates, cap=cap)
@@ -630,6 +648,15 @@ class QdrantStorage:
 
     def get_stub_stats(self) -> dict[str, Any]:
         return self.stubs.get_stub_stats()
+
+    def iter_stubs_for_resolution(self, batch_size: int = 500):
+        return self.stubs.iter_stubs_for_resolution(batch_size)
+
+    def find_real_by_identifier(self, fields: dict) -> str | None:
+        return self.stubs.find_real_by_identifier(fields)
+
+    def merge_stub_into_real(self, stub_point_id: str, real_point_id: str) -> None:
+        return self.stubs.merge_stub_into_real(stub_point_id, real_point_id)
 
     # =========================================================================
     # Statistics Facade (delegated to StorageStatistics)
