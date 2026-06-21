@@ -32,3 +32,12 @@ def test_build_referenced_openalex_id_set(storage):
     assert isinstance(m, dict)
     # at least one referenced work
     assert any(v >= 1 for v in m.values())
+
+
+def test_build_openalex_id_to_point_id_map(storage):
+    m = storage.build_openalex_id_to_point_id_map()
+    assert isinstance(m, dict)
+    # values are point_id strings
+    for v in m.values():
+        assert isinstance(v, str)
+        break

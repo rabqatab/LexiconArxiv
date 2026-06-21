@@ -796,3 +796,29 @@ class PaperReader:
                         counts[wid] = counts.get(wid, 0) + 1
             if offset is None:
                 return counts
+
+    def build_openalex_id_to_point_id_map(self) -> dict[str, str]:
+        """Return {OpenAlex Work ID -> point_id} for every non-stub paper that has an openalex_id."""
+        out: dict[str, str] = {}
+        has_oa = models.Filter(
+            must_not=[
+                models.FieldCondition(key="is_stub", match=models.MatchValue(value=True)),
+                models.IsEmptyCondition(is_empty=models.PayloadField(key="openalex_id")),
+            ]
+        )
+        offset = None
+        while True:
+            pts, offset = self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=has_oa,
+                limit=500,
+                offset=offset,
+                with_payload=["openalex_id"],
+                with_vectors=False,
+            )
+            for p in pts:
+                oa = (p.payload or {}).get("openalex_id")
+                if oa:
+                    out[oa] = str(p.id)
+            if offset is None:
+                return out
