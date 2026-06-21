@@ -5,6 +5,7 @@ import gzip
 import json
 import logging
 import os
+import warnings
 
 from src.core.snapshot.matcher import build_candidate_index, match_work, extract_enrichment
 
@@ -23,6 +24,12 @@ def run_snapshot_enrichment(storage, snapshot_dir: str, dry_run: bool = False,
 
     Returns counts: scanned, doi_matches, title_matches, applied, candidates.
     """
+    warnings.warn(
+        "run_snapshot_enrichment is deprecated. Use src.core.snapshot.phase1_corpus_fields.run() "
+        "(CLI: `enrich-corpus-fields`) which covers all 15 metadata fields, not just abstract+refs.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     candidates = list(storage.iter_enrichment_candidates())
     doi_map, title_map = build_candidate_index(candidates)
     logger.info("Snapshot candidates: %d (doi=%d, title_norm=%d)",
