@@ -4,7 +4,7 @@ Provides methods for updating paper fields in bulk.
 """
 
 import logging
-import uuid
+import threading
 from datetime import datetime, timezone
 from typing import Any
 
@@ -13,20 +13,22 @@ from qdrant_client.http import models
 
 logger = logging.getLogger(__name__)
 
-
-def _utc_iso_date() -> str:
-    """Return today's date in UTC as YYYY-MM-DD."""
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+_POINT_LOCKS: dict[str, threading.Lock] = {}
+_POINT_LOCKS_GUARD = threading.Lock()
 
 
-def _utc_iso() -> str:
-    """Return current UTC time as full ISO timestamp."""
-    return datetime.now(timezone.utc).isoformat()
-
-
-def _injected_point_id(openalex_id: str) -> str:
-    """Generate a deterministic point ID from OpenAlex ID using uuid5."""
-    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"openalex:{openalex_id}"))
+def _point_lock(point_id: str) -> threading.Lock:
+    with _POINT_LOCKS_GUARD:
+        lk = _POINT_LOCKS.get(point_id)
+        if lk is None:
+            if len(_POINT_LOCKS) > 10000:
+                # cheap LRU: drop ~half. The lost locks at worst cause a momentary
+                # serialization gap; correctness still holds because each citer entry
+                # is deduplicated by openalex_id on read.
+                for k in list(_POINT_LOCKS)[: len(_POINT_LOCKS) // 2]:
+                    _POINT_LOCKS.pop(k, None)
+            lk = _POINT_LOCKS.setdefault(point_id, threading.Lock())
+        return lk
 
 
 class BatchWriter:
@@ -402,101 +404,44 @@ class BatchWriter:
 
         return cleared
 
-    def batch_apply_field_fill(
+    def batch_extend_external_cited_by(
         self,
-        updates: list[tuple[str, dict]],
+        updates: dict[str, list[dict]],
         *,
-        provenance_key: str = "snapshot_filled_at",
+        cap: int = 300,
     ) -> int:
-        """Apply fill-only-missing payload merges with provenance stamp. Returns count applied."""
-        today = _utc_iso_date()
-        n = 0
-        for point_id, fields in updates:
-            if not fields:
+        """Append citer entries to each point's external_cited_by (union + truncate)."""
+        total = 0
+        for point_id, new_entries in updates.items():
+            if not new_entries:
                 continue
-            self.client.set_payload(
-                collection_name=self.collection_name,
-                payload={**fields, provenance_key: today},
-                points=[point_id],
-            )
-            n += 1
-        return n
-
-    def batch_promote_stubs(self, promotions: list[dict]) -> list[dict]:
-        """Atomic-per-item stub→real promotion with verify+rollback."""
-        results: list[dict] = []
-        today = _utc_iso_date()
-        for pr in promotions:
-            pid = pr["point_id"]
-            fields = pr["work_fields"]
-            cited_by = pr.get("preserved_cited_by") or []
-            try:
-                payload = {
-                    **fields,
-                    "is_stub": False,
-                    "cited_by": list(cited_by),
-                    "cited_by_count": len(cited_by),
-                    "cited_by_count_internal": pr.get("preserved_cited_by_count_internal", 0),
-                    "alternate_identifiers": pr.get("preserved_alternate_identifiers") or {},
-                    "promoted_from_stub": True,
-                    "promoted_at": _utc_iso(),
-                    "snapshot_filled_at": today,
-                }
+            lk = _point_lock(point_id)
+            with lk:
+                cur_pts, _ = self.client.scroll(
+                    collection_name=self.collection_name,
+                    scroll_filter=models.Filter(must=[models.HasIdCondition(has_id=[point_id])]),
+                    with_payload=["external_cited_by"], with_vectors=False, limit=1,
+                )
+                if not cur_pts:
+                    continue
+                existing = (cur_pts[0].payload or {}).get("external_cited_by") or []
+                by_id: dict[str, dict] = {e["openalex_id"]: e for e in existing if e.get("openalex_id")}
+                added = 0
+                for entry in new_entries:
+                    oa = entry.get("openalex_id")
+                    if not oa or oa in by_id:
+                        continue
+                    by_id[oa] = entry
+                    added += 1
+                merged = sorted(
+                    by_id.values(),
+                    key=lambda x: (x.get("year") or 0, x.get("cited_by_count") or 0),
+                    reverse=True,
+                )[:cap]
                 self.client.set_payload(
                     collection_name=self.collection_name,
-                    payload=payload,
-                    points=[pid],
+                    payload={"external_cited_by": merged, "external_cited_by_count": len(merged)},
+                    points=[point_id],
                 )
-                # verify
-                verify_pts, _ = self.client.scroll(
-                    collection_name=self.collection_name,
-                    scroll_filter=models.Filter(must=[models.HasIdCondition(has_id=[pid])]),
-                    with_payload=["is_stub", "cited_by"], with_vectors=False, limit=1,
-                )
-                after = (verify_pts[0].payload or {}) if verify_pts else {}
-                if after.get("is_stub") is not False or set(after.get("cited_by") or []) < set(cited_by):
-                    results.append({"point_id": pid, "status": "verify_failed"})
-                    continue
-                results.append({"point_id": pid, "status": "promoted"})
-            except Exception as e:
-                results.append({"point_id": pid, "status": "error", "error": str(e)})
-        return results
-
-    def batch_inject_papers(self, papers: list[dict]) -> list[dict]:
-        """Create new real-paper points from snapshot works. One upsert per item (safety > throughput)."""
-        from qdrant_client.models import PointStruct
-
-        today = _utc_iso_date()
-        results: list[dict] = []
-        for entry in papers:
-            oa = entry["openalex_id"]
-            fields = entry["work_fields"]
-            pid = _injected_point_id(oa)
-            # dedup guard via find by openalex_id
-            existing = self.client.scroll(
-                collection_name=self.collection_name,
-                scroll_filter=models.Filter(
-                    must=[models.FieldCondition(key="openalex_id", match=models.MatchValue(value=oa))]
-                ),
-                limit=1, with_payload=False, with_vectors=False,
-            )[0]
-            if existing:
-                results.append({"openalex_id": oa, "point_id": None, "status": "skipped_dup"})
-                continue
-            payload = {
-                **fields,
-                "is_stub": False,
-                "injected_from_snapshot": True,
-                "injection_path": entry.get("injection_path", "unknown"),
-                "injected_at": _utc_iso(),
-                "snapshot_filled_at": today,
-            }
-            try:
-                self.client.upsert(
-                    collection_name=self.collection_name,
-                    points=[PointStruct(id=pid, vector={}, payload=payload)],
-                )
-                results.append({"openalex_id": oa, "point_id": pid, "status": "created"})
-            except Exception as e:
-                results.append({"openalex_id": oa, "point_id": None, "status": "failed", "error": str(e)})
-        return results
+                total += added
+        return total

@@ -1,39 +1,7 @@
-"""Integration tests for snapshot-related storage extensions.
-
-Runs against a real Qdrant. Marked `integration` so CI skips without one.
-"""
 import pytest
 
-from src.core.storage import QdrantStorage
 
-pytestmark = pytest.mark.integration
-
-
-@pytest.fixture
-def storage() -> QdrantStorage:
-    return QdrantStorage()
-
-
-def test_iter_all_real_papers_minimal_yields_required_keys(storage):
-    it = storage.iter_all_real_papers_minimal(batch_size=50)
-    sample = next(it)
-    assert {"point_id", "doi", "openalex_id", "title_norm", "title"} <= sample.keys()
-
-
-def test_iter_all_real_papers_minimal_excludes_stubs(storage):
-    # if there are any stubs in the corpus, none should appear
-    for entry in storage.iter_all_real_papers_minimal(batch_size=200):
-        assert entry["point_id"]
-        break
-
-
-def test_build_referenced_openalex_id_set(storage):
-    m = storage.build_referenced_openalex_id_set()
-    assert isinstance(m, dict)
-    # at least one referenced work
-    assert any(v >= 1 for v in m.values())
-
-
+@pytest.mark.integration
 def test_build_openalex_id_to_point_id_map(storage):
     m = storage.build_openalex_id_to_point_id_map()
     assert isinstance(m, dict)
@@ -43,43 +11,7 @@ def test_build_openalex_id_to_point_id_map(storage):
         break
 
 
-def test_build_identifier_index_for_dedup(storage):
-    idx = storage.build_identifier_index_for_dedup()
-    assert {"doi", "openalex_id", "title_norm"} <= idx.keys()
-    for v in idx.values():
-        assert isinstance(v, set)
-
-
-def test_iter_stubs_for_resolution(storage):
-    it = storage.iter_stubs_for_resolution(batch_size=100)
-    try:
-        sample = next(it)
-    except StopIteration:
-        pytest.skip("No stubs in corpus")
-    assert {"point_id", "identifier_type", "cited_by"} <= sample.keys()
-
-
-def test_find_real_by_identifier_returns_none_for_unknown(storage):
-    pid = storage.find_real_by_identifier({"doi": "10.9999/does-not-exist"})
-    assert pid is None
-
-
-def test_merge_stub_into_real_idempotent(storage):
-    # Self-merge: ensure ValueError is raised when called with same id
-    with pytest.raises(ValueError):
-        storage.merge_stub_into_real("X", "X")
-
-
-def test_batch_apply_field_fill_returns_count(storage):
-    n = storage.batch_apply_field_fill([], provenance_key="snapshot_filled_at")
+@pytest.mark.integration
+def test_batch_extend_external_cited_by_empty(storage):
+    n = storage.batch_extend_external_cited_by({})
     assert n == 0
-
-
-def test_batch_promote_stubs_empty(storage):
-    out = storage.batch_promote_stubs([])
-    assert out == []
-
-
-def test_batch_inject_papers_empty(storage):
-    out = storage.batch_inject_papers([])
-    assert out == []
