@@ -25,3 +25,10 @@ def test_iter_all_real_papers_minimal_excludes_stubs(storage):
     for entry in storage.iter_all_real_papers_minimal(batch_size=200):
         assert entry["point_id"]
         break
+
+
+def test_build_referenced_openalex_id_set(storage):
+    m = storage.build_referenced_openalex_id_set()
+    assert isinstance(m, dict)
+    # at least one referenced work
+    assert any(v >= 1 for v in m.values())

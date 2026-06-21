@@ -772,3 +772,27 @@ class PaperReader:
                 }
             if offset is None:
                 return
+
+    def build_referenced_openalex_id_set(self) -> dict[str, int]:
+        """Return {OpenAlex Work ID -> in-corpus citer count} across all real papers."""
+        counts: dict[str, int] = {}
+        flt = models.Filter(
+            must_not=[models.FieldCondition(key="is_stub", match=models.MatchValue(value=True))]
+        )
+        offset = None
+        while True:
+            pts, offset = self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=flt,
+                limit=500,
+                offset=offset,
+                with_payload=["referenced_works"],
+                with_vectors=False,
+            )
+            for p in pts:
+                for ref in (p.payload or {}).get("referenced_works") or []:
+                    wid = ref.rsplit("/", 1)[-1] if isinstance(ref, str) else None
+                    if wid and wid.startswith("W"):
+                        counts[wid] = counts.get(wid, 0) + 1
+            if offset is None:
+                return counts

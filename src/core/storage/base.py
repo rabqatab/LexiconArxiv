@@ -421,6 +421,9 @@ class QdrantStorage:
         """Get non-stub papers with abstracts for embedding."""
         return self.readers.get_papers_for_embedding(limit, offset, skip_embedded)
 
+    def build_referenced_openalex_id_set(self) -> dict[str, int]:
+        return self.readers.build_referenced_openalex_id_set()
+
     def count_papers_for_embedding(self) -> int:
         """Count non-stub papers with non-empty abstracts."""
         return self.client.count(
