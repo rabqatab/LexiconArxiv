@@ -1278,7 +1278,7 @@ Append to `src/core/snapshot/matcher.py`:
 ```python
 from dataclasses import dataclass, field
 
-from src.core.dedup import Deduplicator
+from src.core.deduplication import Deduplicator
 
 
 @dataclass
@@ -1465,7 +1465,7 @@ def iter_all_real_papers_minimal(self, batch_size: int = 1000):
 
     Loads minimal payload (4 fields) — suitable for in-memory index building.
     """
-    from src.core.dedup import Deduplicator
+    from src.core.deduplication import Deduplicator
 
     flt = models.Filter(
         must_not=[models.FieldCondition(key="is_stub", match=models.MatchValue(value=True))]
@@ -1739,7 +1739,7 @@ Append to `reader.py`:
 ```python
 def build_identifier_index_for_dedup(self) -> dict[str, set[str]]:
     """Return all known identifiers in the corpus (real + stubs) for P3 dedup."""
-    from src.core.dedup import Deduplicator
+    from src.core.deduplication import Deduplicator
 
     out: dict[str, set[str]] = {"doi": set(), "openalex_id": set(), "title_norm": set()}
     offset = None
@@ -2765,7 +2765,7 @@ Append to the class body:
 ```python
     # ----- read helpers used by phases -----
     def iter_all_real_papers_minimal(self, batch_size: int = 1000):
-        from src.core.dedup import Deduplicator
+        from src.core.deduplication import Deduplicator
         for pid, pl in self._payloads.items():
             if pl.get("is_stub") is True:
                 continue
@@ -2799,7 +2799,7 @@ Append to the class body:
         return out
 
     def build_identifier_index_for_dedup(self) -> dict:
-        from src.core.dedup import Deduplicator
+        from src.core.deduplication import Deduplicator
         out = {"doi": set(), "openalex_id": set(), "title_norm": set()}
         for _, pl in self._payloads.items():
             if pl.get("doi"):
