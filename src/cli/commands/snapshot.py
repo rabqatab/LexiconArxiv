@@ -22,3 +22,29 @@ def register_commands(cli: click.Group):
             dry_run=dry_run, batch_size=batch_size,
         )
         click.echo(f"Snapshot enrichment: {result}")
+
+    @cli.command("enrich-corpus-fields")
+    @click.option("--snapshot-dir",
+                  default="/mnt/nfs/ssd2/openalex_snapshot/data/works",
+                  help="Path to OpenAlex works snapshot (updated_date=*/*.gz)")
+    @click.option("--batch-size", type=int, default=500)
+    @click.option("--dry-run", is_flag=True,
+                  help="Count matches without writing.")
+    @click.option("--resume/--no-resume", default=True,
+                  help="Skip .gz files already marked done in the checkpoint.")
+    @click.option("--limit-files", type=int, default=None,
+                  help="Process at most N .gz files (debug).")
+    def enrich_corpus_fields(snapshot_dir, batch_size, dry_run, resume, limit_files):
+        """Stream the OpenAlex snapshot and fill missing metadata fields on
+        every matched real paper (cited_by_count, fwci, concepts, topics,
+        best_oa_pdf_url, orcid_map, ...). Fill-only-missing; idempotent."""
+        from src.core.snapshot import phase1_corpus_fields
+        from src.core.snapshot import checkpoint as cp
+        storage = QdrantStorage()
+        if not resume:
+            cp.reset("p1")
+        summary = phase1_corpus_fields.run(
+            storage, snapshot_dir=snapshot_dir, batch_size=batch_size,
+            dry_run=dry_run, limit_files=limit_files,
+        )
+        click.echo(summary.to_log_line())
