@@ -4,6 +4,7 @@ Provides methods for updating paper fields in bulk.
 """
 
 import logging
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 
@@ -21,6 +22,11 @@ def _utc_iso_date() -> str:
 def _utc_iso() -> str:
     """Return current UTC time as full ISO timestamp."""
     return datetime.now(timezone.utc).isoformat()
+
+
+def _injected_point_id(openalex_id: str) -> str:
+    """Generate a deterministic point ID from OpenAlex ID using uuid5."""
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"openalex:{openalex_id}"))
 
 
 class BatchWriter:
@@ -454,4 +460,43 @@ class BatchWriter:
                 results.append({"point_id": pid, "status": "promoted"})
             except Exception as e:
                 results.append({"point_id": pid, "status": "error", "error": str(e)})
+        return results
+
+    def batch_inject_papers(self, papers: list[dict]) -> list[dict]:
+        """Create new real-paper points from snapshot works. One upsert per item (safety > throughput)."""
+        from qdrant_client.models import PointStruct
+
+        today = _utc_iso_date()
+        results: list[dict] = []
+        for entry in papers:
+            oa = entry["openalex_id"]
+            fields = entry["work_fields"]
+            pid = _injected_point_id(oa)
+            # dedup guard via find by openalex_id
+            existing = self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=models.Filter(
+                    must=[models.FieldCondition(key="openalex_id", match=models.MatchValue(value=oa))]
+                ),
+                limit=1, with_payload=False, with_vectors=False,
+            )[0]
+            if existing:
+                results.append({"openalex_id": oa, "point_id": None, "status": "skipped_dup"})
+                continue
+            payload = {
+                **fields,
+                "is_stub": False,
+                "injected_from_snapshot": True,
+                "injection_path": entry.get("injection_path", "unknown"),
+                "injected_at": _utc_iso(),
+                "snapshot_filled_at": today,
+            }
+            try:
+                self.client.upsert(
+                    collection_name=self.collection_name,
+                    points=[PointStruct(id=pid, vector={}, payload=payload)],
+                )
+                results.append({"openalex_id": oa, "point_id": pid, "status": "created"})
+            except Exception as e:
+                results.append({"openalex_id": oa, "point_id": None, "status": "failed", "error": str(e)})
         return results

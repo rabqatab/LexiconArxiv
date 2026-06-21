@@ -549,6 +549,9 @@ class QdrantStorage:
     def batch_promote_stubs(self, promotions: list[dict]) -> list[dict]:
         return self.writers.batch_promote_stubs(promotions)
 
+    def batch_inject_papers(self, papers: list[dict]) -> list[dict]:
+        return self.writers.batch_inject_papers(papers)
+
     # =========================================================================
     # Stub Facade (delegated to StubManager)
     # =========================================================================

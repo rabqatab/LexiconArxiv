@@ -78,3 +78,8 @@ def test_batch_apply_field_fill_returns_count(storage):
 def test_batch_promote_stubs_empty(storage):
     out = storage.batch_promote_stubs([])
     assert out == []
+
+
+def test_batch_inject_papers_empty(storage):
+    out = storage.batch_inject_papers([])
+    assert out == []
