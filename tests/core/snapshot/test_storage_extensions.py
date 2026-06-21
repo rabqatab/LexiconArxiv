@@ -62,3 +62,9 @@ def test_iter_stubs_for_resolution(storage):
 def test_find_real_by_identifier_returns_none_for_unknown(storage):
     pid = storage.find_real_by_identifier({"doi": "10.9999/does-not-exist"})
     assert pid is None
+
+
+def test_merge_stub_into_real_idempotent(storage):
+    # Self-merge: ensure ValueError is raised when called with same id
+    with pytest.raises(ValueError):
+        storage.merge_stub_into_real("X", "X")

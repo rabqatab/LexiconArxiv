@@ -643,6 +643,9 @@ class QdrantStorage:
     def find_real_by_identifier(self, fields: dict) -> str | None:
         return self.stubs.find_real_by_identifier(fields)
 
+    def merge_stub_into_real(self, stub_point_id: str, real_point_id: str) -> None:
+        return self.stubs.merge_stub_into_real(stub_point_id, real_point_id)
+
     # =========================================================================
     # Statistics Facade (delegated to StorageStatistics)
     # =========================================================================

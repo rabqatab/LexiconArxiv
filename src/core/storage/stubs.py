@@ -869,3 +869,42 @@ class StubManager:
             if pts:
                 return str(pts[0].id)
         return None
+
+    def merge_stub_into_real(self, stub_point_id: str, real_point_id: str) -> None:
+        """Union stub.cited_by into real.cited_by, then delete the stub.
+
+        Defensive: refuses self-merge.
+        """
+        if stub_point_id == real_point_id:
+            raise ValueError("cannot merge a point into itself")
+        stub_pts, _ = self.client.scroll(
+            collection_name=self.collection_name,
+            scroll_filter=models.Filter(must=[models.HasIdCondition(has_id=[stub_point_id])]),
+            with_payload=["cited_by", "alternate_identifiers"], with_vectors=False, limit=1,
+        )
+        if not stub_pts:
+            return
+        real_pts, _ = self.client.scroll(
+            collection_name=self.collection_name,
+            scroll_filter=models.Filter(must=[models.HasIdCondition(has_id=[real_point_id])]),
+            with_payload=["cited_by", "alternate_identifiers"], with_vectors=False, limit=1,
+        )
+        if not real_pts:
+            return
+        stub_pl = stub_pts[0].payload or {}
+        real_pl = real_pts[0].payload or {}
+        merged = sorted(set(stub_pl.get("cited_by") or []) | set(real_pl.get("cited_by") or []))
+        merged_alt = {**(real_pl.get("alternate_identifiers") or {}), **(stub_pl.get("alternate_identifiers") or {})}
+        self.client.set_payload(
+            collection_name=self.collection_name,
+            payload={
+                "cited_by": merged,
+                "cited_by_count": len(merged),
+                "alternate_identifiers": merged_alt,
+            },
+            points=[real_point_id],
+        )
+        self.client.delete(
+            collection_name=self.collection_name,
+            points_selector=models.PointIdsList(points=[stub_point_id]),
+        )
