@@ -637,6 +637,9 @@ class QdrantStorage:
     def get_stub_stats(self) -> dict[str, Any]:
         return self.stubs.get_stub_stats()
 
+    def iter_stubs_for_resolution(self, batch_size: int = 500):
+        return self.stubs.iter_stubs_for_resolution(batch_size)
+
     # =========================================================================
     # Statistics Facade (delegated to StorageStatistics)
     # =========================================================================

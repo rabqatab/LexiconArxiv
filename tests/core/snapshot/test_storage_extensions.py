@@ -48,3 +48,12 @@ def test_build_identifier_index_for_dedup(storage):
     assert {"doi", "openalex_id", "title_norm"} <= idx.keys()
     for v in idx.values():
         assert isinstance(v, set)
+
+
+def test_iter_stubs_for_resolution(storage):
+    it = storage.iter_stubs_for_resolution(batch_size=100)
+    try:
+        sample = next(it)
+    except StopIteration:
+        pytest.skip("No stubs in corpus")
+    assert {"point_id", "identifier_type", "cited_by"} <= sample.keys()

@@ -4,7 +4,7 @@ Provides methods for creating and managing stub papers (external references).
 """
 
 import logging
-from typing import Any
+from typing import Any, Iterator
 
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
@@ -807,3 +807,43 @@ class StubManager:
         ]
 
         return stats
+
+    def iter_stubs_for_resolution(self, batch_size: int = 500) -> Iterator[dict]:
+        """Yield stub dicts shaped for the P2 matcher and promotion logic."""
+        flt = models.Filter(
+            must=[models.FieldCondition(key="is_stub", match=models.MatchValue(value=True))]
+        )
+        offset = None
+        while True:
+            pts, offset = self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=flt,
+                limit=batch_size,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False,
+            )
+            for p in pts:
+                pl = p.payload or {}
+                first = None
+                if authors := pl.get("authors"):
+                    name = (authors[0] or {}).get("display_name") if isinstance(authors[0], dict) else None
+                    if name:
+                        first = name.split()[-1].lower()
+                yield {
+                    "point_id": str(p.id),
+                    "identifier": pl.get("identifier"),
+                    "identifier_type": pl.get("identifier_type"),
+                    "doi": pl.get("doi"),
+                    "arxiv_id": pl.get("arxiv_id"),
+                    "openalex_id": pl.get("openalex_id"),
+                    "title": pl.get("title"),
+                    "year": pl.get("year"),
+                    "first_author": first,
+                    "authors": pl.get("authors") or [],
+                    "cited_by": list(pl.get("cited_by") or []),
+                    "cited_by_count_internal": pl.get("cited_by_count_internal", 0),
+                    "alternate_identifiers": pl.get("alternate_identifiers") or {},
+                }
+            if offset is None:
+                return
