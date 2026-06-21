@@ -1,0 +1,138 @@
+[
+  {
+    "point_id": "stub-doi-001",
+    "payload": {
+      "is_stub": true,
+      "identifier": "doi:10.1000/stub-doi-001",
+      "identifier_type": "doi",
+      "doi": "10.1000/stub-doi-001",
+      "title": null,
+      "abstract": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "cited_by": ["real-005", "real-006"],
+      "cited_by_count_internal": 2,
+      "alternate_identifiers": {}
+    }
+  },
+  {
+    "point_id": "stub-doi-002",
+    "payload": {
+      "is_stub": true,
+      "identifier": "doi:10.1000/stub-doi-002",
+      "identifier_type": "doi",
+      "doi": "10.1000/stub-doi-002",
+      "title": null,
+      "abstract": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "cited_by": ["real-007"],
+      "cited_by_count_internal": 1,
+      "alternate_identifiers": {}
+    }
+  },
+  {
+    "point_id": "stub-arxiv-001",
+    "payload": {
+      "is_stub": true,
+      "identifier": "arXiv:2401.12345",
+      "identifier_type": "arxiv",
+      "doi": null,
+      "title": null,
+      "abstract": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "cited_by": ["real-003"],
+      "cited_by_count_internal": 1,
+      "alternate_identifiers": {}
+    }
+  },
+  {
+    "point_id": "stub-arxiv-002",
+    "payload": {
+      "is_stub": true,
+      "identifier": "arXiv:2402.67890",
+      "identifier_type": "arxiv",
+      "doi": null,
+      "title": null,
+      "abstract": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "cited_by": ["real-004"],
+      "cited_by_count_internal": 1,
+      "alternate_identifiers": {}
+    }
+  },
+  {
+    "point_id": "stub-title-001",
+    "payload": {
+      "is_stub": true,
+      "identifier": "TITLE:stub_title_match_promotable_f3a2b1c4d5e6",
+      "identifier_type": "title",
+      "doi": null,
+      "title": "Stub Title Match Promotable",
+      "abstract": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "cited_by": ["real-008"],
+      "cited_by_count_internal": 1,
+      "alternate_identifiers": {}
+    }
+  },
+  {
+    "point_id": "stub-title-002",
+    "payload": {
+      "is_stub": true,
+      "identifier": "TITLE:no_matching_work_in_fixture_a1b2c3d4e5f6",
+      "identifier_type": "title",
+      "doi": null,
+      "title": "No Matching Work In Fixture",
+      "abstract": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "cited_by": ["real-009"],
+      "cited_by_count_internal": 1,
+      "alternate_identifiers": {}
+    }
+  },
+  {
+    "point_id": "stub-oa-001",
+    "payload": {
+      "is_stub": true,
+      "identifier": "openalex:W1000000005",
+      "identifier_type": "openalex",
+      "doi": null,
+      "title": null,
+      "abstract": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "cited_by": ["real-010"],
+      "cited_by_count_internal": 1,
+      "alternate_identifiers": {}
+    }
+  },
+  {
+    "point_id": "stub-oa-002",
+    "payload": {
+      "is_stub": true,
+      "identifier": "openalex:W1000000009",
+      "identifier_type": "openalex",
+      "doi": null,
+      "title": null,
+      "abstract": null,
+      "year": null,
+      "authors": [],
+      "venue": null,
+      "cited_by": ["real-001"],
+      "cited_by_count_internal": 1,
+      "alternate_identifiers": {}
+    }
+  }
+]

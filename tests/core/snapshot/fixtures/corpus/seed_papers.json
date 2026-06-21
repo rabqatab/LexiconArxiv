@@ -1,0 +1,142 @@
+[
+  {
+    "point_id": "real-001",
+    "payload": {
+      "is_stub": false,
+      "title": "DOI-Match Corpus Paper",
+      "doi": "10.1000/seed-doi-001",
+      "openalex_id": "W1000000001",
+      "publication_year": 2024,
+      "authors": [{"display_name": "Alice Researcher"}],
+      "abstract": "existing abstract for DOI match paper",
+      "referenced_works": ["W1000000008", "W2000000111"],
+      "cited_by": ["real-002"]
+    }
+  },
+  {
+    "point_id": "real-002",
+    "payload": {
+      "is_stub": false,
+      "title": "Title-Match Plus Year",
+      "doi": null,
+      "openalex_id": null,
+      "publication_year": 2024,
+      "authors": [{"display_name": "Bob Researcher"}],
+      "abstract": "existing abstract for title plus year match",
+      "referenced_works": ["W1000000008", "W2000000222"],
+      "cited_by": ["real-003"]
+    }
+  },
+  {
+    "point_id": "real-003",
+    "payload": {
+      "is_stub": false,
+      "title": "Title-Match Plus Author",
+      "doi": null,
+      "openalex_id": null,
+      "publication_year": 2022,
+      "authors": [{"display_name": "Carol Researcher"}],
+      "abstract": "existing abstract for title plus author match",
+      "referenced_works": ["W2000000333"],
+      "cited_by": []
+    }
+  },
+  {
+    "point_id": "real-004",
+    "payload": {
+      "is_stub": false,
+      "title": "Title-No-Corroboration",
+      "doi": null,
+      "openalex_id": null,
+      "publication_year": 2015,
+      "authors": [{"display_name": "Xie Researcher"}],
+      "abstract": "existing abstract for no-corroboration paper",
+      "referenced_works": ["W2000000444"],
+      "cited_by": []
+    }
+  },
+  {
+    "point_id": "real-005",
+    "payload": {
+      "is_stub": false,
+      "title": "AI Survey Paper 2022",
+      "doi": "10.1000/ai-survey-2022",
+      "openalex_id": "W3000000005",
+      "publication_year": 2022,
+      "authors": [{"display_name": "Leo Researcher"}],
+      "abstract": "survey of AI methods in 2022",
+      "referenced_works": ["W1000000008", "W2000000555"],
+      "cited_by": ["real-006"]
+    }
+  },
+  {
+    "point_id": "real-006",
+    "payload": {
+      "is_stub": false,
+      "title": "Deep Learning Advances 2021",
+      "doi": "10.1000/dl-advances-2021",
+      "openalex_id": "W3000000006",
+      "publication_year": 2021,
+      "authors": [{"display_name": "Mia Researcher"}],
+      "abstract": "advances in deep learning techniques",
+      "referenced_works": ["W1000000008", "W2000000666"],
+      "cited_by": ["real-007"]
+    }
+  },
+  {
+    "point_id": "real-007",
+    "payload": {
+      "is_stub": false,
+      "title": "Natural Language Processing Review",
+      "doi": "10.1000/nlp-review-2023",
+      "openalex_id": "W3000000007",
+      "publication_year": 2023,
+      "authors": [{"display_name": "Noah Researcher"}],
+      "abstract": "review of NLP state of the art",
+      "referenced_works": ["W2000000777"],
+      "cited_by": ["real-008"]
+    }
+  },
+  {
+    "point_id": "real-008",
+    "payload": {
+      "is_stub": false,
+      "title": "Transformer Architectures Survey",
+      "doi": "10.1000/transformer-survey-2023",
+      "openalex_id": "W3000000008",
+      "publication_year": 2023,
+      "authors": [{"display_name": "Olivia Researcher"}],
+      "abstract": "comprehensive survey of transformer architectures",
+      "referenced_works": ["W2000000888"],
+      "cited_by": ["real-009"]
+    }
+  },
+  {
+    "point_id": "real-009",
+    "payload": {
+      "is_stub": false,
+      "title": "Reinforcement Learning from Human Feedback",
+      "doi": "10.1000/rlhf-2022",
+      "openalex_id": "W3000000009",
+      "publication_year": 2022,
+      "authors": [{"display_name": "Paul Researcher"}],
+      "abstract": "RLHF methods for aligning language models",
+      "referenced_works": ["W2000000999"],
+      "cited_by": ["real-010"]
+    }
+  },
+  {
+    "point_id": "real-010",
+    "payload": {
+      "is_stub": false,
+      "title": "Vision Language Models Overview",
+      "doi": "10.1000/vlm-overview-2024",
+      "openalex_id": "W3000000010",
+      "publication_year": 2024,
+      "authors": [{"display_name": "Quinn Researcher"}],
+      "abstract": "overview of vision-language model architectures",
+      "referenced_works": ["W2000001000"],
+      "cited_by": []
+    }
+  }
+]
