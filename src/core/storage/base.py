@@ -640,6 +640,9 @@ class QdrantStorage:
     def iter_stubs_for_resolution(self, batch_size: int = 500):
         return self.stubs.iter_stubs_for_resolution(batch_size)
 
+    def find_real_by_identifier(self, fields: dict) -> str | None:
+        return self.stubs.find_real_by_identifier(fields)
+
     # =========================================================================
     # Statistics Facade (delegated to StorageStatistics)
     # =========================================================================

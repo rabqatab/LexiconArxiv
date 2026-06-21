@@ -847,3 +847,25 @@ class StubManager:
                 }
             if offset is None:
                 return
+
+    def find_real_by_identifier(self, fields: dict) -> str | None:
+        """Find a non-stub paper matching any of doi/openalex_id/arxiv_id; return point_id or None."""
+        real_only = models.FieldCondition(key="is_stub", match=models.MatchValue(value=True))
+        for key in ("doi", "openalex_id", "arxiv_id"):
+            v = fields.get(key)
+            if not v:
+                continue
+            flt = models.Filter(
+                must=[models.FieldCondition(key=key, match=models.MatchValue(value=v))],
+                must_not=[real_only],
+            )
+            pts, _ = self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=flt,
+                limit=1,
+                with_payload=False,
+                with_vectors=False,
+            )
+            if pts:
+                return str(pts[0].id)
+        return None

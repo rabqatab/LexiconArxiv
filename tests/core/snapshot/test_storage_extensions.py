@@ -57,3 +57,8 @@ def test_iter_stubs_for_resolution(storage):
     except StopIteration:
         pytest.skip("No stubs in corpus")
     assert {"point_id", "identifier_type", "cited_by"} <= sample.keys()
+
+
+def test_find_real_by_identifier_returns_none_for_unknown(storage):
+    pid = storage.find_real_by_identifier({"doi": "10.9999/does-not-exist"})
+    assert pid is None
