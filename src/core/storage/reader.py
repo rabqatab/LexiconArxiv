@@ -739,3 +739,36 @@ class PaperReader:
                 }
             if offset is None:
                 break
+
+    def iter_all_real_papers_minimal(self, batch_size: int = 1000):
+        """Yield {point_id, doi, openalex_id, title_norm, title} for every non-stub paper.
+
+        Loads minimal payload (4 fields) — suitable for in-memory index building.
+        """
+        from src.core.deduplication import Deduplicator
+
+        flt = models.Filter(
+            must_not=[models.FieldCondition(key="is_stub", match=models.MatchValue(value=True))]
+        )
+        offset = None
+        while True:
+            pts, offset = self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=flt,
+                limit=batch_size,
+                offset=offset,
+                with_payload=["doi", "openalex_id", "title"],
+                with_vectors=False,
+            )
+            for p in pts:
+                pl = p.payload or {}
+                title = pl.get("title")
+                yield {
+                    "point_id": str(p.id),
+                    "doi": pl.get("doi"),
+                    "openalex_id": pl.get("openalex_id"),
+                    "title": title,
+                    "title_norm": Deduplicator.normalize_title(title) if title else None,
+                }
+            if offset is None:
+                return

@@ -329,6 +329,9 @@ class QdrantStorage:
     def iter_enrichment_candidates(self, batch_size: int = 1000):
         return self.readers.iter_enrichment_candidates(batch_size=batch_size)
 
+    def iter_all_real_papers_minimal(self, batch_size: int = 1000):
+        return self.readers.iter_all_real_papers_minimal(batch_size)
+
     def get_papers_without_doi_missing_references(
         self,
         limit: int = 100,
