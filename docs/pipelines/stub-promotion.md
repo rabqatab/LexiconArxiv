@@ -46,6 +46,29 @@ re-promote it":
   `${checkpoint_root}/p2/failed_batches/<ts>.jsonl`. Replay with
   `snapshot-replay-failed --phase p2`.
 
+### Verify-failed recovery (operator action required)
+
+Spec §6 originally prescribed a backup/restore semantic where a verify failure
+would auto-revert `is_stub` back to `True`. The implementation does NOT do this —
+`batch_promote_stubs` writes the new payload (including `is_stub=False`) before
+the read-back verify. If verify fails, the point is in a **partially-promoted
+state**: `is_stub=False` but `cited_by` may not equal the stub's original list.
+
+Subsequent P2 passes will NOT re-pick it up (the iterator filters by
+`is_stub=True`). Two operator paths:
+
+1. **Trust the partial promotion** — the corpus has a new real paper whose
+   `cited_by` may be incomplete. Acceptable if you can rebuild `cited_by` later
+   (e.g. via `build_cited_by_incremental`).
+2. **Hand-revert** — read the quarantined work from `${checkpoint_root}/p2/quarantine.jsonl`,
+   inspect the affected `point_id`, and either:
+   - `storage.set_payload(point_id, {"is_stub": True, "promoted_from_stub": False})`
+     to re-stub it for the next pass, OR
+   - apply the original stub's `cited_by` back to the now-real paper.
+
+In practice verify_failed requires Qdrant to silently accept a write but return
+different content on read-back. Quarantine.jsonl is the audit trail.
+
 ## Dedup safety
 
 When `find_real_by_identifier` returns a real paper hit, `merge_stub_into_real`:

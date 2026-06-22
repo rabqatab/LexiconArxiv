@@ -53,7 +53,8 @@ def process_one(
     if decision is Decision.PROMOTE and allow_promotion:
         try:
             result = promote_one(storage, stub, fields,
-                                 embedding_queue_root=embedding_queue_root)
+                                 embedding_queue_root=embedding_queue_root,
+                                 allow_merge=allow_merge)
         except PromotionError as e:
             return {"matched": True, "action": "promote_failed", "error": str(e)}
         if result is Decision.MERGED_INTO_EXISTING:

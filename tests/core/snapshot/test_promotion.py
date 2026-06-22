@@ -113,6 +113,33 @@ def test_promote_one_idempotent_on_already_promoted(mock_storage, tmp_path):
     assert p_after["cited_by"] == p_before["cited_by"]
 
 
+def test_promote_one_skips_merge_when_allow_merge_false(mock_storage, tmp_path):
+    """When allow_merge=False, promote_one must NOT call merge_stub_into_real."""
+    mock_storage.seed_from_json(Path(__file__).parent / "fixtures" / "corpus" / "seed_stubs.json")
+    # Plant a real paper with the same DOI as stub-doi-001
+    mock_storage.set_payload("real-existing", {
+        "is_stub": False,
+        "doi": "10.1000/stub-doi-001",
+        "cited_by": ["real-007"],
+        "cited_by_count": 1,
+    })
+    stub = next(s for s in mock_storage.iter_stubs_for_resolution()
+                if s["point_id"] == "stub-doi-001")
+    original_cited_by = list(stub.get("cited_by") or [])
+    fields = {"title": "Stub DOI Match", "doi": "10.1000/stub-doi-001",
+              "year": 2024, "authors": [{"display_name": "Alice"}], "abstract": "x"}
+
+    result = promote_one(mock_storage, stub, fields,
+                         embedding_queue_root=tmp_path, allow_merge=False)
+
+    assert result is Decision.MERGED_INTO_EXISTING
+    # Real paper's cited_by must NOT have been mutated (merge did not happen)
+    real = mock_storage.get_payload("real-existing")
+    assert real["cited_by"] == ["real-007"], "cited_by on real paper was mutated despite allow_merge=False"
+    # Stub must still exist (was not deleted)
+    assert mock_storage.get_payload("stub-doi-001") is not None, "stub was deleted despite allow_merge=False"
+
+
 def test_cited_by_invariant_after_many_promotions(mock_storage, tmp_path):
     """Run 5 promotions, then assert no promoted point lost its cited_by."""
     mock_storage.seed_from_json(Path(__file__).parent / "fixtures" / "corpus" / "seed_stubs.json")

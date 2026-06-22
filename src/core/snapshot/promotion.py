@@ -66,8 +66,14 @@ def promote_one(
     work_fields: dict,
     *,
     embedding_queue_root=None,
+    allow_merge: bool = True,
 ) -> Decision:
-    """Run one promotion transaction. Raises PromotionError on verify failure."""
+    """Run one promotion transaction. Raises PromotionError on verify failure.
+
+    If *allow_merge* is False and a real duplicate is found via the dedup guard,
+    the function returns MERGED_INTO_EXISTING WITHOUT calling merge_stub_into_real.
+    The caller interprets this as "merge was blocked by policy".
+    """
     pid = stub["point_id"]
 
     # A. dedup guard
@@ -77,6 +83,8 @@ def promote_one(
         "arxiv_id": work_fields.get("arxiv_id") or stub.get("arxiv_id"),
     })
     if real_dup and real_dup != pid:
+        if not allow_merge:
+            return Decision.MERGED_INTO_EXISTING
         storage.merge_stub_into_real(pid, real_dup)
         return Decision.MERGED_INTO_EXISTING
 
