@@ -73,3 +73,32 @@ def register_commands(cli: click.Group):
             dry_run=dry_run, limit_files=limit_files, cap_per_paper=max_citers_per_paper,
         )
         click.echo(summary.to_log_line())
+
+    @cli.command("resolve-stubs-from-snapshot")
+    @click.option("--snapshot-dir",
+                  default="/mnt/nfs/ssd2/openalex_snapshot/data/works")
+    @click.option("--batch-size", type=int, default=500)
+    @click.option("--dry-run", is_flag=True,
+                  help="Report would-be promotions/enrichments without writing.")
+    @click.option("--resume/--no-resume", default=True)
+    @click.option("--limit-files", type=int, default=None)
+    @click.option("--allow-promotion/--no-allow-promotion", default=True,
+                  help="If False, only enrich-in-place; never flip is_stub.")
+    @click.option("--allow-merge/--no-allow-merge", default=True,
+                  help="If False, refuse to merge a stub into an existing real paper.")
+    def resolve_stubs_from_snapshot(snapshot_dir, batch_size, dry_run, resume,
+                                     limit_files, allow_promotion, allow_merge):
+        """Match every stub against the OpenAlex snapshot, then promote (preserve
+        cited_by), enrich-in-place, or merge into an existing real paper."""
+        from src.core.snapshot import phase2_stub_resolution
+        from src.core.snapshot import checkpoint as cp
+        from src.core.storage import QdrantStorage
+        storage = QdrantStorage()
+        if not resume:
+            cp.reset("p2")
+        summary = phase2_stub_resolution.run(
+            storage, snapshot_dir=snapshot_dir, batch_size=batch_size,
+            dry_run=dry_run, limit_files=limit_files,
+            allow_promotion=allow_promotion, allow_merge=allow_merge,
+        )
+        click.echo(summary.to_log_line())
