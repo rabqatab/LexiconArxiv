@@ -57,9 +57,85 @@ for name in ['abstract_coverage','embedding_coverage_complete','doi_papers_have_
 "
 ```
 
-## Day 3 — P2 (covered in the separate Plan 3 runbook section)
+## Day 3 — P2 dry-run and full run
 
-(See `docs/runbooks/snapshot-bootstrap.md` after Plan 3 lands.)
+### Dry-run first
+
+```bash
+uv run python -m src.cli.core_collect resolve-stubs-from-snapshot \
+    --dry-run --limit-files 20
+```
+
+Inspect the printed summary:
+
+```
+p2 Summary: scanned=N matched=M ... stubs_seen=S promoted=P enriched=E merged=Me ...
+```
+
+Sanity:
+- `promoted / matched` should be majority for high-quality stubs.
+- `merged` reflects existing-real-paper collisions (good, not an error).
+- `enriched` reflects partial metadata gains (also good).
+
+### Full run
+
+```bash
+uv run python -m src.cli.core_collect resolve-stubs-from-snapshot
+```
+
+Expected duration: ≈6–8 hours.
+
+### Post-run verification
+
+1. **Invariant query** — every promoted point with a non-empty stub `cited_by`
+   list should still carry that list:
+
+```bash
+uv run python -c "
+from src.core.storage import QdrantStorage
+from qdrant_client import models as m
+st = QdrantStorage()
+flt = m.Filter(must=[m.FieldCondition(key='promoted_from_stub', match=m.MatchValue(value=True))])
+pts, _ = st.client.scroll(st.collection_name, scroll_filter=flt, limit=20,
+                          with_payload=['cited_by','cited_by_count'])
+for p in pts:
+    print(str(p.id)[:8], 'cited_by=', len(p.payload.get('cited_by') or []),
+          'count=', p.payload.get('cited_by_count'))
+"
+```
+
+Every line should show a non-zero `cited_by`. If any is 0, inspect the
+quarantine file:
+
+```bash
+ls -la ~/dagster_home/snapshot_checkpoints/p2/quarantine.jsonl
+```
+
+2. **DQ checks still pass.**
+
+```bash
+uv run python -c "
+from src.core.pipeline import dq
+for n in ['abstract_coverage','embedding_coverage_complete','doi_papers_have_refs','real_papers_have_titles']:
+    r = getattr(dq, n)()
+    print(n, '=', 'PASS' if r['passed'] else 'FAIL', r['metadata'])
+"
+```
+
+## Day 4–5 — drain the embedding queue
+
+```bash
+uv run python -m src.cli.core_collect embed-papers --consume-snapshot-queue
+```
+
+(`--consume-snapshot-queue` flag is added in Plan 4.) Wait until the queue is
+empty before moving on:
+
+```bash
+uv run python -m src.cli.core_collect snapshot-status
+```
+
+(Also added in Plan 4.)
 
 ## Day 6 — P3 (covered in the separate Plan 4 runbook section)
 
