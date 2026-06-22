@@ -111,3 +111,24 @@ def test_promote_one_idempotent_on_already_promoted(mock_storage, tmp_path):
     p_after = mock_storage.get_payload("stub-doi-001")
     # cited_by must not duplicate
     assert p_after["cited_by"] == p_before["cited_by"]
+
+
+def test_cited_by_invariant_after_many_promotions(mock_storage, tmp_path):
+    """Run 5 promotions, then assert no promoted point lost its cited_by."""
+    mock_storage.seed_from_json(Path(__file__).parent / "fixtures" / "corpus" / "seed_stubs.json")
+    promoted: dict[str, list[str]] = {}
+    for stub in list(mock_storage.iter_stubs_for_resolution()):
+        if stub["identifier_type"] in ("doi", "openalex"):
+            promoted[stub["point_id"]] = list(stub["cited_by"])
+            fields = {"title": "T", "year": 2024, "authors": [{"display_name": "A"}], "abstract": "x"}
+            try:
+                promote_one(mock_storage, stub, fields, embedding_queue_root=tmp_path)
+            except PromotionError:
+                continue
+    # Invariant: no promoted point ended up with cited_by==[] when it started non-empty
+    for pid, original in promoted.items():
+        pl = mock_storage.get_payload(pid)
+        if pl is None:
+            continue  # merged
+        if pl.get("promoted_from_stub") is True and original:
+            assert pl["cited_by"], f"{pid} lost cited_by; was {original}"
