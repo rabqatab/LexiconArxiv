@@ -9,6 +9,7 @@ from src.orchestration.assets.resolution import resolve_refs, enrich_stubs
 from src.orchestration.assets.graph import build_cited_by, analyze_graph
 from src.orchestration.assets.embedding import embed_papers
 from src.orchestration.assets.analytics import compute_similarity, compute_topics
+from src.orchestration.assets import snapshot as _snapshot_assets
 from src.orchestration.checks import ALL_CHECKS
 from src.orchestration.jobs import core_job, maintenance_job
 from src.orchestration.schedules import daily_core_schedule, weekly_maintenance_schedule
@@ -19,6 +20,8 @@ defs = Definitions(
         collect_papers, enrich_abstracts, enrich_refs_s2, enrich_refs_crossref,
         extract_keywords, label_abstracts, resolve_refs, enrich_stubs,
         build_cited_by, analyze_graph, embed_papers, compute_similarity, compute_topics,
+        _snapshot_assets.snapshot_enrich_corpus_fields,
+        _snapshot_assets.snapshot_extend_cited_by,
     ],
     asset_checks=ALL_CHECKS,
     jobs=[core_job, maintenance_job],
