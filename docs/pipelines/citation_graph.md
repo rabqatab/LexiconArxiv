@@ -723,3 +723,26 @@ networkx = ">=3.0"
 - [NetworkX Documentation](https://networkx.org/)
 - [Gephi](https://gephi.org/) - Graph visualization
 - [GraphRAG Paper](https://arxiv.org/abs/2404.16130) - Microsoft's GraphRAG approach
+
+## External cited-by (P4, from the OpenAlex snapshot)
+
+The `build_cited_by_index` pipeline above counts citations **from within the
+corpus** — its `cited_by` field is a list of point IDs of papers we have. P4
+of the snapshot utilization system (`extend-cited-by-from-snapshot`) writes a
+**parallel, additive** field:
+
+| Field | Source | Value |
+|---|---|---|
+| `cited_by` | `build_cited_by_index` | `list[str]` — internal point IDs |
+| `external_cited_by` | `phase4_cited_by` | `list[dict]` — outside-corpus citers, capped at 300, sorted by `(year DESC, cited_by_count DESC)` |
+| `external_cited_by_count` | `phase4_cited_by` | `int` — length of the above |
+
+Each `external_cited_by` entry: `{openalex_id, year, venue, cited_by_count}`.
+
+Search and ranking may combine both fields:
+
+```python
+total_citers = len(payload.get("cited_by", [])) + payload.get("external_cited_by_count", 0)
+```
+
+P4 deduplicates by `openalex_id` so re-running the snapshot pass is safe.
