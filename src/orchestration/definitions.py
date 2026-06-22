@@ -21,6 +21,7 @@ defs = Definitions(
         extract_keywords, label_abstracts, resolve_refs, enrich_stubs,
         build_cited_by, analyze_graph, embed_papers, compute_similarity, compute_topics,
         _snapshot_assets.snapshot_enrich_corpus_fields,
+        _snapshot_assets.snapshot_resolve_stubs,
         _snapshot_assets.snapshot_extend_cited_by,
     ],
     asset_checks=ALL_CHECKS,
