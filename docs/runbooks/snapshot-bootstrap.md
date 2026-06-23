@@ -137,9 +137,47 @@ uv run python -m src.cli.core_collect snapshot-status
 
 (Also added in Plan 4.)
 
-## Day 6 — P3 (covered in the separate Plan 4 runbook section)
+## Day 6 — P3 dry-run + staged real run
 
-(See `docs/runbooks/snapshot-bootstrap.md` after Plan 4 lands.)
+### Dry-run on a slice
+
+```bash
+uv run python -m src.cli.core_collect discover-corpus-gaps \
+    --dry-run --limit-files 30
+```
+
+Inspect:
+- `anchor_inject / scanned` — should be a small fraction of a percent
+- `concept_inject / scanned` — likewise; tune `--concept-min-recent` / `--concept-min-old`
+  if too high
+- `year_distribution` — heavy 2022–2025 expected, very few pre-2018 (the floor)
+- `top_concepts` — should match your AI focus
+
+### Capped real run
+
+```bash
+uv run python -m src.cli.core_collect discover-corpus-gaps --max-injections 5000
+```
+
+Review the summary line and verify a sample of injected points in the search UI.
+
+### Full run (after the capped run looks healthy)
+
+```bash
+uv run python -m src.cli.core_collect snapshot-reset --phase p3 --confirm
+uv run python -m src.cli.core_collect discover-corpus-gaps
+```
+
+Expected duration: ≈4–8 hours.
+
+## Day 7-9 — drain P3 embedding queue
+
+Same procedure as Day 4-5 after P2:
+
+```bash
+uv run python -m src.cli.core_collect snapshot-status   # check queue depth
+uv run python -m src.cli.core_collect embed-papers --consume-snapshot-queue
+```
 
 ## Day 10 — P4 full run
 
