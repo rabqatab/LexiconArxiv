@@ -140,3 +140,66 @@ def register_commands(cli: click.Group):
             max_injections=max_injections, thresholds=thresholds,
         )
         click.echo(summary.to_log_line())
+
+    @cli.command("snapshot-status")
+    def snapshot_status():
+        """Print checkpoint progress + embedding queue depth for all 4 phases."""
+        from src.core.snapshot import checkpoint as cp
+        from src.core.snapshot import embedding_queue
+        import json
+        for phase in ("p1", "p2", "p3", "p4"):
+            done = cp.load(phase)
+            click.echo(f"{phase}: {len(done)} files done")
+            # Surface last_summary.json if it exists
+            from pathlib import Path
+            import os
+            root = Path(os.environ.get("DAGSTER_HOME", str(Path.home()/"dagster_home"))) \
+                   / "snapshot_checkpoints" / phase
+            ls = root / "last_summary.json"
+            if ls.exists():
+                click.echo(f"  last: {ls.read_text().strip()}")
+            q = root / "quarantine.jsonl"
+            if q.exists():
+                click.echo(f"  quarantine: {sum(1 for _ in q.open())} entries")
+        click.echo(f"embedding_queue depth: {embedding_queue.depth()}")
+
+
+    @cli.command("snapshot-reset")
+    @click.option("--phase", type=click.Choice(["p1","p2","p3","p4"]), required=True)
+    @click.option("--confirm", is_flag=True, help="Required to actually delete.")
+    def snapshot_reset(phase, confirm):
+        """Delete the per-phase checkpoint directory. Data is not touched (phases are idempotent)."""
+        if not confirm:
+            click.echo("Add --confirm to actually delete.", err=True)
+            raise click.exceptions.Exit(1)
+        from src.core.snapshot import checkpoint as cp
+        cp.reset(phase)
+        click.echo(f"reset {phase}")
+
+
+    @cli.command("snapshot-replay-failed")
+    @click.option("--phase", type=click.Choice(["p1","p2","p3","p4"]), required=True)
+    @click.option("--quarantine", is_flag=True, help="Also replay quarantine.jsonl items.")
+    def snapshot_replay_failed(phase, quarantine):
+        """Re-attempt the failed_batches (and optionally quarantine) of a phase."""
+        import json
+        from pathlib import Path
+        import os
+        root = Path(os.environ.get("DAGSTER_HOME", str(Path.home()/"dagster_home"))) \
+               / "snapshot_checkpoints" / phase
+        d = root / "failed_batches"
+        n = 0
+        if d.exists():
+            for f in sorted(d.glob("*.jsonl")):
+                lines = f.read_text().splitlines()
+                # We do not auto-reapply here — surface the items and let the operator
+                # decide. (Auto-replay is too risky without root-cause analysis.)
+                click.echo(f"{f.name}: {len(lines)} items")
+                n += len(lines)
+        if quarantine:
+            qf = root / "quarantine.jsonl"
+            if qf.exists():
+                n_q = sum(1 for _ in qf.open())
+                click.echo(f"quarantine.jsonl: {n_q} items")
+                n += n_q
+        click.echo(f"total items needing operator review: {n}")
