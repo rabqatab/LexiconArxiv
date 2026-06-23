@@ -92,9 +92,12 @@ def run_live_delta(
             r1 = phase1_corpus_fields.process_one(
                 work, p1_indexes, storage=storage, dry_run=dry_run,
             )
-            counters["p1"][r1.get("action") or ("matched" if r1.get("matched") else "no_match")] += 1
             if r1.get("matched"):
                 counters["p1"]["matched"] += 1
+                if r1.get("applied"):
+                    counters["p1"]["applied"] += 1
+            else:
+                counters["p1"]["no_match"] += 1
             # P2: stub resolution
             r2 = phase2_stub_resolution.process_one(
                 work, stub_index, all_stubs_by_id, storage=storage,
@@ -139,9 +142,11 @@ def run_live_delta(
         for ph in _PHASES:
             cp.set_live_high_water_mark(ph, hwm_iso, root=checkpoint_root)
 
+    worker_errors = counters.get("meta", Counter()).get("worker_errors", 0)
     summary = {
         "since": hwm_iso,
         "fetched": fetched,
+        "worker_errors": worker_errors,
         "per_phase": {p: dict(counters[p]) for p in _PHASES},
         "queue_depth_after": embedding_queue.depth(root=embedding_queue_root),
         "hwm_updated": {p: hwm_iso for p in _PHASES} if not dry_run

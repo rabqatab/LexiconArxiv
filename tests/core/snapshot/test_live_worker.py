@@ -94,3 +94,45 @@ def test_run_live_delta_uses_default_iterator_when_not_injected(monkeypatch, moc
     )
     assert called_with["since"].isoformat()  # got a date
     assert out["fetched"] == 0
+
+
+def test_run_live_delta_p1_matched_counted_once(mock_storage, tmp_path):
+    """P1 matched works should be counted exactly once, not double-counted."""
+    mock_storage.seed_from_json(FIX / "corpus" / "seed_papers.json")
+    mock_storage.seed_from_json(FIX / "corpus" / "seed_stubs.json")
+
+    # Load tiny works and feed only the first one (which matches in P1)
+    works = _load_tiny_works()
+    work_0 = works[0] if works else None
+
+    if work_0 is not None:
+        out = live_worker.run_live_delta(
+            mock_storage,
+            since=date(2026, 6, 22),
+            work_iterator=iter([work_0]),
+            checkpoint_root=tmp_path / "checkpoints",
+            embedding_queue_root=tmp_path / "checkpoints",
+        )
+
+        # Assert matched count is exactly 1, not 2
+        assert out["per_phase"]["p1"]["matched"] == 1
+
+
+def test_run_live_delta_summary_includes_worker_errors(mock_storage, tmp_path):
+    """Summary dict should include worker_errors at top level."""
+    mock_storage.seed_from_json(FIX / "corpus" / "seed_papers.json")
+    mock_storage.seed_from_json(FIX / "corpus" / "seed_stubs.json")
+    works = _load_tiny_works()
+
+    out = live_worker.run_live_delta(
+        mock_storage,
+        since=date(2026, 6, 22),
+        work_iterator=iter(works),
+        checkpoint_root=tmp_path / "checkpoints",
+        embedding_queue_root=tmp_path / "checkpoints",
+    )
+
+    # Assert worker_errors is present in summary (can be 0 if no errors occurred)
+    assert "worker_errors" in out
+    assert out["worker_errors"] >= 0
+    assert out["fetched"] == len(works)
