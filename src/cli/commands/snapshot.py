@@ -203,3 +203,52 @@ def register_commands(cli: click.Group):
                 click.echo(f"quarantine.jsonl: {n_q} items")
                 n += n_q
         click.echo(f"total items needing operator review: {n}")
+
+    @cli.command("snapshot-live-delta")
+    @click.option("--days-back", type=int, default=1,
+                  help="Fetch updates from N days ago (default 1 = yesterday).")
+    @click.option("--since", type=str, default=None,
+                  help="Explicit ISO date (YYYY-MM-DD); overrides --days-back.")
+    @click.option("--dry-run", is_flag=True,
+                  help="Run the full chain but do not write to storage.")
+    @click.option("--max-injections", type=int, default=None,
+                  help="Stop P3 after this many injections (safety cap).")
+    @click.option("--anchor-min-citers", type=int, default=2)
+    @click.option("--concept-min-recent", type=int, default=50)
+    @click.option("--concept-min-old", type=int, default=200)
+    @click.option("--concept-min-year", type=int, default=2018)
+    @click.option("--max-citers-per-paper", type=int, default=300)
+    def snapshot_live_delta(days_back, since, dry_run, max_injections,
+                             anchor_min_citers, concept_min_recent,
+                             concept_min_old, concept_min_year,
+                             max_citers_per_paper):
+        """Run one live-mode pass: fetch yesterday's OpenAlex API delta and
+        chain P1→P2→P3→P4 per work (same phase logic as the snapshot bootstrap)."""
+        from datetime import date as _date
+        from src.core.snapshot import live_worker
+        from src.core.snapshot.gap_filter import Thresholds
+        from src.core.storage import QdrantStorage
+        storage = QdrantStorage()
+        since_date = _date.fromisoformat(since) if since else None
+        thresholds = Thresholds(
+            anchor_min_citers=anchor_min_citers,
+            concept_min_recent=concept_min_recent,
+            concept_min_old=concept_min_old,
+            concept_min_year=concept_min_year,
+        )
+        out = live_worker.run_live_delta(
+            storage,
+            since=since_date,
+            days_back=days_back,
+            dry_run=dry_run,
+            thresholds=thresholds,
+            max_injections=max_injections,
+            cap_per_paper=max_citers_per_paper,
+        )
+        click.echo(
+            f"live-delta since={out['since']} fetched={out['fetched']} "
+            f"p1={out['per_phase']['p1']} p2={out['per_phase']['p2']} "
+            f"p3={out['per_phase']['p3']} p4={out['per_phase']['p4']} "
+            f"queue_depth_after={out['queue_depth_after']} "
+            f"hwm_updated={out['hwm_updated']} duration_s={out['duration_s']}"
+        )
