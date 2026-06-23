@@ -102,3 +102,41 @@ def register_commands(cli: click.Group):
             allow_promotion=allow_promotion, allow_merge=allow_merge,
         )
         click.echo(summary.to_log_line())
+
+    @cli.command("discover-corpus-gaps")
+    @click.option("--snapshot-dir",
+                  default="/mnt/nfs/ssd2/openalex_snapshot/data/works")
+    @click.option("--batch-size", type=int, default=500)
+    @click.option("--dry-run", is_flag=True)
+    @click.option("--resume/--no-resume", default=True)
+    @click.option("--limit-files", type=int, default=None)
+    @click.option("--anchor-min-citers", type=int, default=2)
+    @click.option("--concept-min-recent", type=int, default=50)
+    @click.option("--concept-min-old", type=int, default=200)
+    @click.option("--concept-min-year", type=int, default=2018)
+    @click.option("--max-injections", type=int, default=None,
+                  help="Stop after this many injections (safety cap).")
+    def discover_corpus_gaps(snapshot_dir, batch_size, dry_run, resume, limit_files,
+                              anchor_min_citers, concept_min_recent, concept_min_old,
+                              concept_min_year, max_injections):
+        """Discover snapshot works missing from the corpus, classify as
+        anchor-citation or AI-concept-high-impact, inject as new real papers."""
+        from src.core.snapshot import phase3_gap_discovery
+        from src.core.snapshot import checkpoint as cp
+        from src.core.snapshot.gap_filter import Thresholds
+        from src.core.storage import QdrantStorage
+        storage = QdrantStorage()
+        if not resume:
+            cp.reset("p3")
+        thresholds = Thresholds(
+            anchor_min_citers=anchor_min_citers,
+            concept_min_recent=concept_min_recent,
+            concept_min_old=concept_min_old,
+            concept_min_year=concept_min_year,
+        )
+        summary = phase3_gap_discovery.run(
+            storage, snapshot_dir=snapshot_dir, batch_size=batch_size,
+            dry_run=dry_run, limit_files=limit_files,
+            max_injections=max_injections, thresholds=thresholds,
+        )
+        click.echo(summary.to_log_line())
