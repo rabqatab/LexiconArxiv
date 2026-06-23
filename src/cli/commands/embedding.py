@@ -63,7 +63,9 @@ def register_commands(cli: click.Group):
     @click.option("--limit", "-n", type=int, default=None, help="Max papers to embed")
     @click.option("--resume/--no-resume", default=True, help="Resume from checkpoint")
     @click.option("--dry-run", is_flag=True, help="Count papers to embed without doing it")
-    def embed_papers(batch_size, embed_batch_size, concurrency, limit, resume, dry_run):
+    @click.option("--consume-snapshot-queue", is_flag=True,
+                  help="Drain points queued by P2/P3 first; then fall through to the default scroll.")
+    def embed_papers(batch_size, embed_batch_size, concurrency, limit, resume, dry_run, consume_snapshot_queue):
         """Embed paper abstracts with section-level + structured-abstract vectors.
 
         Generates up to 9 dense vectors per paper (abstract, structured-abstract,
@@ -120,6 +122,30 @@ def register_commands(cli: click.Group):
 
                 total_embedded = 0
                 offset = None
+
+                if consume_snapshot_queue:
+                    from src.core.snapshot import embedding_queue
+                    queued = list(embedding_queue.drain())
+                    if queued:
+                        click.echo(f"Consuming {len(queued)} points from snapshot queue...")
+                        # Build papers list by fetching payloads
+                        pids = [pid for pid, _ in queued]
+                        # Use storage to scroll specifically these points
+                        from qdrant_client import models as m
+                        pts, _ = storage.client.scroll(
+                            collection_name=storage.collection_name,
+                            scroll_filter=m.Filter(must=[m.HasIdCondition(has_id=pids)]),
+                            with_payload=["title", "abstract", "abstract_structure"],
+                            with_vectors=False, limit=len(pids),
+                        )
+                        papers = [(str(p.id), p.payload or {}) for p in pts]
+                        if papers:
+                            await embedder.embed_and_upsert_batch(
+                                papers=papers, storage=storage,
+                                embed_batch_size=embed_batch_size,
+                            )
+                            total_embedded += len(papers)
+                            click.echo(f"  embedded {len(papers)} from queue")
 
                 while True:
                     # skip_embedded=True uses HasVectorCondition to skip
