@@ -140,12 +140,12 @@ def register_commands(cli: click.Group):
                         )
                         papers = [(str(p.id), p.payload or {}) for p in pts]
                         if papers:
-                            await embedder.embed_and_upsert_batch(
+                            queue_embedded = await embedder.embed_and_upsert_batch(
                                 papers=papers, storage=storage,
                                 embed_batch_size=embed_batch_size,
                             )
-                            total_embedded += len(papers)
-                            click.echo(f"  embedded {len(papers)} from queue")
+                            total_embedded += queue_embedded
+                            click.echo(f"  embedded {queue_embedded} from queue (of {len(papers)} attempted)")
 
                 while True:
                     # skip_embedded=True uses HasVectorCondition to skip

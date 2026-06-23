@@ -61,3 +61,21 @@ def test_p1_dry_run_does_not_mutate(mock_storage, tmp_path):
     assert summary.matched >= 2
     assert summary.applied == 0     # dry-run reports matched but applies nothing
     assert before == after
+
+
+def test_p1_limit_files_does_not_double_count(mock_storage, tmp_path):
+    """Regression: when limit_files triggers break, post-loop tail must not re-mark/count."""
+    mock_storage.seed_from_json(FIXTURE_DIR / "corpus" / "seed_papers.json")
+    # Two files so the limit can engage mid-stream
+    d = tmp_path / "data" / "works"
+    (d / "updated_date=2024-01-01").mkdir(parents=True)
+    (d / "updated_date=2024-01-02").mkdir(parents=True)
+    src = (FIXTURE_DIR / "works" / "tiny.jsonl.gz").read_bytes()
+    (d / "updated_date=2024-01-01" / "part_0000.gz").write_bytes(src)
+    (d / "updated_date=2024-01-02" / "part_0000.gz").write_bytes(src)
+
+    summary = phase1_corpus_fields.run(
+        mock_storage, snapshot_dir=str(d), limit_files=1,
+        checkpoint_root=tmp_path / "checkpoints",
+    )
+    assert summary.extra["files_done"] == 1   # NOT 2 (pre-fix it would be 2)

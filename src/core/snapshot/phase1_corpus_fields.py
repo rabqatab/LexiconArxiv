@@ -103,6 +103,7 @@ def run(
                 cp.mark_done(PHASE, current_file, root=checkpoint_root)
                 files_done += 1
                 if limit_files is not None and files_done >= limit_files:
+                    current_file = None  # prevent post-loop double-mark/double-count
                     break
             current_file = fp
         summary.scanned += 1

@@ -1,7 +1,10 @@
 # OpenAlex Snapshot → Qdrant Payload Field Mapping
 
-This is the source-of-truth mapping from the **49 fields** in an OpenAlex `works`
-snapshot record to the payload keys Lexicon Arxiv stores on a real paper point.
+This is the source-of-truth mapping from the OpenAlex `works` snapshot record
+to the payload keys Lexicon Arxiv stores on a real paper point. The OpenAlex
+schema has ~49 top-level fields; the table below covers every field we touch.
+Fields not listed are intentionally ignored (e.g. internal OpenAlex housekeeping
+keys with no downstream consumer).
 
 | OpenAlex field | Payload key | Filled by | Notes |
 |---|---|---|---|

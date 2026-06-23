@@ -24,9 +24,12 @@ def load(phase: str, *, root: Path | None = None) -> set[str]:
 
 
 def mark_done(phase: str, filepath: str, *, root: Path | None = None) -> None:
-    done = load(phase, root=root)
-    if filepath in done:
-        return
+    """Append filepath to the done-files log.
+
+    Idempotent at the consumer side (`load()` returns a set so duplicates are
+    harmless). Skipping the read-before-write here keeps mark_done O(1) instead
+    of O(N) over the file list — meaningful on the ~380-file OpenAlex snapshot.
+    """
     f = _phase_dir(phase, root) / "done_files.txt"
     with f.open("a") as fh:
         fh.write(filepath + "\n")
@@ -54,9 +57,22 @@ def quarantine(phase: str, work: dict, reason: str, *, root: Path | None = None)
 
 
 def reset(phase: str, *, root: Path | None = None) -> None:
+    """Delete the phase's checkpoint dir but preserve quarantine.jsonl audit trail.
+
+    `snapshot-reset` is an operator-facing destructive op (resume state, failed
+    batches, etc. are dropped). The quarantine log is different — it's the audit
+    trail of items that needed human inspection, and losing it on reset would
+    silently destroy work tracking. Preserved as a sibling file.
+    """
     p = (root or _default_root()) / phase
-    if p.exists():
-        shutil.rmtree(p)
+    if not p.exists():
+        return
+    quarantine_path = p / "quarantine.jsonl"
+    quarantine_content = quarantine_path.read_bytes() if quarantine_path.exists() else None
+    shutil.rmtree(p)
+    if quarantine_content is not None:
+        p.mkdir(parents=True, exist_ok=True)
+        quarantine_path.write_bytes(quarantine_content)
 
 
 def live_high_water_mark(phase: str, *, root: Path | None = None) -> str | None:

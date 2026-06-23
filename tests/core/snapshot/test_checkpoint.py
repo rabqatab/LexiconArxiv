@@ -37,3 +37,17 @@ def test_reset_clears_phase(tmp_path: Path):
     cp.mark_done("p1", "/x.gz", root=tmp_path)
     cp.reset("p1", root=tmp_path)
     assert cp.load("p1", root=tmp_path) == set()
+
+
+def test_reset_preserves_quarantine_audit_trail(tmp_path: Path):
+    """reset() must not destroy the quarantine.jsonl audit log."""
+    cp.mark_done("p2", "/x.gz", root=tmp_path)
+    cp.quarantine("p2", {"id": "w1"}, "verify failed", root=tmp_path)
+    quarantine_path = tmp_path / "p2" / "quarantine.jsonl"
+    before = quarantine_path.read_text()
+    cp.reset("p2", root=tmp_path)
+    # done_files wiped...
+    assert cp.load("p2", root=tmp_path) == set()
+    # ...but quarantine survives byte-for-byte
+    assert quarantine_path.exists()
+    assert quarantine_path.read_text() == before
