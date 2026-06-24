@@ -217,6 +217,45 @@ uv run python -m src.cli.core_collect analyze-graph
 uv run python -m src.cli.core_collect compute-topics
 ```
 
+## Day 12+ — enable daily live mode
+
+After two weeks of clean bootstrap operations and a successful drain of the
+embedding queue, enable the daily live worker so corpus stays current.
+
+### Smoke-test the live worker once manually
+
+```bash
+uv run python -m src.cli.core_collect snapshot-live-delta --days-back 1 --dry-run
+```
+
+Verify the printed summary line shows `fetched=N` (non-zero) and no
+`worker_errors`. Inspect a sample by widening the date range to confirm the
+classifier picks up real AI-domain works:
+
+```bash
+uv run python -m src.cli.core_collect snapshot-live-delta --since 2026-06-22 --dry-run --max-injections 20
+```
+
+### Enable the schedule
+
+In the Dagster UI, locate `daily_snapshot_live_schedule` and flip it from
+STOPPED → RUNNING. Or, in code, change `default_status=DefaultScheduleStatus.RUNNING`
+in `src/orchestration/schedules.py` and redeploy.
+
+### Monitor
+
+The first week, check daily in the Dagster UI's asset page:
+- `snapshot_live_delta` materialization metadata shows
+  `fetched`/`p1.matched`/`p2.promoted`/`p3.anchor_inject`/`p3.concept_inject`/`p4.applied`.
+- Embedding queue depth (visible in `snapshot-status` CLI) should drain on the
+  next `core_pipeline_job` run.
+
+### Rollback
+
+Flip the schedule back to STOPPED and the corpus stops getting daily updates
+without any other side effect. The HWM file remains, so re-enabling resumes
+from the next day after the last successful pass.
+
 ## Resume / restart
 
 All phases are file-checkpointed. To re-run a phase from scratch:
