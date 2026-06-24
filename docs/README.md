@@ -28,10 +28,14 @@
 |----------|-------------|
 | [Data Collection](./pipelines/data_collection.md) | Multi-source data collection strategy |
 | [Incremental Crawling](./pipelines/incremental_crawling.md) | Incremental update strategy and troubleshooting |
-| [Enrichment](./pipelines/enrichment.md) | Citation and abstract enrichment |
+| [Enrichment](./pipelines/enrichment.md) | Citation and abstract enrichment (covers P1 metadata fill) |
+| [Embedding](./pipelines/embedding.md) | Qwen3-Embedding-8B + section vectors + BM25 |
 | [Keyword Extraction](./pipelines/keyword_extraction.md) | Keyword/acronym extraction for BM25 |
 | [Abstract Labeling](./pipelines/abstract_labeling.md) | Abstract sentence rhetorical classification |
-| [Citation Graph](./pipelines/citation_graph.md) | Citation graph and GraphRAG design |
+| [Citation Graph](./pipelines/citation_graph.md) | Citation graph + GraphRAG (covers P4 external_cited_by) |
+| [Stub Promotion](./pipelines/stub-promotion.md) | P2: snapshot-driven stub → real paper promotion |
+| [Corpus Gap Discovery](./pipelines/corpus-gap-discovery.md) | P3: hybrid-classified injection (anchor + AI taxonomy) |
+| [Snapshot Live Mode](./pipelines/snapshot-live-mode.md) | Daily OpenAlex API delta — same phase chain as bootstrap |
 | [Search](./pipelines/search.md) | Hybrid search pipeline |
 
 ### Guides
@@ -49,6 +53,24 @@
 |----------|-------------|
 | [Venues](./reference/venues.md) | Venue tiers, IDs, and classifications |
 | [CLI](./reference/cli.md) | Complete CLI command reference |
+| [Snapshot Field Mapping](./reference/snapshot-fields.md) | OpenAlex `works` JSONL → Qdrant payload mapping |
+| [Labeling LLM Comparison](./reference/labeling-llm-comparison.md) | granite4.1:8b vs gemma4:e4b vs DiffusionGemma eval results |
+
+### Runbooks
+
+| Document | Description |
+|----------|-------------|
+| [Snapshot Bootstrap](./runbooks/snapshot-bootstrap.md) | Day 0..11+ procedure for quarterly snapshot ingest (P1→P2→P3→P4 + Day 12+ live-mode enable) |
+| [Snapshot Rollback](./runbooks/snapshot-rollback.md) | 4 scenarios: P2 wrong promotions, P3 injection runaway, Qdrant corruption, embedding queue lost |
+| [Dagster Cutover](./runbooks/dagster-cutover.md) | Migrating from bash orchestration to Dagster |
+
+### Specs & Plans
+
+| Document | Description |
+|----------|-------------|
+| [Snapshot Utilization Design](./superpowers/specs/2026-06-21-snapshot-utilization-design.md) | 5-plan architecture for OpenAlex snapshot bootstrap + live mode |
+| [Plan TODO](./plans/TODO.md) | Live backlog and deferred items |
+| [Ponytail Audit (2026-06-24)](./refactoring/2026-06-24-ponytail-audit.md) | Over-engineering audit — ~1800 lines / 4 deps removable, deferred until post-bootstrap |
 
 ### Testing & Design
 
@@ -68,6 +90,8 @@
 - **Graph Visualization API**: REST API for interactive citation graph exploration with D3.js UI
 - **Stub Papers**: External papers referenced by corpus papers but not crawled (for complete citation graph)
 - **Payload-Only Storage**: Decouple metadata from embeddings; add vectors later with any dimension
+- **Snapshot Bootstrap (quarterly)**: 4-phase enrichment from a local OpenAlex `works` snapshot — fill metadata, promote stubs, inject AI-relevant gaps, extend external_cited_by
+- **Snapshot Live Mode (daily)**: Same `process_one(work)` chain driven by the OpenAlex API delta — keeps the corpus current between quarterly bootstraps
 
 ### Venue Summary
 
@@ -128,13 +152,21 @@ lexiconarxiv/
 │   │   ├── routes/graph.py      # /graph/* endpoints
 │   │   ├── models/responses.py  # Pydantic response models
 │   │   └── static/index.html    # D3.js visualization UI
+│   ├── orchestration/           # Dagster: assets, jobs, schedules, asset_checks (DQ)
 │   ├── core/                    # Core Corpus collection
 │   │   ├── crawler/             # Data source collectors
 │   │   ├── enrichment/          # Citation/abstract enrichment
 │   │   ├── resolution/          # Reference resolution
 │   │   ├── citation_graph/      # Graph building and analysis
-│   │   ├── keyword/             # Keyword extraction
-│   │   └── labeling/            # Abstract sentence labeling
+│   │   ├── snapshot/            # OpenAlex snapshot bootstrap (Plans 1-5)
+│   │   │   ├── phase{1,2,3,4}_*.py       # P1/P2/P3/P4 phase modules
+│   │   │   ├── live_worker.py            # daily API delta chain
+│   │   │   ├── work_source.py            # iter_snapshot_works + iter_live_works
+│   │   │   ├── gap_filter.py             # AI taxonomy classification (P3)
+│   │   │   ├── matcher.py / promotion.py # DOI/arXiv/title matching, stub merge
+│   │   │   └── checkpoint.py / embedding_queue.py / stats.py / extractor.py
+│   │   ├── keyword/             # Keyword extraction (Ollama)
+│   │   └── labeling/            # Abstract sentence labeling (Ollama)
 │   ├── models/                  # Data models
 │   ├── cli/                     # CLI tools
 │   └── utils/                   # Utilities
@@ -148,11 +180,17 @@ lexiconarxiv/
 ## Tech Stack
 
 ```
-Backend:     Python 3.12+ / FastAPI / uvicorn
-Databases:   Qdrant (vector + server-side BM25)
-ML/NLP:      sentence-transformers / KeyBERT / Gemini API / Ollama
-Graph:       NetworkX (citation graph) / D3.js (visualization)
-Infra:       Docker / Kubernetes
+Backend:        Python 3.12+ / FastAPI / uvicorn
+Vector store:   Qdrant (payload-only, named vectors, server-side BM25)
+LLM:            Ollama-only (Gemini removed v0.12)
+                - granite4.1:8b (labeling, default; fallback gemma4:e4b)
+                - llama3.1:8b (keyword extraction)
+                - qwen3-embedding:8b (1024d via Matryoshka)
+ML/NLP:         sentence-transformers (Qwen3-Reranker-0.6B) / KeyBERT
+Orchestration:  Dagster (assets, jobs, schedules, asset_checks for DQ)
+Snapshot:       OpenAlex `works` JSONL (~600GB gzip, quarterly) + daily API delta
+Graph:          NetworkX (citation graph) / D3.js (visualization)
+Infra:          Docker (Qdrant, GROBID) / Kubernetes (optional)
 ```
 
 ---
@@ -161,7 +199,11 @@ Infra:       Docker / Kubernetes
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 0.10.0 | Feb 2026 | Abstract sentence labeling (7 rhetorical roles), multi-key Gemini round-robin |
+| 0.13.0 | Jun 2026 | Snapshot Utilization System (5 plans, 47+ commits): 4-phase bootstrap (metadata fill / stub promotion / gap injection / external_cited_by) + live mode (daily OpenAlex API delta) + 9 CLIs + 5 Dagster assets + 3 dormant schedules + 88 unit/12 integration tests |
+| 0.12.0 | Jun 2026 | Ollama-only LLMs — Gemini removed; labeling defaults to granite4.1:8b; data quality asset_checks (Phase 3a/3b) cover search-critical invariants |
+| 0.11.1 | Mar 2026 | First incremental loop (152K papers), OpenAlex Premium fallback, multi-key rotation |
+| 0.11.0 | Mar 2026 | Hybrid search (Qwen3-8B + BM25 RRF), search/dashboard UIs, MCP server, on-demand retrieval, trends + UMAP+HDBSCAN topic clusters |
+| 0.10.0 | Feb 2026 | Abstract sentence labeling (7 rhetorical roles), multi-key Gemini round-robin (deprecated in v0.12) |
 | 0.9.0 | Feb 2026 | LLM-enhanced keyword extraction (Gemini/Ollama), LLM judge validation, configurable embeddings |
 | 0.8.0 | Feb 2026 | Graph Visualization API with D3.js UI for citation graph exploration |
 | 0.7.2 | Feb 2026 | DBLP/ACM consolidation, build_cited_by retry fix, incremental pipeline script |

@@ -24,6 +24,9 @@ AI Research Insights Engine - Hybrid semantic search, on-demand retrieval, trend
 - **Semantic Similarity Graph**: Precomputed typed similarity edges (same_method, same_task, same_result, method_transfer, overall) using section-level vectors
 - **Graph Visualization API**: REST API + D3.js UI for interactive citation graph exploration
 - **Stub Papers**: Store external references with automatic deduplication for complete citation graph
+- **Snapshot Bootstrap (4 phases)**: Quarterly enrichment from local OpenAlex `works` snapshot — P1 metadata fill, P2 stub→real promotion, P3 hybrid gap discovery + injection, P4 external_cited_by extension
+- **Live Mode (daily delta)**: API-driven `process_one(work)` chain over yesterday's OpenAlex updates — same phase logic as the bootstrap, dormant Dagster schedule activated post-bootstrap
+- **Dagster Orchestration**: 5 snapshot assets (4 bootstrap + 1 live) + 3 schedules (all STOPPED by default until operator enables)
 
 ## Quick Start
 
@@ -85,15 +88,44 @@ uv run python -m src.cli.core_collect status
 ### Embedding & Migration
 
 ```bash
-# Migrate collection to add vector config (creates lexicon_arxiv_v2)
+# Migrate collection to add vector config (creates lexicon_arxiv_v3 — current production)
 uv run python -m src.cli.core_collect migrate-collection
 
-# Update .env to use the new collection
-# QDRANT_COLLECTION=lexicon_arxiv_v2
+# Update .env: QDRANT_COLLECTION=lexicon_arxiv_v3
 
-# Run embedding pipeline (Qwen3-Embedding-8B, 1024d)
-scripts/embedding/run_embedding.sh
+# Run embedding pipeline (Qwen3-Embedding-8B, 1024d via Ollama)
+uv run python -m src.cli.core_collect embed-papers              # standard backlog drain
+uv run python -m src.cli.core_collect embed-papers --consume-snapshot-queue  # drain P2/P3 outputs first
 ```
+
+### Snapshot Enrichment (quarterly bootstrap + daily live mode)
+
+```bash
+# One-time prerequisite: download the OpenAlex `works` snapshot to local SSD (~600GB compressed)
+# See docs/runbooks/snapshot-bootstrap.md for full Day 0..11+ procedure.
+
+# Phase dry-runs (idempotent — safe to repeat)
+uv run python -m src.cli.core_collect enrich-corpus-fields --dry-run --limit-files 5
+uv run python -m src.cli.core_collect resolve-stubs-from-snapshot --dry-run --limit-files 5
+uv run python -m src.cli.core_collect discover-corpus-gaps --dry-run --limit-files 5
+uv run python -m src.cli.core_collect extend-cited-by-from-snapshot --dry-run --limit-files 5
+
+# Full bootstrap runs (sequence with embedding drains between phases)
+uv run python -m src.cli.core_collect enrich-corpus-fields --resume          # P1: ~6-8h
+uv run python -m src.cli.core_collect resolve-stubs-from-snapshot --resume   # P2: ~6h + drain
+uv run python -m src.cli.core_collect discover-corpus-gaps --resume          # P3: ~4-8h + drain
+uv run python -m src.cli.core_collect extend-cited-by-from-snapshot --resume # P4: ~2-3h
+
+# Operational tools
+uv run python -m src.cli.core_collect snapshot-status                        # per-phase checkpoint progress
+uv run python -m src.cli.core_collect snapshot-reset --phase p3 --confirm    # destructive reset (preserves quarantine.jsonl)
+uv run python -m src.cli.core_collect snapshot-replay-failed --phase p2      # list items needing operator review
+
+# Live mode (daily — manually trigger, or enable daily_snapshot_live_schedule in Dagster)
+uv run python -m src.cli.core_collect snapshot-live-delta --days-back 1
+```
+
+Pipeline references: [P1 metadata fill](docs/pipelines/enrichment.md) · [P2 stub promotion](docs/pipelines/stub-promotion.md) · [P3 gap discovery](docs/pipelines/corpus-gap-discovery.md) · [P4 citation graph](docs/pipelines/citation_graph.md) · [Live mode](docs/pipelines/snapshot-live-mode.md) · [Field mapping](docs/reference/snapshot-fields.md) · [Bootstrap runbook](docs/runbooks/snapshot-bootstrap.md) · [Rollback runbook](docs/runbooks/snapshot-rollback.md)
 
 ### API & Search
 
@@ -257,20 +289,32 @@ uv run python -m src.cli.core_collect keyword-stats                 # Show stati
 
 # Abstract Labeling (sentence-level rhetorical classification)
 uv run python -m src.cli.core_collect label-abstracts --dry-run --limit 5  # Preview
-uv run python -m src.cli.core_collect label-abstracts --limit 100          # Label papers
-uv run python -m src.cli.core_collect label-abstracts --llm-backend ollama # Use Ollama
+uv run python -m src.cli.core_collect label-abstracts --limit 100          # Label papers (Ollama)
 uv run python -m src.cli.core_collect label-abstracts --force --limit 50   # Re-label
+
+# Snapshot Enrichment (see docs/runbooks/snapshot-bootstrap.md)
+uv run python -m src.cli.core_collect enrich-corpus-fields           # P1: metadata fill from OpenAlex snapshot
+uv run python -m src.cli.core_collect resolve-stubs-from-snapshot    # P2: promote stubs to real papers
+uv run python -m src.cli.core_collect discover-corpus-gaps           # P3: hybrid-classified gap injection
+uv run python -m src.cli.core_collect extend-cited-by-from-snapshot  # P4: external_cited_by union
+uv run python -m src.cli.core_collect snapshot-live-delta            # daily live-mode API delta
+uv run python -m src.cli.core_collect snapshot-status                # operational status
+uv run python -m src.cli.core_collect snapshot-reset --phase p3 --confirm  # reset phase checkpoint
+uv run python -m src.cli.core_collect snapshot-replay-failed --phase p2    # list failed batches
 ```
 
 ## Documentation
 
-- [Crawling Guide](docs/guides/crawling.md) - Detailed collection guide
-- [BM25 & Hybrid Search Guide](docs/guides/bm25_hybrid_search.md) - Keyword extraction and hybrid search setup
-- [Data Collection Design](docs/pipelines/data_collection.md) - Architecture and strategy
-- [Keyword Extraction](docs/pipelines/keyword_extraction.md) - LLM-first keyword pipeline
-- [Abstract Labeling](docs/pipelines/abstract_labeling.md) - Sentence-level rhetorical classification
-- [Graph API Specification](docs/architecture/api.md#8-graph-visualization-api) - Graph Visualization API
-- [Full Documentation](docs/README.md) - Complete documentation index
+- [Crawling Guide](docs/guides/crawling.md) — Detailed collection guide
+- [BM25 Migration](docs/guides/bm25_migration.md) — Enable hybrid search (dense + BM25)
+- [Data Collection Design](docs/pipelines/data_collection.md) — Architecture and strategy
+- [Keyword Extraction](docs/pipelines/keyword_extraction.md) — LLM-first keyword pipeline
+- [Abstract Labeling](docs/pipelines/abstract_labeling.md) — Sentence-level rhetorical classification
+- [Snapshot System Spec](docs/superpowers/specs/2026-06-21-snapshot-utilization-design.md) — Quarterly bootstrap + daily live mode architecture
+- [Snapshot Bootstrap Runbook](docs/runbooks/snapshot-bootstrap.md) — Day 0..11+ operational procedure
+- [Snapshot Rollback Runbook](docs/runbooks/snapshot-rollback.md) — 4 rollback scenarios
+- [Graph API Specification](docs/architecture/api.md#8-graph-visualization-api) — Graph Visualization API
+- [Full Documentation Index](docs/README.md)
 
 ## Project Structure
 
@@ -295,7 +339,23 @@ lexiconarxiv/
 │   ├── cli/                     # CLI tools
 │   │   ├── core_collect.py      # Main CLI entry point
 │   │   └── commands/            # CLI command modules
+│   ├── orchestration/           # Dagster assets, jobs, schedules
+│   │   ├── assets/              # 5 snapshot assets + DQ + ingest/transform
+│   │   ├── jobs.py              # core_job + maintenance_job + snapshot_*_job
+│   │   ├── schedules.py         # 3 schedules (all STOPPED by default)
+│   │   └── definitions.py       # Dagster Definitions registration
 │   ├── core/                    # Core modules
+│   │   ├── snapshot/            # OpenAlex snapshot bootstrap (Plans 1-5)
+│   │   │   ├── phase1_corpus_fields.py      # P1: metadata fill
+│   │   │   ├── phase2_stub_resolution.py    # P2: stub→real promotion
+│   │   │   ├── phase3_gap_discovery.py      # P3: hybrid gap injection
+│   │   │   ├── phase4_cited_by.py           # P4: external_cited_by union
+│   │   │   ├── live_worker.py               # daily API delta chain
+│   │   │   ├── work_source.py               # iter_snapshot_works + iter_live_works
+│   │   │   ├── gap_filter.py                # AI taxonomy + classification
+│   │   │   ├── matcher.py / promotion.py    # DOI/arXiv/title matching, stub merge
+│   │   │   ├── checkpoint.py / embedding_queue.py / stats.py
+│   │   │   └── extractor.py                 # OpenAlex work → payload
 │   │   ├── storage/             # Qdrant storage package
 │   │   ├── search/              # Search & on-demand retrieval
 │   │   │   ├── service.py       # SearchService (hybrid search orchestrator)
@@ -362,10 +422,28 @@ lexiconarxiv/
 └── data/core/checkpoints/       # Collection state
 ```
 
-## Recent Updates (Mar 2026) — v0.11.1
+## Recent Updates
 
-- **First Incremental Loop**: Collected 7,275 new papers (OpenAlex 6,089, ACL 999, DBLP 187) bringing corpus to 152K+ core papers. Full enrichment cycle completed including abstracts, citations, keywords, labeling, and embedding.
-- **Incremental Fixes**: OpenAlex Premium fallback, `force=True` for non-OpenAlex sources, S2 stub exclusion, QdrantStorage `fetched_since` passthrough, S2 `--recent-days` flag, multi-key rotation.
+### v0.13.0 (Jun 2026) — Snapshot Utilization System
+
+5 plans, 47+ commits, full quarterly + daily enrichment from the OpenAlex `works` snapshot.
+
+- **4-phase bootstrap** (Plans 1-4): P1 metadata fill (every matched corpus paper gets ~15 missing fields), P2 stub→real promotion (preserves `cited_by` invariant), P3 hybrid gap discovery + injection (anchor + AI-concept taxonomy with age-scaled citation thresholds), P4 corpus-internal `external_cited_by` extension.
+- **Live mode** (Plan 5): `snapshot-live-delta` CLI + dormant `daily_snapshot_live_schedule` chains `process_one(work)` across all 4 phases for daily OpenAlex API deltas — same phase logic as the bootstrap, different work source.
+- **9 new CLIs**: 4 phase triggers + 3 operational tools (`snapshot-status`/`-reset`/`-replay-failed`) + `embed-papers --consume-snapshot-queue` + `snapshot-live-delta`.
+- **5 Dagster assets**: P1 → P2 → P3 → P4 chain (`snapshot_bootstrap_job`) plus parallel `snapshot_live_delta_job`. All schedules `STOPPED` by default; operator enables after bootstrap is stable.
+- **88 unit + 12 integration tests** + `tests/core/snapshot/test_storage_compat.py` (regression lock on the entire phase-call surface).
+- **Operator-facing docs**: pipeline docs for each phase + Day 0..11+ bootstrap runbook + 4-scenario rollback runbook + field-mapping reference.
+
+### v0.12.0 (Jun 2026) — Ollama-only LLMs
+
+- Dropped Gemini (`google-genai` removed). Labeling defaults to `granite4.1:8b` (fallback `gemma4:e4b`); keyword extraction stays on `llama3.1:8b`. Embedding stays on `qwen3-embedding:8b`.
+- Data quality `asset_checks` (Phases 3a/3b) cover search-critical invariants; failures block downstream Dagster assets.
+
+### v0.11.1 (Mar 2026) — First Incremental Loop
+
+- Collected 7,275 new papers (OpenAlex 6,089, ACL 999, DBLP 187) bringing corpus to 152K+ core papers. Full enrichment cycle completed including abstracts, citations, keywords, labeling, and embedding.
+- Incremental fixes: OpenAlex Premium fallback, `force=True` for non-OpenAlex sources, S2 stub exclusion, QdrantStorage `fetched_since` passthrough, S2 `--recent-days` flag, multi-key rotation.
 
 ### v0.11.0
 
@@ -467,13 +545,14 @@ See [Data Model](docs/architecture/data_model.md#5-qdrant-collection-schema) for
 
 ```env
 OPENALEX_API_KEYS=key1,key2,key3      # Comma-separated for round-robin rotation
-OPENALEX_EMAIL=your-email@example.com  # Fallback polite pool when all keys exhausted
-CROSSREF_EMAIL=your-email@example.com  # Recommended for CrossRef polite pool
+OPENALEX_EMAIL=your-email@example.com  # Polite-pool fallback + used by snapshot-live-delta
+CROSSREF_EMAIL=your-email@example.com  # CrossRef polite pool
 QDRANT_URL=http://localhost:6333
-QDRANT_COLLECTION=lexicon_arxiv        # Optional, default collection name
-GEMINI_API_KEYS=key1,key2,...           # Comma-separated for round-robin (keywords + labeling)
-OLLAMA_BASE_URL=http://localhost:11434 # Local LLM (default)
-GITHUB_TOKEN=ghp_...                   # GitHub token for code repo search (30 req/min vs 10/min)
+QDRANT_COLLECTION=lexicon_arxiv_v3     # Production collection
+OLLAMA_BASE_URL=http://localhost:11434 # Local LLM + embedding (Gemini removed in v0.12)
+GITHUB_TOKEN=ghp_...                   # 30 req/min vs 10/min for code-repo search
+DAGSTER_HOME=$HOME/dagster_home        # Holds snapshot phase checkpoints + embedding queue
+# SNAPSHOT_DIR=/mnt/ssd/openalex_snapshot/data/works   # Only needed for snapshot bootstrap
 ```
 
 ## License
