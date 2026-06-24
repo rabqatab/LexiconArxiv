@@ -11,8 +11,8 @@ from src.orchestration.assets.embedding import embed_papers
 from src.orchestration.assets.analytics import compute_similarity, compute_topics
 from src.orchestration.assets import snapshot as _snapshot_assets
 from src.orchestration.checks import ALL_CHECKS
-from src.orchestration.jobs import core_job, maintenance_job
-from src.orchestration.schedules import daily_core_schedule, weekly_maintenance_schedule
+from src.orchestration.jobs import core_job, maintenance_job, snapshot_live_delta_job
+from src.orchestration.schedules import daily_core_schedule, weekly_maintenance_schedule, daily_snapshot_live_schedule
 from src.orchestration.sensors import run_failure_alert_sensor
 
 defs = Definitions(
@@ -24,9 +24,10 @@ defs = Definitions(
         _snapshot_assets.snapshot_resolve_stubs,
         _snapshot_assets.snapshot_discover_gaps,
         _snapshot_assets.snapshot_extend_cited_by,
+        _snapshot_assets.snapshot_live_delta,
     ],
     asset_checks=ALL_CHECKS,
-    jobs=[core_job, maintenance_job],
-    schedules=[daily_core_schedule, weekly_maintenance_schedule],
+    jobs=[core_job, maintenance_job, snapshot_live_delta_job],
+    schedules=[daily_core_schedule, weekly_maintenance_schedule, daily_snapshot_live_schedule],
     sensors=[run_failure_alert_sensor],
 )
