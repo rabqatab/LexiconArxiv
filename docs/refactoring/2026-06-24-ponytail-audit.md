@@ -54,3 +54,7 @@ Apply only **after**:
 5. Final whole-branch review with the most capable available model; merge FF.
 
 Owner: whoever next has 2–3 hours to spend on cleanup. Reviewer: a fresh pair of eyes from outside this audit (so the report doesn't bias the review).
+
+## Addendum — 2026-06-24 (during bootstrap)
+
+**20.** `yagni` `QdrantStorage.get_payload` alias added in commit `5cc3bac` as a bootstrap hotfix. Replace by renaming mock + 2 phase callsites + 17 test callsites to `get_paper_by_id`; then drop the alias. The bug it papered over: real storage and mock storage diverged on the name (mock was written first without checking real's interface). The regression test in `tests/core/snapshot/test_storage_compat.py` is permanent and should stay — it catches future drift on any phase-called method. [src/core/storage/base.py:297-305 — the `# ponytail:` block names this exact follow-up]
