@@ -294,6 +294,14 @@ class QdrantStorage:
     def get_paper_by_id(self, point_id: str) -> dict[str, Any] | None:
         return self.queries.get_paper_by_id(point_id)
 
+    # ponytail: snapshot phase modules + mock_storage use get_payload as the
+    # name for "fetch this point's payload dict". Real storage already had
+    # get_paper_by_id with identical shape; this alias bridges the naming gap
+    # so bootstrap unblocks. Drop during the polish wave by renaming mock + 2
+    # phase callsites + 17 test callsites to get_paper_by_id (audit item).
+    def get_payload(self, point_id: str) -> dict[str, Any] | None:
+        return self.get_paper_by_id(point_id)
+
     def get_paper_by_normalized_title(
         self, normalized_title: str
     ) -> tuple[str, dict] | None:
