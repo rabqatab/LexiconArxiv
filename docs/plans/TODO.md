@@ -103,3 +103,7 @@ Tracked enhancement backlog. Items are grouped by priority and area.
 - [x] ACM pdf_url backfill for DBLP-sourced papers + orchestrator script
 - [x] `sentence-transformers` dependency added for cross-encoder reranking
 - [x] Plan doc drift fix (reranker model 8B→0.6B, Ollama→sentence-transformers)
+
+## Refactoring / cleanup (deferred)
+
+- [ ] **Apply ponytail-audit cuts** — ~1800 lines, 4 deps removable. **Trigger:** apply only after snapshot bootstrap completes + corpus is verified stable for ≥1 week. See `docs/refactoring/2026-06-24-ponytail-audit.md` for the ranked list and apply-procedure.
