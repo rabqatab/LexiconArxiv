@@ -27,6 +27,32 @@ def test_evaluate_skip_when_nothing_gained():
     assert evaluate(stub, fields) is Decision.SKIP
 
 
+def test_evaluate_min_cited_by_count_gates_promotion():
+    """Quality filter: cited_by_count below threshold downgrades PROMOTE → ENRICH_KEEP_STUB."""
+    stub = {"title": None}
+    base = {"title": "X", "abstract": "...", "cited_by_count": 3}
+    # Without filter: PROMOTE
+    assert evaluate(stub, base) is Decision.PROMOTE
+    # With filter at threshold: PROMOTE
+    assert evaluate(stub, base, min_cited_by_count=3) is Decision.PROMOTE
+    # With filter above the work's count: ENRICH_KEEP_STUB (still enrich, don't flip is_stub)
+    assert evaluate(stub, base, min_cited_by_count=10) is Decision.ENRICH_KEEP_STUB
+
+
+def test_evaluate_min_cited_by_count_zero_is_no_op():
+    """Default min_cited_by_count=0 preserves the original semantics for every value."""
+    stub = {"title": None}
+    fields = {"title": "X", "abstract": "..."}  # no cited_by_count key at all
+    assert evaluate(stub, fields, min_cited_by_count=0) is Decision.PROMOTE
+
+
+def test_evaluate_min_cited_by_count_treats_missing_as_zero():
+    """A snapshot work without cited_by_count is treated as 0 — gated by any positive threshold."""
+    stub = {"title": None}
+    fields = {"title": "X", "abstract": "..."}  # no cited_by_count
+    assert evaluate(stub, fields, min_cited_by_count=1) is Decision.ENRICH_KEEP_STUB
+
+
 def test_evaluate_skip_when_only_fields_already_on_stub():
     stub = {"title": "Existing", "year": 2024, "authors": [{"display_name": "X"}]}
     fields = {"title": "Existing", "year": 2024}

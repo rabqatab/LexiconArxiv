@@ -86,8 +86,15 @@ def register_commands(cli: click.Group):
                   help="If False, only enrich-in-place; never flip is_stub.")
     @click.option("--allow-merge/--no-allow-merge", default=True,
                   help="If False, refuse to merge a stub into an existing real paper.")
+    @click.option("--min-cited-by-count", type=int, default=0, show_default=True,
+                  help="Quality gate: drop promotion to ENRICH_KEEP_STUB if the snapshot "
+                       "work's external cited_by_count is below N. Default 0 = no filter. "
+                       "Operator dials this up to keep the corpus biased toward well-cited "
+                       "references (e.g. 5 = trim long-tail, 50 = strict). The stub still "
+                       "gets enriched in place when gated.")
     def resolve_stubs_from_snapshot(snapshot_dir, batch_size, dry_run, resume,
-                                     limit_files, allow_promotion, allow_merge):
+                                     limit_files, allow_promotion, allow_merge,
+                                     min_cited_by_count):
         """Match every stub against the OpenAlex snapshot, then promote (preserve
         cited_by), enrich-in-place, or merge into an existing real paper."""
         from src.core.snapshot import phase2_stub_resolution
@@ -100,6 +107,7 @@ def register_commands(cli: click.Group):
             storage, snapshot_dir=snapshot_dir, batch_size=batch_size,
             dry_run=dry_run, limit_files=limit_files,
             allow_promotion=allow_promotion, allow_merge=allow_merge,
+            min_cited_by_count=min_cited_by_count,
         )
         click.echo(summary.to_log_line())
 

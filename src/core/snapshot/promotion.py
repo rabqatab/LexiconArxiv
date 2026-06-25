@@ -34,8 +34,22 @@ def _gains(stub: dict, fields: dict) -> dict:
     return out
 
 
-def evaluate(stub: dict, work_fields: dict) -> Decision:
-    """Decide what to do with this match."""
+def evaluate(
+    stub: dict,
+    work_fields: dict,
+    *,
+    min_cited_by_count: int = 0,
+) -> Decision:
+    """Decide what to do with this match.
+
+    *min_cited_by_count*: if the snapshot work has fewer external citations
+    than this, drop the promotion to ENRICH_KEEP_STUB (still fill payload gaps
+    but keep is_stub=true). Default 0 = no filter (every match that meets the
+    base PROMOTE criteria gets promoted). Operator dials this up to keep the
+    corpus biased toward well-cited references — protects against the bootstrap
+    promoting millions of low-signal external papers into the search index.
+    The stub itself still gets enriched in-place; only the is_stub→false flip
+    is gated."""
     gains = _gains(stub, work_fields)
     if not gains:
         return Decision.SKIP
@@ -46,9 +60,20 @@ def evaluate(stub: dict, work_fields: dict) -> Decision:
     year_after = work_fields.get("year") or stub.get("year")
     authors_after = work_fields.get("authors") or stub.get("authors") or []
 
-    if title_after and (abstract_after or (year_after and len(authors_after) >= 1)):
-        return Decision.PROMOTE
-    return Decision.ENRICH_KEEP_STUB
+    base_eligible = title_after and (
+        abstract_after or (year_after and len(authors_after) >= 1)
+    )
+    if not base_eligible:
+        return Decision.ENRICH_KEEP_STUB
+
+    # Quality gate: external citation floor (use snapshot work value, not stub —
+    # stub's cited_by_count_internal is corpus-internal, not OpenAlex global).
+    if min_cited_by_count > 0:
+        cited_by_count = work_fields.get("cited_by_count") or 0
+        if cited_by_count < min_cited_by_count:
+            return Decision.ENRICH_KEEP_STUB
+
+    return Decision.PROMOTE
 
 
 class PromotionError(Exception):
