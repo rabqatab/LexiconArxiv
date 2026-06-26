@@ -294,7 +294,7 @@ uv run python -m src.cli.core_collect label-abstracts --force --limit 50   # Re-
 
 # Snapshot Enrichment (see docs/runbooks/snapshot-bootstrap.md)
 uv run python -m src.cli.core_collect enrich-corpus-fields           # P1: metadata fill from OpenAlex snapshot
-uv run python -m src.cli.core_collect resolve-stubs-from-snapshot    # P2: promote stubs to real papers
+uv run python -m src.cli.core_collect resolve-stubs-from-snapshot --min-cites-per-year 5  # P2: promote stubs (age-normalized citation gate)
 uv run python -m src.cli.core_collect discover-corpus-gaps           # P3: hybrid-classified gap injection
 uv run python -m src.cli.core_collect extend-cited-by-from-snapshot  # P4: external_cited_by union
 uv run python -m src.cli.core_collect snapshot-live-delta            # daily live-mode API delta

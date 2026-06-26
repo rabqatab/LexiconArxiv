@@ -57,33 +57,69 @@ for name in ['abstract_coverage','embedding_coverage_complete','doi_papers_have_
 "
 ```
 
-## Day 3 — P2 dry-run and full run
+## Day 3 — P2 quality threshold + dry-run sweep + full run
 
-### Dry-run first
+### Pick the quality threshold (sweep dry-runs)
+
+P2's `--min-cites-per-year` gate controls how aggressively stubs get promoted to
+real papers. **Default 0 means promote everything that matches** — on a
+~3.45M-stub corpus this is 1.5–2.5M promotions and ~2 weeks of embedding work.
+For an operational bootstrap, pick a threshold that bounds scope.
+
+Sweep 3–4 thresholds on the same 5 recent files (each takes ~4 min):
 
 ```bash
-uv run python -m src.cli.core_collect resolve-stubs-from-snapshot \
-    --dry-run --limit-files 20
+SNAP=/mnt/nfs/ssd2/openalex_snapshot/data/works
+DAGSTER_HOME=${DAGSTER_HOME:-$HOME/dagster_home}
+for RATE in 0 1 5 10; do
+    rm -rf "$DAGSTER_HOME/snapshot_checkpoints/p2"
+    mkdir -p "$DAGSTER_HOME/snapshot_checkpoints/p2"
+    ls $SNAP/updated_date=*/*.gz | sort | head -n -5 | xargs -I{} realpath {} \
+        > "$DAGSTER_HOME/snapshot_checkpoints/p2/done_files.txt"
+    echo "--- min-cites-per-year=$RATE ---"
+    uv run python -m src.cli.core_collect resolve-stubs-from-snapshot \
+        --snapshot-dir $SNAP --dry-run --resume \
+        --min-cites-per-year $RATE --now-year 2026 2>&1 | grep "p2 Summary" | tail -1
+done
+rm -rf "$DAGSTER_HOME/snapshot_checkpoints/p2"
 ```
 
-Inspect the printed summary:
+Note: recent files skew toward well-cited papers, so `promoted/matched` here
+overstates what the full run will produce on older files (which carry more
+long-tail). Use the sweep to compare *relative* impact across thresholds.
+
+### Recommended starting threshold
+
+| Goal | Use |
+|---|---|
+| Sustainable scope (recommended) | `--min-cites-per-year 5` (~500K-1M promotions, 4-7 days embed) |
+| Conservative | `--min-cites-per-year 10` (~300K-650K promotions, 2-4 days embed) |
+| Maximal coverage | `--min-cites-per-year 0` (~1.5-2.5M promotions, 11-18 days embed) |
+
+See [`docs/pipelines/stub-promotion.md` — Quality gate](../pipelines/stub-promotion.md#quality-gate---min-cites-per-year)
+for the full decision-rule table and worked examples.
+
+### Sanity checks on the dry-run output
 
 ```
 p2 Summary: scanned=N matched=M ... stubs_seen=S promoted=P enriched=E merged=Me ...
 ```
 
-Sanity:
-- `promoted / matched` should be majority for high-quality stubs.
+- `promoted / matched` decreases as `--min-cites-per-year` rises (papers below
+  the rate fall to `enriched`).
 - `merged` reflects existing-real-paper collisions (good, not an error).
-- `enriched` reflects partial metadata gains (also good).
+- `enriched` reflects gated promotions + partial metadata gains (also good — the
+  citation-graph data is preserved on the stub regardless).
 
 ### Full run
 
 ```bash
-uv run python -m src.cli.core_collect resolve-stubs-from-snapshot
+uv run python -m src.cli.core_collect resolve-stubs-from-snapshot \
+    --min-cites-per-year 5 --now-year 2026
 ```
 
-Expected duration: ≈6–8 hours.
+Expected duration: ≈24–30 hours (full snapshot scan + Qdrant writes).
+Adjust `--min-cites-per-year` per your threshold sweep result above.
 
 ### Post-run verification
 

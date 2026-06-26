@@ -5,13 +5,56 @@ against the OpenAlex snapshot; promote, enrich, or merge.
 
 ## Decision rules
 
-`src/core/snapshot/promotion.py:evaluate(stub, work_fields)`:
+`src/core/snapshot/promotion.py:evaluate(stub, work_fields, *, min_cites_per_year=0.0, now_year=None)`:
 
 | Condition | Decision |
 |---|---|
-| `title` AND (`abstract` OR (`year` AND ≥1 author)) after the merge | `PROMOTE` |
-| Some field is gained that the stub did not have | `ENRICH_KEEP_STUB` |
-| Nothing gained | `SKIP` |
+| Nothing gained from the merge | `SKIP` |
+| Base PROMOTE criteria met (`title` AND (`abstract` OR (`year` AND ≥1 author))) **AND** age-normalized citation rate ≥ `min_cites_per_year` | `PROMOTE` |
+| Otherwise (base criteria fail OR rate below threshold) | `ENRICH_KEEP_STUB` |
+
+### Quality gate: `--min-cites-per-year`
+
+A flat `cited_by_count` threshold is unfair to recent papers — citation counts
+accumulate over time, so a 2026 paper with 5 cites and a 2010 paper with 5 cites
+are not the same signal. P2 uses an **age-normalized rate**:
+
+```
+rate = cited_by_count / max(1, now_year - publication_year)
+PROMOTE only if rate >= min_cites_per_year
+```
+
+| `min_cites_per_year` | What it admits |
+|---|---|
+| `0` (default) | Everything (no gate) — bootstrap-conformant maximal coverage |
+| `1` | Any paper still being cited at all (~3% trim on the recent slice) |
+| `5` | "Five times a year, every year" — captures both recent influential work and durable classics |
+| `10` | Strict — recent landmarks + foundational old papers only |
+
+Worked examples (with `now_year=2026`):
+
+| Paper | cites | year | rate | passes 5.0? |
+|---|---|---|---|---|
+| Recent landmark | 5 | 2025 | 5.0 | ✅ |
+| Old classic | 80 | 2010 | 5.0 | ✅ |
+| Old long-tail | 5 | 2010 | 0.31 | ❌ → `ENRICH_KEEP_STUB` |
+| Current year buzz | 3 | 2026 | 3.0 (divided by `max(1, 0)=1`) | ❌ → `ENRICH_KEEP_STUB` |
+| Missing year | 100 | — | n/a | ❌ → `ENRICH_KEEP_STUB` (gated conservatively) |
+
+**Important**: gated papers don't get dropped — they fall to `ENRICH_KEEP_STUB`,
+which still fills payload gaps (snapshot-derived title/year/authors/topics/etc.)
+but leaves `is_stub=True`. So the citation-graph data is preserved either way;
+only the search-index membership is gated.
+
+### Recommended starting values
+
+| Goal | Use |
+|---|---|
+| First bootstrap on a 175K-real / 3.45M-stub corpus | `--min-cites-per-year 5` (≈ 500K-1M promotions, 4-7 days embed) |
+| Conservative — keep corpus tight to AI/CS canon | `--min-cites-per-year 10` (≈ 300K-650K promotions, 2-4 days embed) |
+| Spec-conformant maximal coverage | `--min-cites-per-year 0` (≈ 1.5-2.5M promotions, 11-18 days embed) |
+
+Re-run with a different threshold at any time — P2 is idempotent and resumable.
 
 ## Promotion transaction
 
