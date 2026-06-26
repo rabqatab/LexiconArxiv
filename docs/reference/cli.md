@@ -44,10 +44,10 @@ Delete an old Qdrant collection (e.g., after migration to a new vector-enabled c
 
 ```bash
 # Preview (no --confirm flag = dry run)
-uv run python -m src.cli.core_collect delete-old-collection --collection lexicon_arxiv_v1
+uv run python -m src.cli.core_collect delete-old-collection --collection lexicon_arxiv_v3
 
 # Delete
-uv run python -m src.cli.core_collect delete-old-collection --collection lexicon_arxiv_v1 --confirm
+uv run python -m src.cli.core_collect delete-old-collection --collection lexicon_arxiv_v3 --confirm
 ```
 
 **Options:**
@@ -603,11 +603,8 @@ uv run python -m src.cli.core_collect export-graph-subgraph <paper_id> --hops 2 
 Extract keywords using an LLM-first pipeline with regex + KeyBERT as fallback, and optional LLM judge validation.
 
 ```bash
-# LLM-first pipeline with Gemini + judge (recommended)
+# LLM-first pipeline (Ollama, recommended)
 uv run python -m src.cli.core_collect extract-keywords --llm --judge
-
-# LLM-first with local Ollama
-uv run python -m src.cli.core_collect extract-keywords --llm --judge --llm-backend ollama
 
 # Fallback only: regex + KeyBERT (no LLM)
 uv run python -m src.cli.core_collect extract-keywords
@@ -627,8 +624,8 @@ uv run python -m src.cli.core_collect extract-keywords --force
 # With limit
 uv run python -m src.cli.core_collect extract-keywords --limit 1000
 
-# Custom batch size
-uv run python -m src.cli.core_collect extract-keywords --batch-size 200
+# Custom batch size + alternate Ollama model
+uv run python -m src.cli.core_collect extract-keywords --llm --batch-size 200 --ollama-model llama3.1:8b
 ```
 
 **Options:**
@@ -640,12 +637,10 @@ uv run python -m src.cli.core_collect extract-keywords --batch-size 200
 | `--no-keybert` | Skip KeyBERT in fallback, use regex only |
 | `--force` | Re-extract for papers with existing keywords |
 | `--embedding-model` | Sentence-transformers model for KeyBERT fallback (default: `all-MiniLM-L6-v2`) |
-| `--llm` | Enable LLM keyword extraction (primary) |
-| `--llm-backend` | LLM backend: `gemini` (default) or `ollama` |
-| `--judge` | Enable LLM judge validation |
-| `--judge-backend` | Judge backend: `gemini` or `ollama` (default: same as `--llm-backend`) |
-| `--ollama-model` | Ollama model name (default: `llama3.1:8b`) |
-| `--gemini-model` | Gemini model name (default: `gemini-3-flash-preview`) |
+| `--llm` | Enable LLM keyword extraction (Ollama) |
+| `--judge` | Enable LLM judge validation (Ollama) |
+| `--ollama-model` | Ollama model name (default: `granite4.1:8b`; fallback: `gemma4:e4b`) |
+| `--ollama-timeout` | Ollama request timeout in seconds (default: 180) |
 
 **Behavior:**
 - Default: Skips papers that already have keywords
@@ -679,23 +674,23 @@ uv run python -m src.cli.core_collect clear-keywords --confirm
 
 ### label-abstracts
 
-Classify each sentence of a paper's abstract into 7 rhetorical roles: task, domain, background, approach, method, result, contribution. Results are stored in `abstract_structure`. Backed by Gemini (default) or Ollama.
+Classify each sentence of a paper's abstract into 7 rhetorical roles: task, domain, background, approach, method, result, contribution. Results are stored in `abstract_structure`. Backed by Ollama (`granite4.1:8b` default, fallback `gemma4:e4b`).
 
 ```bash
-# Preview with Gemini (default)
+# Preview
 uv run python -m src.cli.core_collect label-abstracts --dry-run --limit 5
 
 # Label unlabeled papers
 uv run python -m src.cli.core_collect label-abstracts --limit 100
 
-# Use Ollama backend
-uv run python -m src.cli.core_collect label-abstracts --llm-backend ollama
-
 # Re-label papers that already have abstract_structure
 uv run python -m src.cli.core_collect label-abstracts --force --limit 50
+
+# Custom Ollama model + timeout
+uv run python -m src.cli.core_collect label-abstracts --ollama-model gemma4:e4b --ollama-timeout 300
 ```
 
-Options: `--dry-run`, `--limit N`, `--batch-size N` (default 500), `--force`, `--llm-backend [gemini|ollama]`, `--gemini-model TEXT`, `--ollama-model TEXT`, `--ollama-timeout FLOAT`.
+Options: `--dry-run`, `--limit N`, `--batch-size N` (default 500), `--force`, `--ollama-model TEXT`, `--ollama-timeout FLOAT`.
 
 ---
 
@@ -755,6 +750,7 @@ uv run python -m src.cli.core_collect embed-papers --no-resume
 | `--limit`, `-n` | Max papers to embed |
 | `--resume/--no-resume` | Resume from last checkpoint (default: resume) |
 | `--dry-run` | Preview without embedding |
+| `--consume-snapshot-queue` | Drain points queued by P2/P3 first, then fall through to default scroll |
 
 ### compute-topics
 
@@ -807,6 +803,172 @@ uv run python -m src.cli.core_collect compute-similarity --limit 5000
 **Shell script wrapper:**
 ```bash
 scripts/analytics/run_similarity.sh
+```
+
+---
+
+## Snapshot Commands
+
+Quarterly bootstrap + daily live-mode enrichment from a local OpenAlex `works`
+snapshot. See [`docs/runbooks/snapshot-bootstrap.md`](../runbooks/snapshot-bootstrap.md)
+for the full Day 0..11+ procedure.
+
+All commands accept `--snapshot-dir` (default
+`/mnt/nfs/ssd2/openalex_snapshot/data/works`), `--dry-run`,
+`--resume/--no-resume`, and `--limit-files`. Per-phase checkpoints land in
+`${DAGSTER_HOME:-$HOME/dagster_home}/snapshot_checkpoints/{p1,p2,p3,p4}/`.
+
+### enrich-corpus-fields (P1)
+
+Fill missing metadata fields on every matched corpus paper. Idempotent
+(fill-only-missing). No corpus growth.
+
+```bash
+# Dry-run on 5 files
+uv run python -m src.cli.core_collect enrich-corpus-fields --dry-run --limit-files 5
+
+# Full bootstrap
+uv run python -m src.cli.core_collect enrich-corpus-fields --resume
+```
+
+Expected duration: ≈6–9h on 596GB / 2127 .gz files.
+
+### resolve-stubs-from-snapshot (P2)
+
+Promote corpus stubs (identifier-only) to real papers when the snapshot has
+matching records. `cited_by` is preserved across the promotion. Newly-promoted
+papers with abstracts are queued for embedding.
+
+```bash
+# Dry-run sweep across thresholds (see runbook)
+uv run python -m src.cli.core_collect resolve-stubs-from-snapshot \
+    --dry-run --resume --min-cites-per-year 5 --now-year 2026
+
+# Full run with age-normalized citation gate (recommended)
+uv run python -m src.cli.core_collect resolve-stubs-from-snapshot \
+    --min-cites-per-year 5 --now-year 2026
+```
+
+**Quality gate** (`--min-cites-per-year N`, default 0 = no filter): drops
+promotion to ENRICH_KEEP_STUB when `cited_by_count / max(1, now - pub_year) < N`.
+Self-normalizes recent vs old papers without bucket boundaries. See
+[`docs/pipelines/stub-promotion.md`](../pipelines/stub-promotion.md#quality-gate---min-cites-per-year)
+for the formula, worked examples, and recommended starting values.
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--min-cites-per-year FLOAT` | Age-normalized citation rate floor (default 0) |
+| `--now-year INT` | Reference year for age calc (default current UTC year) |
+| `--allow-promotion/--no-allow-promotion` | If False, only enrich-in-place |
+| `--allow-merge/--no-allow-merge` | If False, refuse to merge into existing real paper |
+| `--batch-size INT` | Upsert batch size (default 500) |
+
+Expected duration: ≈24–30h.
+
+### discover-corpus-gaps (P3)
+
+Inject new AI-relevant papers from the snapshot via hybrid classification:
+ANCHOR_INJECT (cited by ≥N corpus papers) + CONCEPT_INJECT (matches AI
+taxonomy + age-scaled citation thresholds).
+
+```bash
+# Dry-run with cap to bound exploration
+uv run python -m src.cli.core_collect discover-corpus-gaps \
+    --dry-run --limit-files 30 --max-injections 5000
+
+# Full run
+uv run python -m src.cli.core_collect discover-corpus-gaps --resume
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--anchor-min-citers INT` | Min corpus papers citing this work to anchor-inject (default 2) |
+| `--concept-min-recent INT` | Concept-inject threshold for papers ≤5y old (default 50) |
+| `--concept-min-old INT` | Concept-inject threshold for older papers (default 200) |
+| `--concept-min-year INT` | Recent/old boundary year (default 2018) |
+| `--max-injections INT` | Stop early after N injections (safety cap) |
+
+See [`docs/pipelines/corpus-gap-discovery.md`](../pipelines/corpus-gap-discovery.md)
+for the AI taxonomy and threshold tuning. Expected duration: ≈4–8h depending
+on `--max-injections`.
+
+### extend-cited-by-from-snapshot (P4)
+
+Compute `external_cited_by` for every corpus paper by scanning the snapshot
+for works that reference it. Truncates each list at `--max-citers-per-paper`
+(year DESC, cited_by_count DESC).
+
+```bash
+uv run python -m src.cli.core_collect extend-cited-by-from-snapshot --resume
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--max-citers-per-paper INT` | Cap on external_cited_by list length (default 300) |
+
+Expected duration: ≈2–3h.
+
+### snapshot-live-delta
+
+Run one live-mode pass: fetch yesterday's OpenAlex API delta and chain
+P1→P2→P3→P4 per work (same phase logic as the bootstrap). Idempotent — same
+`--since` is safe.
+
+```bash
+# Yesterday's delta
+uv run python -m src.cli.core_collect snapshot-live-delta --days-back 1
+
+# Explicit date with dry-run
+uv run python -m src.cli.core_collect snapshot-live-delta --since 2026-06-22 --dry-run
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--days-back INT` | Fetch from N days ago (default 1) |
+| `--since YYYY-MM-DD` | Explicit ISO date (overrides --days-back) |
+| `--max-injections INT` | P3 safety cap |
+| `--anchor-min-citers`, `--concept-min-*`, `--max-citers-per-paper` | Same as bootstrap CLIs |
+
+Daily Dagster schedule `daily_snapshot_live_schedule` (cron `0 5 * * *` KST,
+default STOPPED). Enable in the UI after bootstrap is stable. See
+[`docs/pipelines/snapshot-live-mode.md`](../pipelines/snapshot-live-mode.md).
+
+### snapshot-status
+
+Print per-phase checkpoint progress + embedding queue depth.
+
+```bash
+uv run python -m src.cli.core_collect snapshot-status
+```
+
+### snapshot-reset
+
+Reset a phase's checkpoint (destructive — clears done_files + last_summary +
+failed_batches). **Preserves `quarantine.jsonl` audit trail** across resets.
+
+```bash
+uv run python -m src.cli.core_collect snapshot-reset --phase p3 --confirm
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--phase {p1,p2,p3,p4}` | Phase to reset (required) |
+| `--confirm` | Required to actually delete (without it, no-ops with warning) |
+
+### snapshot-replay-failed
+
+List items in a phase's `failed_batches/` directory (and optionally
+`quarantine.jsonl`) for operator review. Does NOT auto-replay — operator must
+manually re-run the phase after inspecting.
+
+```bash
+uv run python -m src.cli.core_collect snapshot-replay-failed --phase p2
+uv run python -m src.cli.core_collect snapshot-replay-failed --phase p2 --quarantine
 ```
 
 ---
@@ -1023,11 +1185,9 @@ uv run python -m src.cli.core_collect clear-keyword-checkpoint
 | `QDRANT_URL` | Qdrant server URL | Yes |
 | `QDRANT_API_KEY` | Qdrant API key (for cloud) | No |
 | `S2_API_KEYS` | Semantic Scholar API keys (comma-separated for round-robin rotation with per-key rate limiting). Legacy `S2_API_KEY` (singular) still works. | No |
-| `GEMINI_API_KEYS` | Gemini API key(s), comma-separated for round-robin (keywords + labeling) | No |
-| `GEMINI_API_KEY` | Fallback for `GEMINI_API_KEYS` (singular) | No |
-| `GOOGLE_API_KEY` | Fallback (legacy) | No |
-| `OLLAMA_BASE_URL` | Ollama server URL (default: `http://localhost:11434`) | No |
+| `OLLAMA_BASE_URL` | Ollama server URL (default: `http://localhost:11434`). Used by `embed-papers`, `extract-keywords --llm`, and `label-abstracts`. Gemini was removed in v0.12 — Ollama is the only supported LLM backend. | No |
 | `GITHUB_TOKEN` | GitHub personal access token for code repo search (30 req/min vs 10/min) | No |
+| `DAGSTER_HOME` | Holds per-phase snapshot checkpoints + embedding queue (default: `$HOME/dagster_home`) | No |
 
 ---
 

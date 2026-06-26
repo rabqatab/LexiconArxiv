@@ -18,7 +18,7 @@ AI Research Insights Engine - Hybrid semantic search, on-demand retrieval, trend
 - **Cross-source Deduplication**: Automatic duplicate detection
 - **Checkpoint Resume**: Resumable collection with progress tracking
 - **Qdrant Integration**: Payload-only storage with optional named vectors
-- **Keyword Extraction**: LLM-first (Gemini/Ollama) with regex + KeyBERT fallback + LLM judge for BM25 search
+- **Keyword Extraction**: LLM-first (Ollama) with regex + KeyBERT fallback + LLM judge for BM25 search
 - **Abstract Labeling**: LLM-based sentence classification into 7 rhetorical roles (task, domain, background, approach, method, result, contribution)
 - **Citation Graph**: Reference resolution and GraphRAG support
 - **Semantic Similarity Graph**: Precomputed typed similarity edges (same_method, same_task, same_result, method_transfer, overall) using section-level vectors
@@ -243,7 +243,7 @@ uv run python -m src.cli.core_collect status
 uv run python -m src.cli.core_collect deduplicate --dry-run
 uv run python -m src.cli.core_collect clear-checkpoint
 uv run python -m src.cli.core_collect reset-title-enriched --dry-run   # Reset title-matched papers
-uv run python -m src.cli.core_collect delete-old-collection --collection lexicon_arxiv_v1 --confirm
+uv run python -m src.cli.core_collect delete-old-collection --collection lexicon_arxiv_v3 --confirm
 
 # Enrichment (add citations/abstracts)
 uv run python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-openalex --parallel 10    # OpenAlex
@@ -403,14 +403,12 @@ lexiconarxiv/
 │   │   │   ├── patterns.py      # Regex patterns for acronyms
 │   │   │   ├── stopwords.py     # Stopword filtering
 │   │   │   ├── llm_base.py      # Pydantic models, prompts, ABC base classes
-│   │   │   ├── gemini.py        # Gemini API extraction + judge
 │   │   │   ├── ollama.py        # Ollama REST API extraction + judge
 │   │   │   └── judge.py         # KeywordJudge wrapper
 │   │   └── labeling/            # Abstract sentence labeling
 │   │       ├── labeler.py       # AbstractLabeler orchestrator (pysbd + LLM)
 │   │       ├── llm_base.py      # Models, prompts, helpers, ABC
-│   │       ├── gemini.py        # Gemini API labeling (round-robin)
-│   │       └── ollama.py        # Ollama REST API labeling
+│   │       └── ollama.py        # Ollama REST API labeling (granite4.1:8b)
 │   └── models/
 │       └── paper.py             # Paper data model
 ├── scripts/
@@ -460,9 +458,8 @@ lexiconarxiv/
 ### Previous Updates (Feb 2026)
 
 - **Code Repository Enrichment**: 3-tier strategy (PWC/HuggingFace, GROBID PDF extraction, GitHub API search) with URL classification heuristics
-- **Abstract Labeling**: Sentence-level rhetorical classification (7 roles) using Gemini/Ollama with structured JSON output
-- **Multi-Key Gemini**: Round-robin rotation across multiple comma-separated Gemini API keys for rate limit distribution
-- **LLM-First Keywords**: Gemini/Ollama as primary keyword extraction with regex + KeyBERT fallback, LLM judge validation, retry with exponential backoff
+- **Abstract Labeling**: Sentence-level rhetorical classification (7 roles) using Ollama with structured JSON output
+- **LLM-First Keywords**: Ollama as primary keyword extraction with regex + KeyBERT fallback, LLM judge validation, retry with exponential backoff
 - **Graph Visualization API**: FastAPI REST API with D3.js UI for interactive citation graph exploration
 - **Payload-Only Architecture**: Decouple enrichment from embeddings (see below)
 - **Code Refactoring**: BaseCrawler class, BaseEnricher with mixins, centralized constants

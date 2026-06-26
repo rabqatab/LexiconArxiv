@@ -51,7 +51,7 @@ Qdrant does not allow adding vector configs to an existing collection. A new col
 `CollectionMigrator` performs these steps:
 
 1. **Snapshot** the old collection (backup)
-2. **Create** new collection (`lexicon_arxiv_v2`) with vector configs:
+2. **Create** new collection (`lexicon_arxiv_v3`) with vector configs:
    - `abstract-qwen3-8b`: dense, 1024d, cosine distance
    - `bm25`: sparse, IDF modifier (for server-side BM25)
 3. **Scroll and copy** all points (payload only, no vectors yet)

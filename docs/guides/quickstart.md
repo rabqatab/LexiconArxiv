@@ -158,7 +158,7 @@ uv run python -m src.cli.core_collect keyword-stats
 ```bash
 # 1. Migrate collection for vector support
 uv run python -m src.cli.core_collect migrate-collection
-# Update QDRANT_COLLECTION=lexicon_arxiv_v2 in .env
+# Update QDRANT_COLLECTION=lexicon_arxiv_v3 in .env
 
 # 2. Embed papers (25-50 min for 152K+ papers)
 scripts/embedding/run_embedding.sh

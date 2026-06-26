@@ -377,25 +377,10 @@ uv run python -m src.cli.core_collect extract-keywords --no-keybert
 uv run python -m src.cli.core_collect extract-keywords --limit 1000
 ```
 
-### Gemini API Key Not Found
-
-**Symptoms:**
-- `ValueError: Gemini API key not found. Set GEMINI_API_KEYS or GEMINI_API_KEY.`
-
-**Solution:**
-
-Set the API key in your `.env` file:
-
-```bash
-GEMINI_API_KEYS=your_api_key_here
-```
-
-Get a key at: https://aistudio.google.com/app/apikey
-
 ### Ollama Connection Refused
 
 **Symptoms:**
-- `httpx.ConnectError: Connection refused` when using `--llm-backend ollama`
+- `httpx.ConnectError: Connection refused` when using `--llm` or running `embed-papers` / `label-abstracts`
 
 **Solution:**
 
@@ -405,34 +390,38 @@ Get a key at: https://aistudio.google.com/app/apikey
 ollama serve
 ```
 
-2. Pull the required model:
+2. Pull the required models:
 
 ```bash
-ollama pull llama3.1:8b
+ollama pull qwen3-embedding:8b   # embed-papers
+ollama pull granite4.1:8b         # label-abstracts (default), extract-keywords --llm
+ollama pull gemma4:e4b             # labeling fallback
 ```
 
 3. Verify with custom URL if not on default port:
 
 ```bash
-OLLAMA_BASE_URL=http://localhost:11434 uv run python -m src.cli.core_collect extract-keywords --llm --llm-backend ollama
+OLLAMA_BASE_URL=http://localhost:11434 uv run python -m src.cli.core_collect extract-keywords --llm
 ```
+
+(Gemini was removed in v0.12 — Ollama is the only supported LLM backend.)
 
 ### LLM Extraction Timeout
 
-**Cause:** Local Ollama model is too slow for the default 60s timeout.
+**Cause:** Local Ollama model is slower than the default 180s timeout (rare with the production models above; happens when running larger backups on constrained hardware).
 
 **Solutions:**
 
-1. Use a smaller model:
+1. Use a smaller / faster model:
 
 ```bash
-uv run python -m src.cli.core_collect extract-keywords --llm --llm-backend ollama --ollama-model qwen2.5:7b
+uv run python -m src.cli.core_collect extract-keywords --llm --ollama-model qwen2.5:7b
 ```
 
-2. Use Gemini (cloud, faster):
+2. Raise the timeout:
 
 ```bash
-uv run python -m src.cli.core_collect extract-keywords --llm --llm-backend gemini
+uv run python -m src.cli.core_collect extract-keywords --llm --ollama-timeout 300
 ```
 
 ---

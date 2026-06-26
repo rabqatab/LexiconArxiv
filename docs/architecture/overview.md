@@ -467,7 +467,7 @@ User Query: "Recent LLM evaluation benchmarks"
 ### 7.4 ML/NLP
 - **Embeddings**: Qwen3-Embedding-8B via Ollama (1024d via MRL from 4096d, instruction-aware)
 - **BM25**: Server-side sparse vectors via Qdrant `qdrant/bm25` Document inference
-- **Keyword Extraction**: LLM-first (Gemini/Ollama) with KeyBERT fallback
+- **Keyword Extraction**: LLM-first (Ollama, `llama3.1:8b`) with KeyBERT fallback
 - **Clustering**: UMAP + HDBSCAN (for trend analysis)
 - **NL Processing**: spaCy
 

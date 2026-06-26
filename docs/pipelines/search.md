@@ -627,7 +627,7 @@ prefetch = [
     Prefetch(query=Document(text=query, model="qdrant/bm25"), using="bm25", limit=N),
 ]
 results = client.query_points(
-    collection_name="lexicon_arxiv_v2",
+    collection_name="lexicon_arxiv_v3",
     prefetch=prefetch,
     query=FusionQuery(fusion=Fusion.RRF),
 )

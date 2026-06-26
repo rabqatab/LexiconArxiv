@@ -322,7 +322,7 @@ CREATE TABLE paper_versions (
 
 ### 5.1 Named Vector Configuration
 
-The production collection (`lexicon_arxiv_v2`) uses 9 dense named vectors plus 1 BM25 sparse vector. All dense vectors are 1024-dimensional (Qwen3-Embedding-8B with MRL truncation) using cosine distance. Title text is prepended to all dense vectors.
+The production collection (`lexicon_arxiv_v3`) uses 9 dense named vectors plus 1 BM25 sparse vector. All dense vectors are 1024-dimensional (Qwen3-Embedding-8B with MRL truncation) using cosine distance. Title text is prepended to all dense vectors.
 
 | Named Vector | Type | Description |
 |-------------|------|-------------|
