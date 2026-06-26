@@ -38,16 +38,23 @@ def evaluate(
     stub: dict,
     work_fields: dict,
     *,
-    min_cited_by_count: int = 0,
+    min_cites_per_year: float = 0.0,
+    now_year: int | None = None,
 ) -> Decision:
     """Decide what to do with this match.
 
-    *min_cited_by_count*: if the snapshot work has fewer external citations
-    than this, drop the promotion to ENRICH_KEEP_STUB (still fill payload gaps
-    but keep is_stub=true). Default 0 = no filter (every match that meets the
-    base PROMOTE criteria gets promoted). Operator dials this up to keep the
-    corpus biased toward well-cited references — protects against the bootstrap
-    promoting millions of low-signal external papers into the search index.
+    *min_cites_per_year*: age-normalized quality gate. If the snapshot work's
+    `cited_by_count / max(1, now_year - publication_year)` is below this rate,
+    drop the promotion to ENRICH_KEEP_STUB (still fill payload gaps but keep
+    is_stub=true). Default 0 = no filter (every match that meets the base
+    PROMOTE criteria gets promoted). Operator dials up to keep the corpus
+    biased toward references that sustain influence regardless of age — a flat
+    cited_by_count threshold would unfairly bias against recent papers since
+    citation counts naturally accumulate over time.
+
+    *now_year*: reference year for the age calculation. Defaults to current
+    UTC year if omitted. Pass explicitly in tests for determinism.
+
     The stub itself still gets enriched in-place; only the is_stub→false flip
     is gated."""
     gains = _gains(stub, work_fields)
@@ -66,11 +73,18 @@ def evaluate(
     if not base_eligible:
         return Decision.ENRICH_KEEP_STUB
 
-    # Quality gate: external citation floor (use snapshot work value, not stub —
-    # stub's cited_by_count_internal is corpus-internal, not OpenAlex global).
-    if min_cited_by_count > 0:
+    # Quality gate: age-normalized citation rate.
+    if min_cites_per_year > 0:
         cited_by_count = work_fields.get("cited_by_count") or 0
-        if cited_by_count < min_cited_by_count:
+        pub_year = work_fields.get("publication_year") or work_fields.get("year") or year_after
+        if pub_year is None:
+            # No year signal at all → can't evaluate rate → gate it
+            return Decision.ENRICH_KEEP_STUB
+        from datetime import datetime, timezone
+        ref_year = now_year if now_year is not None else datetime.now(timezone.utc).year
+        age = max(1, ref_year - int(pub_year))
+        rate = cited_by_count / age
+        if rate < min_cites_per_year:
             return Decision.ENRICH_KEEP_STUB
 
     return Decision.PROMOTE

@@ -27,30 +27,49 @@ def test_evaluate_skip_when_nothing_gained():
     assert evaluate(stub, fields) is Decision.SKIP
 
 
-def test_evaluate_min_cited_by_count_gates_promotion():
-    """Quality filter: cited_by_count below threshold downgrades PROMOTE → ENRICH_KEEP_STUB."""
+def test_evaluate_min_cites_per_year_zero_is_no_op():
+    """Default min_cites_per_year=0 preserves original semantics; no fields needed."""
     stub = {"title": None}
-    base = {"title": "X", "abstract": "...", "cited_by_count": 3}
-    # Without filter: PROMOTE
-    assert evaluate(stub, base) is Decision.PROMOTE
-    # With filter at threshold: PROMOTE
-    assert evaluate(stub, base, min_cited_by_count=3) is Decision.PROMOTE
-    # With filter above the work's count: ENRICH_KEEP_STUB (still enrich, don't flip is_stub)
-    assert evaluate(stub, base, min_cited_by_count=10) is Decision.ENRICH_KEEP_STUB
+    fields = {"title": "X", "abstract": "..."}  # no cited_by_count, no year
+    assert evaluate(stub, fields, min_cites_per_year=0.0) is Decision.PROMOTE
 
 
-def test_evaluate_min_cited_by_count_zero_is_no_op():
-    """Default min_cited_by_count=0 preserves the original semantics for every value."""
+def test_evaluate_min_cites_per_year_recent_paper_passes_low_threshold():
+    """A 2025 paper with 5 cites has rate 5.0/yr — should pass threshold 5.0 in 2026."""
     stub = {"title": None}
-    fields = {"title": "X", "abstract": "..."}  # no cited_by_count key at all
-    assert evaluate(stub, fields, min_cited_by_count=0) is Decision.PROMOTE
+    fields = {"title": "X", "abstract": "...", "cited_by_count": 5, "publication_year": 2025}
+    assert evaluate(stub, fields, min_cites_per_year=5.0, now_year=2026) is Decision.PROMOTE
 
 
-def test_evaluate_min_cited_by_count_treats_missing_as_zero():
-    """A snapshot work without cited_by_count is treated as 0 — gated by any positive threshold."""
+def test_evaluate_min_cites_per_year_old_paper_with_few_cites_is_gated():
+    """A 2010 paper with 5 cites has rate 5/16 ≈ 0.31/yr — gated at threshold 5.0 in 2026."""
     stub = {"title": None}
-    fields = {"title": "X", "abstract": "..."}  # no cited_by_count
-    assert evaluate(stub, fields, min_cited_by_count=1) is Decision.ENRICH_KEEP_STUB
+    fields = {"title": "X", "abstract": "...", "cited_by_count": 5, "publication_year": 2010}
+    assert evaluate(stub, fields, min_cites_per_year=5.0, now_year=2026) is Decision.ENRICH_KEEP_STUB
+
+
+def test_evaluate_min_cites_per_year_old_paper_with_many_cites_passes():
+    """A 2010 paper with 80 cites has rate 80/16 = 5.0/yr — passes threshold 5.0 in 2026."""
+    stub = {"title": None}
+    fields = {"title": "X", "abstract": "...", "cited_by_count": 80, "publication_year": 2010}
+    assert evaluate(stub, fields, min_cites_per_year=5.0, now_year=2026) is Decision.PROMOTE
+
+
+def test_evaluate_min_cites_per_year_current_year_paper_uses_age_one():
+    """A 2026 paper (age 0) divides by max(1, 0) = 1 — its rate equals cited_by_count."""
+    stub = {"title": None}
+    fields = {"title": "X", "abstract": "...", "cited_by_count": 3, "publication_year": 2026}
+    # rate = 3/1 = 3.0; threshold 5.0 → gated
+    assert evaluate(stub, fields, min_cites_per_year=5.0, now_year=2026) is Decision.ENRICH_KEEP_STUB
+    # threshold 3.0 → passes
+    assert evaluate(stub, fields, min_cites_per_year=3.0, now_year=2026) is Decision.PROMOTE
+
+
+def test_evaluate_min_cites_per_year_missing_year_is_gated():
+    """No year signal anywhere → can't evaluate rate → gate it (don't promote on faith)."""
+    stub = {"title": None, "year": None}
+    fields = {"title": "X", "abstract": "...", "cited_by_count": 100}  # no publication_year, no year
+    assert evaluate(stub, fields, min_cites_per_year=1.0, now_year=2026) is Decision.ENRICH_KEEP_STUB
 
 
 def test_evaluate_skip_when_only_fields_already_on_stub():

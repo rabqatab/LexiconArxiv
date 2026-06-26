@@ -36,14 +36,17 @@ def process_one(
     allow_promotion: bool = True,
     allow_merge: bool = True,
     embedding_queue_root: Path | None = None,
-    min_cited_by_count: int = 0,
+    min_cites_per_year: float = 0.0,
+    now_year: int | None = None,
 ) -> dict:
     stub = match_work_for_stubs(work, stub_index, all_stubs_by_id=all_stubs_by_id)
     if stub is None:
         return {"matched": False, "action": None}
 
     fields = extract_full_record(work)
-    decision = evaluate(stub, fields, min_cited_by_count=min_cited_by_count)
+    decision = evaluate(stub, fields,
+                        min_cites_per_year=min_cites_per_year,
+                        now_year=now_year)
 
     if decision is Decision.SKIP:
         return {"matched": True, "action": "skip"}
@@ -83,7 +86,8 @@ def run(
     limit_files: int | None = None,
     allow_promotion: bool = True,
     allow_merge: bool = True,
-    min_cited_by_count: int = 0,
+    min_cites_per_year: float = 0.0,
+    now_year: int | None = None,
     checkpoint_root: Path | None = None,
     embedding_queue_root: Path | None = None,
 ) -> PhaseSummary:
@@ -117,7 +121,8 @@ def run(
                 storage=storage, dry_run=dry_run,
                 allow_promotion=allow_promotion, allow_merge=allow_merge,
                 embedding_queue_root=embedding_queue_root,
-                min_cited_by_count=min_cited_by_count,
+                min_cites_per_year=min_cites_per_year,
+                now_year=now_year,
             )
             if res.get("matched"):
                 summary.matched += 1
