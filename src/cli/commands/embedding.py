@@ -125,27 +125,34 @@ def register_commands(cli: click.Group):
 
                 if consume_snapshot_queue:
                     from src.core.snapshot import embedding_queue
-                    queued = list(embedding_queue.drain())
+                    queued = embedding_queue.peek_all()
                     if queued:
                         click.echo(f"Consuming {len(queued)} points from snapshot queue...")
-                        # Build papers list by fetching payloads
-                        pids = [pid for pid, _ in queued]
-                        # Use storage to scroll specifically these points
-                        from qdrant_client import models as m
-                        pts, _ = storage.client.scroll(
-                            collection_name=storage.collection_name,
-                            scroll_filter=m.Filter(must=[m.HasIdCondition(has_id=pids)]),
-                            with_payload=["title", "abstract", "abstract_structure"],
-                            with_vectors=False, limit=len(pids),
-                        )
-                        papers = [(str(p.id), p.payload or {}) for p in pts]
-                        if papers:
-                            queue_embedded = await embedder.embed_and_upsert_batch(
-                                papers=papers, storage=storage,
-                                embed_batch_size=embed_batch_size,
+                        # Chunk both the Qdrant retrieve() and the queue ack —
+                        # 663K-item retrieves blow past Qdrant's request body
+                        # limit, and acking per-chunk preserves work-in-progress
+                        # on consumer crash. See incident 2026-06-30.
+                        CHUNK = 500
+                        for i in range(0, len(queued), CHUNK):
+                            chunk = queued[i:i + CHUNK]
+                            pids = [pid for pid, _ in chunk]
+                            records = storage.client.retrieve(
+                                collection_name=storage.collection_name,
+                                ids=pids,
+                                with_payload=["title", "abstract", "abstract_structure"],
+                                with_vectors=False,
                             )
-                            total_embedded += queue_embedded
-                            click.echo(f"  embedded {queue_embedded} from queue (of {len(papers)} attempted)")
+                            papers = [(str(r.id), r.payload or {}) for r in records]
+                            if papers:
+                                queue_embedded = await embedder.embed_and_upsert_batch(
+                                    papers=papers, storage=storage,
+                                    embed_batch_size=embed_batch_size,
+                                )
+                                total_embedded += queue_embedded
+                            # ACK only after successful per-chunk embed+upsert
+                            embedding_queue.remove(chunk)
+                            if total_embedded and total_embedded % 1000 == 0:
+                                click.echo(f"  consumed {total_embedded} from queue (of {len(queued)} pending)")
 
                 while True:
                     # skip_embedded=True uses HasVectorCondition to skip
