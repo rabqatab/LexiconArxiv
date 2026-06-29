@@ -58,6 +58,8 @@ Re-run with a different threshold at any time — P2 is idempotent and resumable
 
 ## Performance — payload indices are required
 
+> Full incident report: [`docs/incidents/2026-06-29-p2-missing-payload-indices.md`](../incidents/2026-06-29-p2-missing-payload-indices.md) — timeline, diagnostic chain, test gap analysis, lessons.
+
 P2 scans the snapshot stub-by-stub and per promotion does ~3 filtered Qdrant
 scrolls (`find_real_by_identifier` on `doi` / `openalex_id` / `arxiv_id`) plus
 1 `set_payload` + 1 verify scroll. **Without payload indices on those three

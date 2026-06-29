@@ -72,6 +72,12 @@
 | [Plan TODO](./plans/TODO.md) | Live backlog and deferred items |
 | [Ponytail Audit (2026-06-24)](./refactoring/2026-06-24-ponytail-audit.md) | Over-engineering audit — ~1800 lines / 4 deps removable, deferred until post-bootstrap |
 
+### Incidents
+
+| Document | Date | Severity | Summary |
+|----------|------|----------|---------|
+| [P2 missing payload indices](./incidents/2026-06-29-p2-missing-payload-indices.md) | 2026-06-29 | High | Bootstrap P2 throughput collapsed to 1.6K writes/hr (260h linear ETA) because `doi`/`openalex_id`/`arxiv_id` lacked Qdrant indices → every promotion did 3 full-collection scans. Fixed with auto-called `ensure_identifier_indices()`; production throughput restored to 225K writes/hr (140×). |
+
 ### Testing & Design
 
 | Document | Description |
