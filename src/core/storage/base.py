@@ -131,6 +131,7 @@ class QdrantStorage:
             )
             self.ensure_venue_text_index()
             self.ensure_stub_payload_index()
+            self.ensure_identifier_indices()
             return True
 
     def ensure_venue_text_index(self) -> None:
@@ -173,6 +174,29 @@ class QdrantStorage:
             logger.info("Created is_stub payload index")
         except Exception:
             pass  # Already exists
+
+    def ensure_identifier_indices(self) -> None:
+        """Create keyword indices on doi/openalex_id/arxiv_id for fast lookups.
+
+        Without these, every P2 promotion does ~3 filtered scrolls that
+        full-scan the collection (~4 sec on 3.6M points = ~13 sec per
+        promotion). With them, each scroll is <20ms — ~250x speedup. Required
+        for P2 (resolve-stubs-from-snapshot) and used by find_real_by_identifier
+        + the OpenAlex / DOI / arXiv enrichment paths.
+
+        Idempotent: Qdrant create_payload_index is a no-op if the index already
+        exists. Safe to call repeatedly at every phase startup.
+        """
+        for field in ("doi", "openalex_id", "arxiv_id"):
+            try:
+                self.client.create_payload_index(
+                    collection_name=self.collection_name,
+                    field_name=field,
+                    field_schema=models.PayloadSchemaType.KEYWORD,
+                )
+                logger.info(f"Created keyword payload index on '{field}'")
+            except Exception:
+                pass  # Already exists
 
     def delete_collection(self) -> bool:
         """Delete the collection.

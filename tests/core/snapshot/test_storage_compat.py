@@ -17,6 +17,7 @@ PHASE_METHODS = (
     # P2
     "iter_stubs_for_resolution",
     "batch_promote_stubs",
+    "ensure_identifier_indices",  # perf-critical: without these, P2 full-scans on every promotion
     # P3
     "build_referenced_openalex_id_set",
     "build_identifier_index_for_dedup",

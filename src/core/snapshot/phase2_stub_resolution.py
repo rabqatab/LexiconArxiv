@@ -95,6 +95,12 @@ def run(
     summary = PhaseSummary(phase=PHASE)
     done = cp.load(PHASE, root=checkpoint_root)
 
+    # Ensure identifier payload indices exist before scrolling — without them,
+    # find_real_by_identifier full-scans the collection on every promotion
+    # (~250x slowdown on real corpora). Idempotent; no-op when indices exist.
+    if hasattr(storage, "ensure_identifier_indices"):
+        storage.ensure_identifier_indices()
+
     stubs = list(storage.iter_stubs_for_resolution())
     summary.extra["stubs_seen"] = len(stubs)
     stub_index = build_stub_index(stubs)

@@ -38,6 +38,10 @@ class _MockStorage:
     def vector_set(self, point_id: str) -> None:
         self._vectors.add(point_id)
 
+    def ensure_identifier_indices(self) -> None:
+        """Mock no-op — indices don't apply to in-memory storage."""
+        pass
+
     def count_with_filter(
         self,
         *,
