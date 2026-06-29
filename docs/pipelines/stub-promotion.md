@@ -56,6 +56,44 @@ only the search-index membership is gated.
 
 Re-run with a different threshold at any time — P2 is idempotent and resumable.
 
+## Performance — payload indices are required
+
+P2 scans the snapshot stub-by-stub and per promotion does ~3 filtered Qdrant
+scrolls (`find_real_by_identifier` on `doi` / `openalex_id` / `arxiv_id`) plus
+1 `set_payload` + 1 verify scroll. **Without payload indices on those three
+identifier fields, every scroll is a full collection scan** — measured at 4.2
+seconds per scroll on a 3.6M-point corpus, which caps throughput at ~1.6K
+promotions/hour and pushes a real bootstrap to 11+ days.
+
+`storage.ensure_identifier_indices()` (in `src/core/storage/base.py`) creates
+the keyword indices on `doi`, `openalex_id`, `arxiv_id` and is idempotent —
+called automatically from:
+
+- `ensure_collection()` when a new collection is created
+- `phase2_stub_resolution.run()` at startup (so existing collections get
+  upgraded on the first P2 run)
+
+After the indices exist, the same scroll drops to ~17ms (250× faster) and P2
+throughput rises to ~75K-117K writes/hour — restoring the ~24-30h ETA in the
+runbook.
+
+Verify the indices exist before a P2 run:
+
+```bash
+curl -s http://localhost:6333/collections/lexicon_arxiv_v3 | \
+    jq '.result.payload_schema | keys' | grep -E "doi|openalex_id|arxiv_id"
+```
+
+If missing for any reason (older collection that pre-dates this fix), force
+creation by importing the storage and calling the method directly:
+
+```python
+from src.core.storage import QdrantStorage
+QdrantStorage().ensure_identifier_indices()
+```
+
+Index build takes ~20 seconds per field on a 3.6M-point collection.
+
 ## Promotion transaction
 
 Each promotion is a single-stub call to `storage.batch_promote_stubs`. Steps:

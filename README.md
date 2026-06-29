@@ -422,6 +422,12 @@ lexiconarxiv/
 
 ## Recent Updates
 
+### v0.13.1 (Jun 2026) — Snapshot bootstrap perf hardening
+
+- **P2 ~250× scroll speedup** via `ensure_identifier_indices()` — keyword indices on `doi`/`openalex_id`/`arxiv_id` automatically created at `ensure_collection()` and at every P2 startup. Pre-fix: every promotion did ~3 full-collection scans on a 3.6M-point corpus (~4.2s each, ~1.6K writes/hr). Post-fix: 17ms per scroll, ~75K-117K writes/hr in production. The `tests/core/snapshot/test_storage_compat.py` regression test now pins the method on real storage.
+- **P2 quality gate**: `--min-cites-per-year N` (default 0) — age-normalized citation rate floor that self-balances recent vs old papers without bucket boundaries. `cited_by_count / max(1, now - pub_year) < N` drops promotion to `ENRICH_KEEP_STUB` (stub still gets enriched in place). See [docs/pipelines/stub-promotion.md](docs/pipelines/stub-promotion.md#quality-gate---min-cites-per-year).
+- **`QdrantStorage.get_payload` alias** (bootstrap hotfix `5cc3bac`) bridges a mock-vs-real naming gap; new storage-compat test prevents recurrence on any phase-called method.
+
 ### v0.13.0 (Jun 2026) — Snapshot Utilization System
 
 5 plans, 47+ commits, full quarterly + daily enrichment from the OpenAlex `works` snapshot.

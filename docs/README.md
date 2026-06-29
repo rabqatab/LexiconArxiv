@@ -199,6 +199,7 @@ Infra:          Docker (Qdrant, GROBID) / Kubernetes (optional)
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.13.1 | Jun 2026 | P2 perf hardening: `ensure_identifier_indices()` (~250x scroll speedup), `--min-cites-per-year` age-normalized quality gate, get_payload alias hotfix + compat regression test |
 | 0.13.0 | Jun 2026 | Snapshot Utilization System (5 plans, 47+ commits): 4-phase bootstrap (metadata fill / stub promotion / gap injection / external_cited_by) + live mode (daily OpenAlex API delta) + 9 CLIs + 5 Dagster assets + 3 dormant schedules + 88 unit/12 integration tests |
 | 0.12.0 | Jun 2026 | Ollama-only LLMs — Gemini removed; labeling defaults to granite4.1:8b; data quality asset_checks (Phase 3a/3b) cover search-critical invariants |
 | 0.11.1 | Mar 2026 | First incremental loop (152K papers), OpenAlex Premium fallback, multi-key rotation |

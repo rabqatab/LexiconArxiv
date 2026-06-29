@@ -121,6 +121,14 @@ uv run python -m src.cli.core_collect resolve-stubs-from-snapshot \
 Expected duration: ≈24–30 hours (full snapshot scan + Qdrant writes).
 Adjust `--min-cites-per-year` per your threshold sweep result above.
 
+> **Performance note**: P2 startup auto-creates payload indices on
+> `doi`/`openalex_id`/`arxiv_id` via `ensure_identifier_indices()` — without
+> these, each promotion does ~3 full-collection scans (~4.2s each on a 3.6M-
+> point corpus) and throughput drops to ~1.6K writes/hr (extends ETA to
+> 11+ days). The first P2 run on an existing collection will spend ~60 seconds
+> upfront building the indices, then proceed at full ~75K-117K writes/hr. See
+> [docs/pipelines/stub-promotion.md — Performance](../pipelines/stub-promotion.md#performance--payload-indices-are-required).
+
 ### Post-run verification
 
 1. **Invariant query** — every promoted point with a non-empty stub `cited_by`
