@@ -290,49 +290,80 @@ async def _handle_search_papers(arguments: dict) -> list[TextContent]:
     return [TextContent(type="text", text=text)]
 
 
+def _looks_like_arxiv_id(s: str) -> bool:
+    """Heuristic: bare arXiv id like 1706.03762 or 2504.13837."""
+    import re
+    return bool(re.match(r"^\d{4}\.\d{4,5}(v\d+)?$", s.strip()))
+
+
+def _looks_like_uuid(s: str) -> bool:
+    """Heuristic: Qdrant point ids are UUIDs. Skips the retrieve()
+    400-error round-trip when the identifier is clearly not a UUID."""
+    import re
+    return bool(re.match(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", s.strip().lower()))
+
+
 async def _handle_get_paper(arguments: dict) -> list[TextContent]:
     service = _get_service()
     storage = _get_storage()
-    identifier = arguments["identifier"]
+    identifier = arguments["identifier"].strip()
 
-    # Try 1: Direct UUID lookup via SearchService
-    paper = await service.get_paper(identifier)
-    if paper:
-        return [TextContent(type="text", text=format_paper_detail(paper))]
+    # Try 1: Direct UUID lookup via SearchService (fast, always O(1)).
+    # Skip when the identifier is clearly not a UUID — otherwise Qdrant returns
+    # 400 which fills the log with noise (2026-07-03 incident).
+    if _looks_like_uuid(identifier):
+        paper = await service.get_paper(identifier)
+        if paper:
+            return [TextContent(type="text", text=format_paper_detail(paper))]
 
-    # Try 2: DOI lookup
-    # get_paper_by_doi returns payload only (no point ID), so we scroll
-    # with the DOI filter to retrieve the point ID for a full detail lookup.
-    doi_results = storage.client.scroll(
-        collection_name=storage.collection_name,
-        scroll_filter=qdrant_models.Filter(
-            must=[
-                qdrant_models.FieldCondition(
+    # Build candidate DOI variants to try. If identifier looks like a bare
+    # arXiv id, also probe the canonical 10.48550/arxiv.<id> DOI convention —
+    # many older arXiv papers exist ONLY as stubs (referenced by corpus but
+    # never crawled or promoted), keyed by that DOI (2026-07-03 incident:
+    # 1706.03762 "Attention Is All You Need" was such a stub).
+    doi_candidates: list[str] = []
+    if identifier.startswith("10.") or "/" in identifier:
+        doi_candidates.append(identifier)
+    if _looks_like_arxiv_id(identifier):
+        # Strip version suffix for the DOI probe (arxiv DOIs never carry versions)
+        bare = identifier.split("v")[0]
+        # Try both casings — snapshot corpus mixes them
+        doi_candidates.extend([
+            f"10.48550/arxiv.{bare}",
+            f"10.48550/arXiv.{bare}",
+        ])
+
+    for candidate in doi_candidates:
+        doi_points, _ = storage.client.scroll(
+            collection_name=storage.collection_name,
+            scroll_filter=qdrant_models.Filter(
+                must=[qdrant_models.FieldCondition(
                     key="doi",
-                    match=qdrant_models.MatchValue(value=identifier),
-                )
-            ]
-        ),
-        limit=1,
-    )
-    doi_points = doi_results[0]
-    if doi_points:
-        point_id = str(doi_points[0].id)
-        paper = await service.get_paper(point_id)
-        if paper:
-            return [TextContent(type="text", text=format_paper_detail(paper))]
-        # Fallback: format the raw payload directly
-        detail = dict(doi_points[0].payload or {})
-        detail.setdefault("id", point_id)
-        return [TextContent(type="text", text=format_paper_detail(detail))]
+                    match=qdrant_models.MatchValue(value=candidate),
+                )]
+            ),
+            limit=1,
+        )
+        if doi_points:
+            point_id = str(doi_points[0].id)
+            paper = await service.get_paper(point_id)
+            if paper:
+                return [TextContent(type="text", text=format_paper_detail(paper))]
+            detail = dict(doi_points[0].payload or {})
+            detail.setdefault("id", point_id)
+            return [TextContent(type="text", text=format_paper_detail(detail))]
 
-    # Try 3: arXiv ID lookup
-    arxiv_result = storage.queries.get_paper_by_arxiv_id(identifier)
-    if arxiv_result is not None:
-        point_id, _payload = arxiv_result
-        paper = await service.get_paper(point_id)
-        if paper:
-            return [TextContent(type="text", text=format_paper_detail(paper))]
+    # Try 3: arXiv ID lookup (indexed arxiv_id field first, then legacy source_id fallback)
+    if _looks_like_arxiv_id(identifier):
+        arxiv_result = storage.queries.get_paper_by_arxiv_id(identifier)
+        if arxiv_result is not None:
+            point_id, payload = arxiv_result
+            paper = await service.get_paper(point_id)
+            if paper:
+                return [TextContent(type="text", text=format_paper_detail(paper))]
+            detail = dict(payload or {})
+            detail.setdefault("id", point_id)
+            return [TextContent(type="text", text=format_paper_detail(detail))]
 
     return [TextContent(type="text", text="Paper not found.")]
 

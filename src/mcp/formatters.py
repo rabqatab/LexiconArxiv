@@ -3,6 +3,32 @@
 from __future__ import annotations
 
 
+def _author_name(a) -> str:
+    """Coerce an author entry to a display string.
+
+    P2 promotion writes OpenAlex `authorships` payload — a list of dicts
+    keyed by `display_name`, `author.display_name`, etc. Old crawler paths
+    wrote plain strings. This helper accepts either. Fixed 2026-07-03 for
+    the `sequence item 0: expected str instance, dict found` incident.
+    """
+    if a is None:
+        return ""
+    if isinstance(a, str):
+        return a
+    if isinstance(a, dict):
+        # Try common name-carrying keys, in decreasing specificity
+        for k in ("display_name", "name"):
+            v = a.get(k)
+            if v:
+                return str(v)
+        author = a.get("author")
+        if isinstance(author, dict):
+            v = author.get("display_name") or author.get("name")
+            if v:
+                return str(v)
+    return ""
+
+
 def format_search_results(results: dict, max_results: int = 10) -> str:
     """Format search results as a numbered list for LLM consumption.
 
@@ -30,7 +56,8 @@ def format_search_results(results: dict, max_results: int = 10) -> str:
     for i, item in enumerate(items[:max_results], 1):
         title = item.get("title", "Untitled")
         authors = item.get("authors", [])
-        author_str = ", ".join(authors[:3])
+        author_names = [n for n in (_author_name(a) for a in authors[:3]) if n]
+        author_str = ", ".join(author_names)
         if len(authors) > 3:
             author_str += f" et al. ({len(authors)} authors)"
         venue = item.get("venue", "")
@@ -92,8 +119,10 @@ def format_paper_detail(paper: dict) -> str:
     # Authors
     authors = paper.get("authors", [])
     if authors:
-        lines.append(f"**Authors:** {', '.join(authors)}")
-        lines.append("")
+        author_names = [n for n in (_author_name(a) for a in authors) if n]
+        if author_names:
+            lines.append(f"**Authors:** {', '.join(author_names)}")
+            lines.append("")
 
     # Venue and year
     venue = paper.get("venue", "")

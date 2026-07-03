@@ -108,6 +108,42 @@ The unit tests for storage-query methods used mock storage that didn't distingui
 
 Both gaps generalize: **any test that runs against a mock or against a full-payload fixture is not a substitute for adversarial input at scale**. The next audit item (see `docs/refactoring/2026-06-24-ponytail-audit.md`) is a startup-check that scans call sites for `Filter(must=[FieldCondition(key=X, ...)])` patterns where `X` isn't in the target collection's `payload_schema`.
 
+## Follow-up bugs discovered after State-1 fix
+
+The other Claude session reported two more bugs after reconnecting MCP to the
+patched server. Both were latent — same root cause class as the first two.
+
+### Bug 3 — `sequence item 0: expected str instance, dict found` (search_papers + research_topic)
+
+`src/mcp/formatters.py` did `", ".join(authors[:3])` at line 33 and
+`", ".join(authors)` at line 95, both assuming `authors` is a list of
+strings. **P2 promotion writes OpenAlex `authorships` payload** — a list
+of dicts like `{"display_name": "A. Vaswani", "orcid": "..."}` or the
+nested `{"author": {"display_name": ...}, "position": "middle"}` shape.
+The old crawler wrote plain strings; the formatter never learned about
+the new shape.
+
+Fix: `_author_name(a)` helper that accepts str, dict-with-display_name,
+or nested-authorship dict and returns a display string. Both `join()`
+sites now use `[n for n in (_author_name(a) for a in authors) if n]`
+so empty-name entries are filtered out. 8 regression tests in
+`tests/mcp/test_formatters_dict_authors.py` pin every author shape.
+
+### Bug 4 — `get_paper` "Paper not found" for canonical arXiv IDs (e.g. 1706.03762 "Attention Is All You Need")
+
+The Attention paper exists in the corpus **only as a stub**, keyed by DOI
+`10.48550/arxiv.1706.03762`. `arxiv_id` and `title` are both None on the
+stub because P2 hasn't promoted it (either the snapshot's match key didn't
+line up, or the paper's OpenAlex work was skipped). The MCP `get_paper`
+handler tried UUID → DOI-scroll → arxiv-id scroll but never tried the
+canonical `10.48550/arxiv.<id>` DOI variant for arXiv-shaped identifiers.
+
+Fix: when the identifier matches the arXiv-ID regex (`^\d{4}\.\d{4,5}(v\d+)?$`),
+also probe `10.48550/arxiv.<bare>` and `10.48550/arXiv.<bare>` variants
+(snapshot corpus mixes both casings). Also added `_looks_like_uuid()` guard
+before the direct UUID retrieve so a non-UUID identifier doesn't cause a
+noisy 400-error round-trip to Qdrant.
+
 ## Action items
 
 | # | Item | Status |
