@@ -3,7 +3,12 @@
 writes OpenAlex `authorships` payloads (list of dicts) but the formatters
 did `", ".join(authors)` assuming a list of strings."""
 
-from src.mcp.formatters import _author_name, format_search_results, format_paper_detail
+from src.mcp.formatters import (
+    _author_name,
+    format_paper_detail,
+    format_research_results,
+    format_search_results,
+)
 
 
 def test_author_name_accepts_string():
@@ -74,3 +79,34 @@ def test_format_paper_detail_with_all_unnamed_dict_authors_skips_section():
     out = format_paper_detail(paper)
     # We do NOT want to print '**Authors:** ' with nothing after it
     assert "**Authors:** \n" not in out
+
+
+def test_format_research_results_with_dict_authors_does_not_raise():
+    """Regression for the 2026-07-03 State-4 report: research_topic raised
+    'sequence item 0: expected str instance, dict found' because
+    format_research_results still joined dict authors as strings."""
+    data = {
+        "query": "efficient markets return predictability",
+        "papers": [{
+            "id": "p1",
+            "title": "Attention Is All You Need",
+            "authors": [
+                {"display_name": "A. Vaswani"},
+                {"display_name": "N. Shazeer"},
+                {"display_name": "N. Parmar"},
+                {"display_name": "J. Uszkoreit"},  # >3 to exercise et-al path
+            ],
+            "venue": "NeurIPS", "year": 2017, "tier": 0,
+            "citation_count": 100000,
+            "relevance_score": 0.9, "notable_score": 0.85, "combined_score": 0.88,
+            "keywords": ["attention", "transformer"],
+        }],
+        "trends": [{"keyword": "transformer", "growth_rate": 1.5}],
+        "summary": {"total_found": 1},
+        "query_time_ms": 12,
+    }
+    out = format_research_results(data)
+    assert "Attention Is All You Need" in out
+    assert "A. Vaswani" in out
+    assert "N. Shazeer" in out
+    assert "et al." in out

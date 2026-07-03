@@ -245,7 +245,8 @@ def format_research_results(data: dict) -> str:
     for i, paper in enumerate(papers, 1):
         title = paper.get("title", "Untitled")
         authors = paper.get("authors", [])
-        author_str = ", ".join(authors[:3])
+        author_names = [n for n in (_author_name(a) for a in authors[:3]) if n]
+        author_str = ", ".join(author_names)
         if len(authors) > 3:
             author_str += " et al."
 
