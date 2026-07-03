@@ -1,8 +1,19 @@
 # Embed Drain Strategy — Post-P3 Playbook
 
 **Date drafted:** 2026-07-03
+**Updated:** 2026-07-04 — inserted mandatory labeling phase before embed drain (see below).
 **Trigger:** P3 (`discover-corpus-gaps`) completes with ~2-4M new papers queued for embedding.
 **Goal:** Get hybrid search useful on the highest-quality subset in **hours** instead of the full drain's **days**, without touching the vector schema mid-bootstrap.
+
+## Critical update — labeling must run FIRST
+
+The 2026-07-04 verification exposed a hidden gap: **P2 promoted (~940K) + P3 injected (~2M+) papers all lack `abstract_structure`.** Without labeling, the embedder skips all 7 section-level vectors — the multi-vector search prefetch (`structured-abstract + section-method + section-task`) collapses to a single signal (`structured-abstract = raw abstract`), losing section-aware retrieval on 90% of the post-bootstrap corpus.
+
+**Ollama's labeling throughput is ~750 papers/hr with zero benefit from concurrency** (GPU-serial pipeline). 3M ÷ 750 = 167 days — infeasible. Migration to vLLM (batched inference) targets 100× speedup; see [`docs/design/vllm-labeling-migration.md`](../design/vllm-labeling-migration.md).
+
+**New execution order:** vLLM setup → labeling (Phase 1) → embed drain (Phase 2 below).
+
+The four levers below (parallelism, benchmark, P4-in-parallel, tier priority) still apply to the **embed drain** phase — but only after labeling completes.
 
 ## Situation snapshot
 

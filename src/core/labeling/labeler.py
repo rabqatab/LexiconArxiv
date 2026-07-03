@@ -48,10 +48,23 @@ class AbstractLabeler:
         # accurate at 0.942 but ~4x slower). See docs/reference/labeling-llm-comparison.md.
         ollama_model: str = "granite4.1:8b",
         ollama_timeout: float = 180.0,
+        # vLLM backend for high-throughput bootstrap labeling — 100× the
+        # Ollama serial throughput via continuous batching. Same granite
+        # family as the Ollama default so quality risk is minimized;
+        # requires re-eval before production per the migration design.
+        # See docs/design/vllm-labeling-migration.md.
+        vllm_model: str = "ibm-granite/granite-4.1-8b",
+        vllm_base_url: str = "http://localhost:8000",
+        vllm_max_concurrent: int = 64,
+        vllm_timeout: float = 180.0,
     ):
         self.llm_backend = llm_backend
         self.ollama_model = ollama_model
         self.ollama_timeout = ollama_timeout
+        self.vllm_model = vllm_model
+        self.vllm_base_url = vllm_base_url
+        self.vllm_max_concurrent = vllm_max_concurrent
+        self.vllm_timeout = vllm_timeout
 
         self._llm_labeler: "BaseAbstractLabeler | None" = None
 
@@ -66,9 +79,18 @@ class AbstractLabeler:
                 self._llm_labeler = OllamaAbstractLabeler(
                     model=self.ollama_model, timeout=self.ollama_timeout
                 )
+            elif self.llm_backend == "vllm":
+                from src.core.labeling.vllm import VLLMAbstractLabeler
+                self._llm_labeler = VLLMAbstractLabeler(
+                    model=self.vllm_model,
+                    base_url=self.vllm_base_url,
+                    max_concurrent=self.vllm_max_concurrent,
+                    timeout=self.vllm_timeout,
+                )
             else:
                 logger.warning(
-                    f"Unsupported LLM backend '{self.llm_backend}' (only 'ollama' is supported)"
+                    f"Unsupported LLM backend '{self.llm_backend}' "
+                    f"(supported: 'ollama', 'vllm')"
                 )
                 return None
 

@@ -88,6 +88,7 @@
 |----------|-------------|
 | [Testing Strategy](./testing/strategy.md) | Test strategy and quality assurance |
 | [UX Design](./design/ux.md) | UI/UX design |
+| [vLLM Labeling Migration](./design/vllm-labeling-migration.md) | Post-2026-07-04 shift from Ollama-serial to vLLM-batched labeling for bootstrap-scale (3M papers). Model choice, quality gate, throughput gate, rollback. |
 
 ---
 

@@ -81,6 +81,8 @@ See full context in [`docs/incidents/2026-07-03-mcp-search-endpoints-broken.md`]
 
 Trigger: same as the whole audit — corpus stable ≥1 week AND bootstrap complete. Owner: whoever runs the eval + migration. Reviewer: someone who wasn't in the audit conversation. [full context in [`docs/incidents/2026-07-03-mcp-search-endpoints-broken.md`](../incidents/2026-07-03-mcp-search-endpoints-broken.md) §Follow-up hardening + verification #3]
 
+**25.** **STATUS: IN PROGRESS 2026-07-04** — Migrate abstract labeling from Ollama to vLLM. Ollama's single-GPU serial pipeline hit its ceiling at ~750 papers/hr regardless of concurrency (measured 2026-07-04). At bootstrap scale (3M papers to label from P2 promotions + P3 injections) this projects to 167 days — infeasible. vLLM's continuous batching targets 30K+ papers/hr on the same model family (`ibm-granite/granite-4.1-8b`), reducing the labeling window to ~4 days. Backend abstraction landed; POC + quality eval + throughput bench blocked on P3 completion. Full design in [`docs/design/vllm-labeling-migration.md`](../design/vllm-labeling-migration.md). Files touched: `src/core/labeling/vllm.py` (new), `src/core/labeling/labeler.py` (dispatch extended), `src/cli/commands/labeling.py` (--backend flag), `scripts/labeling/serve_vllm.sh` (sparkq launcher). Ollama remains the default and only backend for incremental (post-bootstrap) labeling — vLLM's serve-time overhead isn't worth it below ~10K papers/month.
+
 ### Polish work completed 2026-07-03 (not deferred)
 
 These landed during the wave rather than being marked "when the trigger is met" — they were user-pain fixes, not stylistic cleanups.

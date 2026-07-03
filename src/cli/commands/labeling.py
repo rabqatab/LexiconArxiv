@@ -18,6 +18,13 @@ def register_commands(cli: click.Group):
     @click.option("--batch-size", default=500, help="Papers per batch (default: 500)")
     @click.option("--force", is_flag=True, help="Re-label papers that already have abstract_structure")
     @click.option(
+        "--backend",
+        type=click.Choice(["ollama", "vllm"]),
+        default="ollama",
+        help="LLM backend. 'ollama' = single-GPU serial (~750/hr); "
+             "'vllm' = batched (100× faster) — needs vLLM server running.",
+    )
+    @click.option(
         "--ollama-model",
         default="granite4.1:8b",
         help="Ollama model name (default: granite4.1:8b; fallback: gemma4:e4b)",
@@ -28,27 +35,47 @@ def register_commands(cli: click.Group):
         default=180.0,
         help="Ollama request timeout in seconds (default: 180)",
     )
+    @click.option(
+        "--vllm-model",
+        default="ibm-granite/granite-4.1-8b",
+        help="vLLM model name (must match `vllm serve <model>` argument)",
+    )
+    @click.option(
+        "--vllm-base-url",
+        default="http://localhost:8000",
+        help="vLLM OpenAI-compatible endpoint (default: http://localhost:8000)",
+    )
+    @click.option(
+        "--vllm-max-concurrent",
+        type=int,
+        default=64,
+        help="Concurrent in-flight requests to vLLM (default: 64)",
+    )
     def label_abstracts(
         dry_run: bool,
         limit: int | None,
         batch_size: int,
         force: bool,
+        backend: str,
         ollama_model: str,
         ollama_timeout: float,
+        vllm_model: str,
+        vllm_base_url: str,
+        vllm_max_concurrent: int,
     ) -> None:
         """Classify abstract sentences into rhetorical roles.
 
         Labels each sentence in paper abstracts into 7 roles:
         task, domain, background, approach, method, result, contribution.
-        Uses the local Ollama backend (granite4.1:8b by default).
 
         Examples:
 
-          # Dry run
+          # Dry run (Ollama, default)
           uv run python -m src.cli.core_collect label-abstracts --dry-run --limit 5
 
-          # Label all unlabeled papers
-          uv run python -m src.cli.core_collect label-abstracts --limit 100
+          # Bootstrap-scale labeling via vLLM (needs vLLM server running)
+          uv run python -m src.cli.core_collect label-abstracts \\
+              --backend vllm --limit 100000
 
           # Re-label all papers
           uv run python -m src.cli.core_collect label-abstracts --force --limit 50
@@ -59,8 +86,12 @@ def register_commands(cli: click.Group):
                 limit=limit,
                 batch_size=batch_size,
                 force=force,
+                backend=backend,
                 ollama_model=ollama_model,
                 ollama_timeout=ollama_timeout,
+                vllm_model=vllm_model,
+                vllm_base_url=vllm_base_url,
+                vllm_max_concurrent=vllm_max_concurrent,
             )
         )
 
@@ -70,19 +101,28 @@ async def _label_abstracts_async(
     limit: int | None,
     batch_size: int,
     force: bool,
+    backend: str,
     ollama_model: str,
     ollama_timeout: float,
+    vllm_model: str,
+    vllm_base_url: str,
+    vllm_max_concurrent: int,
 ) -> None:
     """Async abstract labeling pipeline."""
     from src.core.labeling import AbstractLabeler
 
     storage = QdrantStorage()
     labeler = AbstractLabeler(
+        llm_backend=backend,
         ollama_model=ollama_model,
         ollama_timeout=ollama_timeout,
+        vllm_model=vllm_model,
+        vllm_base_url=vllm_base_url,
+        vllm_max_concurrent=vllm_max_concurrent,
     )
 
-    click.echo(f"Abstract labeling mode: LLM (ollama/{ollama_model})")
+    model_id = vllm_model if backend == "vllm" else ollama_model
+    click.echo(f"Abstract labeling mode: LLM ({backend}/{model_id})")
 
     if dry_run:
         click.echo("DRY RUN - changes will not be saved\n")
