@@ -103,6 +103,7 @@ def test_all_registered_tools_have_handlers():
         "get_similar_papers",
         "expand_search",
         "research_topic",
+        "get_mcp_version",
     }
     assert advertised == set(server._HANDLERS.keys())
 

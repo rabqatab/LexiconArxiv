@@ -2,6 +2,10 @@
 
 import asyncio
 import logging
+import platform
+import subprocess
+from datetime import datetime, timezone
+from pathlib import Path
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -18,6 +22,32 @@ from src.mcp.formatters import (
     format_research_results,
     format_search_results,
 )
+
+
+def _resolve_mcp_version() -> dict[str, str]:
+    """Version fingerprint frozen at import time.
+
+    MCP servers are per-Claude-session subprocesses with no hot-reload. When
+    session A commits a fix and session B still holds an old subprocess, the
+    only way session B can tell is by comparing this SHA against `git rev-parse
+    HEAD` on disk. Capturing at import (not per-call) makes the answer honest.
+    """
+    repo = Path(__file__).resolve().parents[2]
+    try:
+        sha = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"], cwd=repo,
+            stderr=subprocess.DEVNULL, timeout=2,
+        ).decode().strip() or "unknown"
+    except Exception:
+        sha = "unknown"
+    return {
+        "sha": sha,
+        "startup_ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "python": platform.python_version(),
+    }
+
+
+_VERSION: dict[str, str] = _resolve_mcp_version()
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +169,17 @@ async def list_tools() -> list[Tool]:
                 },
                 "required": ["paper_id"],
             },
+        ),
+        Tool(
+            name="get_mcp_version",
+            description=(
+                "Return the running MCP server's git SHA, startup timestamp, "
+                "and Python version. Use this to diagnose stale MCP subprocesses "
+                "across Claude Code sessions — if a fix was committed but the "
+                "reported SHA is older than `git rev-parse HEAD`, this server "
+                "needs a restart (`/mcp reconnect lexiconarxiv`)."
+            ),
+            inputSchema={"type": "object", "properties": {}},
         ),
         Tool(
             name="get_corpus_stats",
@@ -521,6 +562,20 @@ async def _handle_get_similar_papers(arguments: dict) -> list[TextContent]:
     return [TextContent(type="text", text="\n".join(lines))]
 
 
+async def _handle_get_mcp_version(arguments: dict) -> list[TextContent]:
+    lines = [
+        "# MCP Server Version",
+        "",
+        f"- **git sha:** `{_VERSION['sha']}`",
+        f"- **startup:** {_VERSION['startup_ts']}",
+        f"- **python:** {_VERSION['python']}",
+        "",
+        "_If this SHA is older than `git rev-parse HEAD` on disk, "
+        "the server is stale — reconnect the MCP to pick up recent commits._",
+    ]
+    return [TextContent(type="text", text="\n".join(lines))]
+
+
 async def _handle_get_corpus_stats(arguments: dict) -> list[TextContent]:
     storage = _get_storage()
     top_venues = min(int(arguments.get("top_venues", 30)), 200)
@@ -602,6 +657,7 @@ _HANDLERS: dict[str, callable] = {
     "get_similar_papers": _handle_get_similar_papers,
     "expand_search": _handle_expand_search,
     "research_topic": _handle_research_topic,
+    "get_mcp_version": _handle_get_mcp_version,
 }
 
 
@@ -611,6 +667,11 @@ _HANDLERS: dict[str, callable] = {
 
 async def main():
     global _search_service, _storage
+
+    logger.info(
+        "MCP server starting: sha=%s startup=%s python=%s",
+        _VERSION["sha"], _VERSION["startup_ts"], _VERSION["python"],
+    )
 
     _storage = QdrantStorage()
     _search_service = SearchService(storage=_storage)
