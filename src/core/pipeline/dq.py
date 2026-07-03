@@ -20,6 +20,12 @@ from src.core.constants import STRUCTURED_VECTOR_NAME
 MIN_DOI_REFS_RATIO = 0.80
 MIN_ABSTRACT_COVERAGE = 0.80
 MAX_CLUSTER_NOISE_RATIO = 0.40
+# Labeling-gap early warning: allow a small buffer for the freshly-collected
+# papers that haven't had a chance to be labeled yet (incremental cycle runs
+# label-abstracts step). Anything larger indicates a real backlog and should
+# be caught before it silently degrades section-vector search on new papers.
+# See the 2026-07-04 labeling gap incident that motivated this check.
+MAX_UNLABELED_ABSTRACT_BACKLOG = 1000
 
 _STUB = models.FieldCondition(key="is_stub", match=models.MatchValue(value=True))
 _EMPTY_ABSTRACT = models.FieldCondition(key="abstract", match=models.MatchValue(value=""))
@@ -139,6 +145,31 @@ def real_papers_have_titles(storage: QdrantStorage | None = None) -> dict:
         must_not=[_STUB],
     )
     return {"passed": missing == 0, "metadata": {"missing_titles": missing}}
+
+
+def abstract_labeling_gap(storage: QdrantStorage | None = None) -> dict:
+    """Real papers with a non-empty abstract but empty abstract_structure.
+
+    Early-warning signal for the 2026-07-04 labeling gap: P2/P3 promoted
+    ~3M real papers into the corpus without running label-abstracts, which
+    silently degraded section-vector search (default multi-vector query
+    collapses to 1/3 dense signals when section-* vectors are missing).
+
+    WARN (not blocking) — this fires when the labeling backlog exceeds
+    MAX_UNLABELED_ABSTRACT_BACKLOG. Fix: run `docs/runbooks/post-bootstrap-catchup.md`
+    step 1 (labeling). Reuses reader.count_papers_for_abstract_labeling so
+    the filter definition stays in sync with the labeling stage itself.
+    """
+    storage = storage or QdrantStorage()
+    backlog = storage.count_papers_for_abstract_labeling(skip_existing=True)
+    return {
+        "passed": backlog <= MAX_UNLABELED_ABSTRACT_BACKLOG,
+        "metadata": {
+            "unlabeled_with_abstract": backlog,
+            "threshold": MAX_UNLABELED_ABSTRACT_BACKLOG,
+            "fix": "docs/runbooks/post-bootstrap-catchup.md#step-1--labeling-vllm",
+        },
+    }
 
 
 def source_not_silently_zero(storage: QdrantStorage | None = None) -> dict:

@@ -185,10 +185,16 @@ def register_commands(cli: click.Group):
           # Show breakdown by venue
           python -m src.cli.core_collect data-quality --by-venue
         """
+        from src.core.pipeline import dq
+
         try:
             storage = QdrantStorage()
             click.echo("Analyzing data quality (this may take a moment)...")
             stats = storage.get_data_quality_stats()
+            # Labeling-gap early warning (2026-07-04 gap signal): warn-only.
+            # Cheap filtered count, reuses reader.count_papers_for_abstract_labeling.
+            labeling_gap = dq.abstract_labeling_gap(storage)
+            stats["labeling_gap"] = labeling_gap
         except Exception as e:
             click.echo(f"Error connecting to Qdrant: {e}")
             sys.exit(1)
@@ -234,6 +240,17 @@ def register_commands(cli: click.Group):
         click.echo(f"\n=== Enrichment Potential ===\n")
         click.echo(f"Citation enrichment: {potential['citations']:,} papers (have DOI, missing refs)")
         click.echo(f"Abstract enrichment: {potential['abstracts']:,} papers (have DOI, missing abstract)")
+
+        # Labeling-gap early warning (2026-07-04 signal)
+        gap = stats["labeling_gap"]
+        click.echo(f"\n=== Labeling Gap (warn-only) ===\n")
+        backlog = gap["metadata"]["unlabeled_with_abstract"]
+        threshold = gap["metadata"]["threshold"]
+        status = "OK" if gap["passed"] else "WARN"
+        click.echo(f"Status: {status}")
+        click.echo(f"Unlabeled real papers with abstract: {backlog:,} (threshold: {threshold:,})")
+        if not gap["passed"]:
+            click.echo(f"Fix: {gap['metadata']['fix']}")
 
         # By venue (optional)
         if by_venue and stats.get("by_venue"):

@@ -150,3 +150,58 @@ def test_source_not_silently_zero_warn_on_zero_source():
     r = dq.source_not_silently_zero(storage)
     assert r["passed"] is False
     assert "acl" in r["metadata"]["zero_source_names"]
+
+
+# --- abstract_labeling_gap (2026-07-04 gap signal, WARN-only) ---
+#
+# Fake storage models the reader.count_papers_for_abstract_labeling call — the
+# check reuses that method so the filter definition stays in sync with the
+# labeling stage. The MagicMock returns the count of "real papers with a
+# non-empty abstract AND empty abstract_structure" — exactly the population
+# that the labeling gap describes.
+
+def test_abstract_labeling_gap_pass_under_threshold():
+    # 500 unlabeled papers < 1000 threshold -> OK
+    storage = MagicMock()
+    storage.count_papers_for_abstract_labeling.return_value = 500
+    r = dq.abstract_labeling_gap(storage)
+    assert r["passed"] is True
+    assert r["metadata"]["unlabeled_with_abstract"] == 500
+    assert r["metadata"]["threshold"] == dq.MAX_UNLABELED_ABSTRACT_BACKLOG
+    # Reuse guarantee: check invoked the reader's counter method with skip_existing=True
+    storage.count_papers_for_abstract_labeling.assert_called_once_with(skip_existing=True)
+
+
+def test_abstract_labeling_gap_pass_zero_backlog():
+    # Clean corpus: nothing unlabeled -> OK
+    storage = MagicMock()
+    storage.count_papers_for_abstract_labeling.return_value = 0
+    r = dq.abstract_labeling_gap(storage)
+    assert r["passed"] is True
+    assert r["metadata"]["unlabeled_with_abstract"] == 0
+
+
+def test_abstract_labeling_gap_warn_over_threshold():
+    # 2026-07-04-scale backlog: ~3M unlabeled -> WARN
+    storage = MagicMock()
+    storage.count_papers_for_abstract_labeling.return_value = 3_000_000
+    r = dq.abstract_labeling_gap(storage)
+    assert r["passed"] is False
+    assert r["metadata"]["unlabeled_with_abstract"] == 3_000_000
+    # Message points at the runbook so ops knows the fix
+    assert "post-bootstrap-catchup" in r["metadata"]["fix"]
+
+
+def test_abstract_labeling_gap_boundary_at_threshold():
+    # Exactly at threshold is still OK (<= comparison, mirrors other checks)
+    storage = MagicMock()
+    storage.count_papers_for_abstract_labeling.return_value = dq.MAX_UNLABELED_ABSTRACT_BACKLOG
+    r = dq.abstract_labeling_gap(storage)
+    assert r["passed"] is True
+
+
+def test_abstract_labeling_gap_boundary_one_over_threshold():
+    storage = MagicMock()
+    storage.count_papers_for_abstract_labeling.return_value = dq.MAX_UNLABELED_ABSTRACT_BACKLOG + 1
+    r = dq.abstract_labeling_gap(storage)
+    assert r["passed"] is False

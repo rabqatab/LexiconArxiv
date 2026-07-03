@@ -65,6 +65,7 @@
 | [Snapshot Rollback](./runbooks/snapshot-rollback.md) | 4 scenarios: P2 wrong promotions, P3 injection runaway, Qdrant corruption, embedding queue lost |
 | [Embed Drain Strategy](./runbooks/embed-drain-strategy.md) | Post-P3 playbook: 4-lever plan (parallelism, benchmark, P4-in-parallel, tier priority) to get search useful in hours, not days |
 | [Post-Bootstrap Catchup](./runbooks/post-bootstrap-catchup.md) | 7-step sequence to close every gap between the bulk chain (P1→P4) and incremental (labeling, keywords, refs, embed, similarity, graph, topics). Prevents silent quality degradation on the newly-added corpus. |
+| [vLLM Labeling Server](./runbooks/vllm-labeling.md) | Boot / monitor / restart / shutdown for the vLLM labeling backend used by `label-abstracts --backend vllm`. When to prefer over Ollama, sparkq idempotency-key discipline, troubleshooting matrix. |
 | [Dagster Cutover](./runbooks/dagster-cutover.md) | Migrating from bash orchestration to Dagster |
 
 ### Specs & Plans

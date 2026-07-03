@@ -74,12 +74,14 @@ Ollama's ceiling is workload-dependent. Measurements on GB10:
 | **Chat / labeling** (granite4.1:8b) | `-p 1` → `-p 8`: identical | ~750/hr | **Serial** — one request at a time on GPU. |
 | **Embedding** (qwen3-embedding:8b) | `-p 1`: 28K/hr → `-p 4`: 88K/hr → `-p 8`: 89K/hr | ~88K/hr ceiling | **Batched** — Ollama batches concurrent embed requests internally. |
 
-**Policy** (unified for bulk AND incremental):
+**Policy — Path B (finalized 2026-07-04)**: **Ollama chat is retired from every pipeline stage.** Ollama continues to serve search-time embedding and search-time HyDE; nothing else.
 
-1. **Chat/labeling → vLLM everywhere.** Ollama's 750/hr ceiling makes even incremental cycles slow (~150K papers/week is at the edge, 200 hours of pure labeling for a 152K-paper week). vLLM's ~30K+/hr keeps up with any realistic incremental volume and makes bulk feasible. Migration in progress ([`vllm-labeling-migration.md`](vllm-labeling-migration.md)). **Ollama backend remains supported as a fallback** — the `--backend ollama|vllm` flag lets a machine without vLLM serving still run labeling for small ad-hoc runs.
-2. **Embedding → Ollama stays.** Measured at 88K/hr — the ceiling is model-throughput, not concurrency. vLLM has ~2-3× additional headroom for embedding models but the migration cost isn't justified until embed drain becomes the sole bottleneck. Reassess after Phase 2 drain wall-clock.
-3. **Keyword extraction — Ollama-optional today, vLLM-first if enabled.** Default is regex+KeyBERT (no LLM). If we ever want LLM keyword judge at bootstrap scale, use vLLM. Not on the critical path this quarter.
-4. **HyDE (query analyzer)** — search-time only, ~1 call per user query. Ollama is fine at this volume; no policy change.
+1. **Chat/labeling → vLLM everywhere.** Ollama's 750/hr ceiling makes even incremental cycles slow (a 152K-paper week takes 200+ hours of pure labeling). vLLM's ~30K+/hr keeps up with any realistic incremental volume and makes bulk feasible. Migration in progress ([`vllm-labeling-migration.md`](vllm-labeling-migration.md)). **Ollama backend is preserved as a fallback in the CLI** (`--backend ollama`) for dev laptops without a GPU, but no production incremental cycle should use it.
+2. **Embedding → Ollama stays (bulk + incremental + search).** Measured at 88K/hr batched (`-p 4+`, GB10). Vector-space integrity is critical for search recall: query embeddings AND stored corpus embeddings must come from the same serving stack to guarantee cosine consistency. Path A (vLLM embedding for incremental, Ollama for search) was rejected because it would fork the vector space along the incremental frontier — silent recall degradation is an unacceptable risk.
+3. **Keyword LLM (`--llm`, `--judge` flags on `extract-keywords`) → deprecated.** Default remains regex+KeyBERT (no LLM at all). If we ever want LLM keyword quality, add it via vLLM only. The `--llm/--judge` flags stay in the CLI for backward compatibility but the incremental runbook forbids them.
+4. **HyDE (query analyzer) → Ollama stays (search-time only).** ~1 call per user query, ~10K/week. Ollama's serial chat throughput is irrelevant at this volume. Keeping HyDE on Ollama avoids requiring the vLLM server to be up during search — search availability is decoupled from labeling-cycle scheduling.
+
+**MCP-level implication (verified 2026-07-04):** the default `search_papers` path (HyDE off in the shipped `RetrievalConfig`) touches only Ollama embed + Qdrant; ~400-600 ms total against the 5 s handler budget. If HyDE is ever enabled, the ~2-5 s Ollama chat call still fits under the 5 s budget for the same low-volume reason.
 
 ---
 

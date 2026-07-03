@@ -64,8 +64,14 @@ def source_not_silently_zero_check() -> AssetCheckResult:
     return _result(dq.source_not_silently_zero())
 
 
+@asset_check(asset="label_abstracts", name="abstract_labeling_gap",
+             description="Real papers with abstract but no abstract_structure (warn-only, 2026-07-04 gap signal)")
+def abstract_labeling_gap_check() -> AssetCheckResult:
+    return _result(dq.abstract_labeling_gap())
+
+
 ALL_CHECKS = [
     doi_papers_have_refs_check, abstract_coverage_check, embedding_coverage_check,
     graph_metrics_stored_check, cluster_coverage_check, real_papers_have_titles_check,
-    source_not_silently_zero_check,
+    source_not_silently_zero_check, abstract_labeling_gap_check,
 ]
