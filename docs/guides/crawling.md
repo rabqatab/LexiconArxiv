@@ -1140,16 +1140,16 @@ Without keywords, these queries rely solely on title/abstract text matching.
 # Check statistics first
 uv run python -m src.cli.core_collect keyword-stats
 
-# LLM-first pipeline (recommended)
-uv run python -m src.cli.core_collect extract-keywords --llm --judge
-
-# Preview extraction (dry run)
-uv run python -m src.cli.core_collect extract-keywords --llm --judge --dry-run --limit 10
-
-# Fallback only: regex + KeyBERT (no LLM)
+# Production default (Path B, 2026-07-04): regex + KeyBERT, no LLM.
+# --llm / --judge are Ollama-only and hit the 750 papers/hr serial-chat
+# ceiling; do not use at bulk scale. See
+# docs/design/bulk-vs-incremental-audit.md §Ollama→vLLM policy.
 uv run python -m src.cli.core_collect extract-keywords
 
-# Regex only (faster, no ML model)
+# Preview
+uv run python -m src.cli.core_collect extract-keywords --dry-run --limit 10
+
+# Regex only (fastest, no ML model)
 uv run python -m src.cli.core_collect extract-keywords --no-keybert
 
 # Limit for testing
@@ -1218,8 +1218,8 @@ uv run python -m src.cli.core_collect enrich-10-code-repos --parallel 10
 uv run python -m src.cli.core_collect enrich-11-code-repos-via-grobid --parallel 5
 uv run python -m src.cli.core_collect enrich-12-code-repos-via-github --batch-size 50
 
-# 7. Extract keywords (for BM25 search)
-uv run python -m src.cli.core_collect extract-keywords --llm --judge
+# 7. Extract keywords (for BM25 search) — regex + KeyBERT, no LLM at bulk scale.
+uv run python -m src.cli.core_collect extract-keywords
 ```
 
 ---

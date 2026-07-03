@@ -422,6 +422,25 @@ lexiconarxiv/
 
 ## Recent Updates
 
+### v0.13.3 (Jul 2026) — Labeling gap + vLLM migration (Path B) + pipeline audit
+
+The 2026-07-04 verification revealed that **P2-promoted (~940K) and P3-injected (~2M+) papers all lack `abstract_structure`** — no snapshot bootstrap phase runs abstract labeling, and nobody had noticed. Downstream: default MCP search's multi-vector prefetch collapses to a single dense signal on 90% of the post-bootstrap corpus. We fixed both the immediate problem and the class-of-problem that hid it.
+
+- **Bulk-vs-incremental audit** ([`docs/design/bulk-vs-incremental-audit.md`](docs/design/bulk-vs-incremental-audit.md)) systematically mapped every incremental pipeline step against the bulk chain and surfaced **7 hidden gaps**: labeling (known), embed drain (known), reference resolution (new), similarity graph (new), citation graph analysis (new), keyword extraction (new), topic clustering (new).
+- **Post-bootstrap catchup runbook** ([`docs/runbooks/post-bootstrap-catchup.md`](docs/runbooks/post-bootstrap-catchup.md)) — 7-step sequence with exact sparkq commands, dependencies, verify+rollback for each gap. Bootstrap is no longer "done at P4"; this runbook is the required follow-up.
+- **Ollama → vLLM (Path B)**: Ollama chat is retired from every pipeline stage. Measurements — Ollama labeling caps at ~750 papers/hr (serial-chat GPU pipeline, zero benefit from concurrency); Ollama embedding stays at ~88K/hr (batched internally). vLLM handles all chat (labeling); Ollama continues to serve embedding (bulk + incremental + search-time query embed) and search-time HyDE. Vector-space integrity for search recall was the deciding factor over any pipeline-side speedup.
+- **vLLM labeling backend** (`src/core/labeling/vllm.py`) — mirror of `OllamaAbstractLabeler` over vLLM's OpenAI-compatible API with `guided_json` enforcement of the same `SentenceLabels` schema. CLI: `label-abstracts --backend ollama|vllm`. Sparkq launcher: [`scripts/labeling/serve_vllm.sh`](scripts/labeling/serve_vllm.sh). Model: `ibm-granite/granite-4.1-8b` (same family as Ollama default).
+- **Quality gate** ([`scripts/labeling/eval_labeling_quality.py`](scripts/labeling/eval_labeling_quality.py)) — 60-paper baseline-vs-candidate agreement eval (Jaccard mean + per-role micro-F1). Pass condition: ≥0.85 agreement AND ≥55/60 schema-valid on both backends. JSON to stdout, graceful failure never surfaces as a traceback.
+- **vLLM ops runbook** ([`docs/runbooks/vllm-labeling.md`](docs/runbooks/vllm-labeling.md)) — boot / healthcheck / restart / troubleshoot / shutdown via sparkq. Rule of thumb: if Ollama at 750/hr would take under an hour, keep Ollama; everything else → vLLM.
+- **DQ warn-check** for the labeling gap — `abstract_labeling_gap` in `src/core/pipeline/dq.py`, wired into the `label_abstracts` Dagster asset and the `data-quality` CLI. WARNs when >1000 real papers have `abstract` but no `abstract_structure`. Metadata carries the runbook pointer so ops knows the fix without paging code.
+- **Priority-tier drain** — `embed-papers --priority-tier N` for two-phase embed (tier 0/1 first, then everything else) so search becomes useful on the hot subset within hours instead of days. 10 L3 crash-safety tests lock in the invariants of the 2026-06-30 663K-loss incident under the new priority filter path.
+- **Embed drain strategy runbook** ([`docs/runbooks/embed-drain-strategy.md`](docs/runbooks/embed-drain-strategy.md)) — 4-lever plan (parallelism, benchmark, P4-in-parallel, tier priority) + explicit "do NOT" list. Benchmark helper: [`scripts/embedding/benchmark_drain.sh`](scripts/embedding/benchmark_drain.sh).
+- **[gpu] extra** in `pyproject.toml` — installs vLLM + xgrammar for the labeling server; base install unchanged for non-GPU hosts.
+- **Docs sweep**: `docs/pipelines/abstract_labeling.md`, `docs/pipelines/keyword_extraction.md`, `docs/guides/crawling.md` updated for Path B (vLLM backend documented, `--llm --judge` explicitly deprecated at bulk scale, historical Gemini refs cleared). `.gitignore` extended to silence local scratch (`poc_*.py`, `audit_*.py`, `run_complete_chain_*.sh`).
+- **Overhaul plan** ([`docs/refactoring/2026-07-04-code-overhaul-plan.md`](docs/refactoring/2026-07-04-code-overhaul-plan.md)) — waves of cleanup queued for the post-bootstrap stability window: DQ registry, CLI reorg, storage layer consolidation, vector schema versioning, dep prune, deprecation removals. Executes on the same trigger as the ponytail audit (corpus stable ≥ 1 week AND bootstrap complete).
+
+Tests: 417 → 419+ (+2 net after the DQ check tests; older MCP additions still in place). Zero regressions across the full suite.
+
 ### v0.13.2 (Jul 2026) — MCP hardening wave (post-2026-07-03 incident)
 
 Five commits landed the day of the [2026-07-03 incident](docs/incidents/2026-07-03-mcp-search-endpoints-broken.md) postmortem, installing smoke detectors along the failure surfaces the incident exposed. Test count 382 → 417 (+35), MCP subtree 9 → 29 tests, 0 regressions.

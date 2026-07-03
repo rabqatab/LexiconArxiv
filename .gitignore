@@ -78,3 +78,17 @@ __marimo__/
 .serena/
 .playwright-mcp/
 *.png
+
+# Local scratch: PoC / audit / one-off run scripts stay untracked per the
+# "research outputs stay local" convention (see docs). If a script graduates
+# to production, drop it under scripts/ instead — nothing under scripts/ is
+# ignored by these patterns.
+poc_*.py
+audit_*.py
+run_complete_chain_*.sh
+*.local.py
+
+# Local benchmark / eval outputs — reproducible via the scripts, not artifacts
+quality-eval*.json
+embed-bench*.json
+labeling-bench*.json

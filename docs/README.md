@@ -75,6 +75,7 @@
 | [Snapshot Utilization Design](./superpowers/specs/2026-06-21-snapshot-utilization-design.md) | 5-plan architecture for OpenAlex snapshot bootstrap + live mode |
 | [Plan TODO](./plans/TODO.md) | Live backlog and deferred items |
 | [Ponytail Audit (2026-06-24)](./refactoring/2026-06-24-ponytail-audit.md) | Over-engineering audit — ~1800 lines / 4 deps removable, deferred until post-bootstrap |
+| [Code Overhaul Plan (2026-07-04)](./refactoring/2026-07-04-code-overhaul-plan.md) | Post-labeling-gap plan: 5 waves (registries, backend abstraction, vector schema migration, deprecation removals, test reorg). Deferred to the same trigger as the ponytail audit; sibling doc. |
 
 ### Incidents
 
@@ -213,6 +214,7 @@ Infra:          Docker (Qdrant, GROBID) / Kubernetes (optional)
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.13.3 | Jul 2026 | Labeling gap + vLLM migration (Path B) + pipeline audit: bulk-vs-incremental systematic audit revealed 7 hidden gaps (labeling/keywords/refs/embed/similarity/graph/topics); post-bootstrap catchup runbook; Ollama chat retired from pipelines (vLLM primary via `ibm-granite/granite-4.1-8b`), Ollama continues for embedding + search-time HyDE (vector-space integrity); vLLM labeling backend + CLI flag + sparkq launcher + ops runbook; 60-paper quality gate script; `abstract_labeling_gap` DQ warn-check; `embed-papers --priority-tier` for two-phase drain; drain strategy runbook + benchmark script; `[gpu]` extra; docs sweep across abstract_labeling/keyword_extraction/crawling; code overhaul plan queued |
 | 0.13.2 | Jul 2026 | MCP hardening wave after 2026-07-03 incident: `get_corpus_stats` top-N venue cap (1.6MB→<10KB), per-handler `asyncio.wait_for` timeout budgets (5s default + overrides), `get_mcp_version` tool for cross-session stale-subprocess detection, extract `drain_snapshot_queue()` + 6 L3 crash-safety tests, SearchService test fixture rebuilt from `ALL_DENSE_VECTORS` (schema drift fix); +35 tests (382→417), new [MCP reference doc](./reference/mcp-server.md) |
 | 0.13.1 | Jun 2026 | P2 perf hardening: `ensure_identifier_indices()` (~250x scroll speedup), `--min-cites-per-year` age-normalized quality gate, get_payload alias hotfix + compat regression test |
 | 0.13.0 | Jun 2026 | Snapshot Utilization System (5 plans, 47+ commits): 4-phase bootstrap (metadata fill / stub promotion / gap injection / external_cited_by) + live mode (daily OpenAlex API delta) + 9 CLIs + 5 Dagster assets + 3 dormant schedules + 88 unit/12 integration tests |

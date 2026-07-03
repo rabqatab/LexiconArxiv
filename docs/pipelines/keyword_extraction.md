@@ -27,23 +27,16 @@ This document describes the keyword/acronym extraction pipeline for papers in th
 
 ### 2.1 Extract Keywords
 
+**Current production policy (Path B, 2026-07-04):** run without `--llm` / `--judge`. The LLM keyword flags are Ollama-only and share the ~750 papers/hr serial-chat ceiling that made Ollama labeling infeasible at bootstrap scale. Default regex + KeyBERT is fast, CPU-only, and covers 95%+ of search relevance in practice. If we ever want LLM-refined keyword extraction at bulk scale, it goes through vLLM (parallel to how [`vllm-labeling-migration.md`](../design/vllm-labeling-migration.md) handles labeling) — not through Ollama.
+
 ```bash
-# LLM-first extraction with Gemini (primary) + fallback: regex + KeyBERT
-uv run python -m src.cli.core_collect extract-keywords --llm --judge
-
-# LLM-first with Ollama (local)
-uv run python -m src.cli.core_collect extract-keywords --llm --judge --llm-backend ollama
-
-# LLM-first, fallback: regex only (no KeyBERT)
-uv run python -m src.cli.core_collect extract-keywords --llm --judge --no-keybert
-
-# Fallback-only: regex + KeyBERT (no LLM)
+# Production (default): regex + KeyBERT fallback, no LLM
 uv run python -m src.cli.core_collect extract-keywords
 
-# Regex only (fastest, no model loading)
+# Fastest: regex only (no model loading)
 uv run python -m src.cli.core_collect extract-keywords --no-keybert
 
-# Better embedding model for KeyBERT fallback
+# Better embedding model for KeyBERT
 uv run python -m src.cli.core_collect extract-keywords --embedding-model all-mpnet-base-v2
 
 # Preview without saving
@@ -54,10 +47,18 @@ uv run python -m src.cli.core_collect extract-keywords --force
 
 # Limit number of papers to process
 uv run python -m src.cli.core_collect extract-keywords --limit 1000
-
-# Adjust batch size
-uv run python -m src.cli.core_collect extract-keywords --batch-size 200
 ```
+
+**Deprecated (do NOT use in production):**
+```bash
+# --llm / --judge are Ollama chat — ~750 papers/hr ceiling (measured 2026-07-04).
+# Kept in the CLI for backward compatibility only. Bootstrap-scale runs must NOT
+# enable them; see docs/design/bulk-vs-incremental-audit.md §Ollama→vLLM policy.
+uv run python -m src.cli.core_collect extract-keywords --llm --judge          # slow, not for production
+uv run python -m src.cli.core_collect extract-keywords --llm --llm-backend ollama  # ditto
+```
+
+Gemini backend was removed in v0.12 (2026-06). References to `--llm-backend gemini` in older docs / scripts are historical.
 
 ### 2.2 View Statistics
 

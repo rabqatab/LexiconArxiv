@@ -31,22 +31,31 @@ This document describes the abstract sentence labeling pipeline for papers in th
 
 ### 2.1 Label Abstracts
 
+**Backend selection** (Path B, 2026-07-04):
+
+| Backend | When | Why |
+|---|---|---|
+| `--backend vllm` (**production default**) | Any run >5K papers | 30K+ papers/hr via continuous batching; the only feasible option at bootstrap scale. Requires the vLLM server up — see [`docs/runbooks/vllm-labeling.md`](../runbooks/vllm-labeling.md). |
+| `--backend ollama` (fallback) | Dev laptop, ad-hoc <500 papers | 750 papers/hr serial. Works without a GPU labeling server. |
+
 ```bash
-# Dry run with Gemini (default)
-uv run python -m src.cli.core_collect label-abstracts --dry-run --limit 5
+# Production default — vLLM backend (server must be running)
+uv run python -m src.cli.core_collect label-abstracts --backend vllm
 
-# Dry run with Ollama (local)
-uv run python -m src.cli.core_collect label-abstracts --llm-backend ollama --dry-run --limit 5
+# Dry run
+uv run python -m src.cli.core_collect label-abstracts --backend vllm --dry-run --limit 5
 
-# Label all unlabeled papers
-uv run python -m src.cli.core_collect label-abstracts --limit 100
+# Label a bounded batch
+uv run python -m src.cli.core_collect label-abstracts --backend vllm --limit 100
 
-# Re-label all papers (overwrite existing)
-uv run python -m src.cli.core_collect label-abstracts --force --limit 50
+# Re-label everything (overwrite existing abstract_structure)
+uv run python -m src.cli.core_collect label-abstracts --backend vllm --force --limit 50
 
-# Custom model
-uv run python -m src.cli.core_collect label-abstracts --gemini-model gemini-2.5-pro
+# Fallback: Ollama (dev use, small volumes)
+uv run python -m src.cli.core_collect label-abstracts --backend ollama --dry-run --limit 5
 ```
+
+Gemini backend was removed in v0.12 (2026-06). If you find references to `--llm-backend gemini` in older docs or scripts, they are historical.
 
 ---
 
@@ -94,24 +103,24 @@ clean = abstract.replace("\\n", " ")        # Literal \n from arXiv
 clean = re.sub(r"\s+", " ", clean).strip()   # Collapse all whitespace
 ```
 
-### 3.3 Gemini Backend
+### 3.3 vLLM Backend (production)
 
-- Uses `google-genai` SDK with `response_schema=SentenceLabels`
-- Structured JSON output via `response_mime_type="application/json"`
-- Default model: `gemini-3-flash-preview`
-- Supports multiple API keys (comma-separated) for round-robin rotation
-- Rate limiting: `asyncio.Semaphore` (max_concurrent=5) + configurable delay
-- Retry with exponential backoff (max 5 attempts)
-- Temperature: 0.1
+- Uses `httpx.AsyncClient` POST to `/v1/chat/completions` (OpenAI-compatible).
+- Constrained JSON via the `guided_json` extra-body param → the same `SentenceLabels` Pydantic schema Ollama enforces via `format`.
+- Default model: `ibm-granite/granite-4.1-8b` (chosen for family-equivalence with the Ollama default so quality drift is minimized — see [`docs/design/vllm-labeling-migration.md`](../design/vllm-labeling-migration.md) §Quality gate).
+- Concurrency: **64 in-flight requests by default** — vLLM's continuous batching means high `max_concurrent` is a *feature*, not an OOM risk.
+- Throughput: **~30,000+ papers/hr** on GB10 (design target; verified per-corpus at production start).
+- Serving: `scripts/labeling/serve_vllm.sh` via sparkq. Operations runbook: [`docs/runbooks/vllm-labeling.md`](../runbooks/vllm-labeling.md).
 
-### 3.4 Ollama Backend
+### 3.4 Ollama Backend (fallback)
 
-- Uses `httpx.AsyncClient` POST to `/api/chat`
-- Passes `format=SentenceLabels.model_json_schema()`
-- Default model: `llama3.1:8b`
-- Concurrency: 1 (local model)
-- Timeout: 180s (configurable via `--ollama-timeout`)
-- Retry with exponential backoff (max 5 attempts)
+- Uses `httpx.AsyncClient` POST to `/api/chat`.
+- Passes `format=SentenceLabels.model_json_schema()`.
+- Default model: `granite4.1:8b` (selected by the 2026-06-19 60-paper eval — see [`docs/reference/labeling-llm-comparison.md`](../reference/labeling-llm-comparison.md)).
+- Concurrency: **1 effective** (Ollama serializes chat requests on the single GPU regardless of client-side `max_concurrent`; measured 2026-07-04: `-p 1` = `-p 8` = 750 papers/hr).
+- Timeout: 180s (configurable via `--ollama-timeout`).
+- Retry with exponential backoff (max 5 attempts).
+- **Use only for dev / ad-hoc small batches** — production incremental cycles at scale must use vLLM per the [`bulk-vs-incremental-audit.md`](../design/bulk-vs-incremental-audit.md) policy.
 
 ---
 
@@ -191,7 +200,7 @@ Note: Sentences can appear in multiple roles (multi-label classification). All s
 
 | Source Value | Meaning |
 |-------------|---------|
-| `"gemini"` | Gemini LLM labeling |
+| `"vllm"` | vLLM chat completion via `guided_json` (production default) |
 | `"ollama"` | Ollama LLM labeling |
 | `"none"` | Labeling failed |
 
@@ -208,7 +217,7 @@ Note: Sentences can appear in multiple roles (multi-label classification). All s
     "result": ["..."],
     "contribution": ["..."]
   },
-  "abstract_structure_source": "gemini"
+  "abstract_structure_source": "vllm"
 }
 ```
 
@@ -220,12 +229,14 @@ Note: Sentences can appear in multiple roles (multi-label classification). All s
 |--------|---------|-------------|
 | `--dry-run` | off | Preview without saving |
 | `--limit N` | all | Process max N papers |
-| `--batch-size N` | 100 | Papers per batch |
+| `--batch-size N` | 500 | Papers per batch |
 | `--force` | off | Re-label papers with existing abstract_structure |
-| `--llm-backend` | `gemini` | LLM backend: `gemini` or `ollama` |
-| `--gemini-model` | `gemini-3-flash-preview` | Gemini model name |
-| `--ollama-model` | `llama3.1:8b` | Ollama model name |
+| `--backend` | `ollama` | LLM backend: `ollama` (fallback) or `vllm` (production default at scale) |
+| `--ollama-model` | `granite4.1:8b` | Ollama model (kept for legacy fallback runs) |
 | `--ollama-timeout` | `180` | Ollama request timeout in seconds |
+| `--vllm-model` | `ibm-granite/granite-4.1-8b` | Model repo name; must match `vllm serve <model>` argument |
+| `--vllm-base-url` | `http://localhost:8000` | vLLM OpenAI-compatible endpoint |
+| `--vllm-max-concurrent` | `64` | Concurrent in-flight requests to vLLM |
 
 ---
 
@@ -233,10 +244,10 @@ Note: Sentences can appear in multiple roles (multi-label classification). All s
 
 | Variable | Description |
 |----------|-------------|
-| `GEMINI_API_KEYS` | Gemini API key(s), comma-separated for round-robin (required for `--llm-backend gemini`) |
-| `GEMINI_API_KEY` | Fallback for `GEMINI_API_KEYS` (singular) |
-| `GOOGLE_API_KEY` | Fallback (legacy) |
 | `OLLAMA_BASE_URL` | Ollama server URL (default: `http://localhost:11434`) |
+| `HF_HOME` | HuggingFace cache root — set to `/mnt/nfs/ssd1/huggingface_cache` when serving vLLM |
+
+The Gemini backend was removed in v0.12 (2026-06); `GEMINI_API_KEYS` / `GOOGLE_API_KEY` are no longer read.
 
 ---
 
@@ -248,8 +259,8 @@ src/core/labeling/
 ├── llm_base.py          # SentenceLabel/SentenceLabels/AbstractStructure models,
 │                        #   prompts, format_numbered_sentences(),
 │                        #   build_abstract_structure(), BaseAbstractLabeler ABC
-├── gemini.py            # GeminiAbstractLabeler (google-genai SDK, round-robin)
-├── ollama.py            # OllamaAbstractLabeler (httpx REST API)
+├── ollama.py            # OllamaAbstractLabeler (httpx REST API, granite4.1:8b)
+├── vllm.py              # VLLMAbstractLabeler (OpenAI-compatible + guided_json)
 └── labeler.py           # AbstractLabeler orchestrator (pysbd split + LLM + mapping)
 ```
 
