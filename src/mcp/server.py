@@ -12,7 +12,12 @@ from qdrant_client.http import models as qdrant_models
 from src.core.search.service import SearchService
 from src.core.storage.base import QdrantStorage
 from src.core.search.research import research_topic
-from src.mcp.formatters import format_paper_detail, format_research_results, format_search_results
+from src.mcp.formatters import (
+    format_corpus_stats,
+    format_paper_detail,
+    format_research_results,
+    format_search_results,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -139,11 +144,22 @@ async def list_tools() -> list[Tool]:
             name="get_corpus_stats",
             description=(
                 "Get summary statistics about the LexiconArxiv corpus: total papers, "
-                "venue breakdown, and data quality metrics."
+                "distinct-venue count, and the top-N venues by paper count with a "
+                "long-tail summary. Response is bounded — the corpus has thousands "
+                "of unique venues, so full dumps used to blow past 1MB."
             ),
             inputSchema={
                 "type": "object",
-                "properties": {},
+                "properties": {
+                    "top_venues": {
+                        "type": "integer",
+                        "description": (
+                            "Number of top venues to list by paper count "
+                            "(default 30, hard-capped at 200)."
+                        ),
+                        "default": 30,
+                    },
+                },
             },
         ),
         Tool(
@@ -490,28 +506,16 @@ async def _handle_get_similar_papers(arguments: dict) -> list[TextContent]:
 
 async def _handle_get_corpus_stats(arguments: dict) -> list[TextContent]:
     storage = _get_storage()
+    top_venues = min(int(arguments.get("top_venues", 30)), 200)
 
-    total = storage.count_papers()
-    real = storage.count_real_papers()
-    stubs = storage.count_stubs()
-    venue_stats = storage.get_venue_stats()
-
-    lines = [
-        "# LexiconArxiv Corpus Statistics\n",
-        f"**Total points:** {total}",
-        f"**Real papers:** {real}",
-        f"**Stub papers:** {stubs}",
-        "",
-        "## Papers by Venue\n",
-    ]
-
-    # Sort venues by count descending
-    for venue, count in sorted(venue_stats.items(), key=lambda x: -x[1]):
-        lines.append(f"- {venue}: {count}")
-
-    lines.append("")
-
-    return [TextContent(type="text", text="\n".join(lines))]
+    text = format_corpus_stats(
+        total=storage.count_papers(),
+        real=storage.count_real_papers(),
+        stubs=storage.count_stubs(),
+        venue_stats=storage.get_venue_stats(),
+        top_venues=top_venues,
+    )
+    return [TextContent(type="text", text=text)]
 
 
 async def _handle_expand_search(arguments: dict) -> list[TextContent]:

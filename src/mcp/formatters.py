@@ -218,6 +218,51 @@ def format_paper_detail(paper: dict) -> str:
     return "\n".join(lines)
 
 
+def format_corpus_stats(
+    *,
+    total: int,
+    real: int,
+    stubs: int,
+    venue_stats: dict[str, int],
+    top_venues: int = 30,
+) -> str:
+    """Format corpus statistics with a bounded venue list.
+
+    Full dumps blow the MCP response past 1.6MB / 38K lines on a 3.6M-point
+    corpus with ~thousands of unique venues (2026-07-03 incident). Cap at
+    top-N by count and report the tail as a single summary line so callers
+    still see the long-tail shape without paying to render it.
+    """
+    n_venues = len(venue_stats)
+    top_venues = max(0, min(top_venues, n_venues))
+    sorted_venues = sorted(venue_stats.items(), key=lambda x: -x[1])
+
+    lines = [
+        "# LexiconArxiv Corpus Statistics\n",
+        f"**Total points:** {total:,}",
+        f"**Real papers:** {real:,}",
+        f"**Stub papers:** {stubs:,}",
+        f"**Distinct venues:** {n_venues:,}",
+        "",
+    ]
+
+    if top_venues > 0:
+        lines.append(f"## Top {top_venues} Venues (of {n_venues:,})\n")
+        for venue, count in sorted_venues[:top_venues]:
+            lines.append(f"- {venue}: {count:,}")
+
+    remaining = n_venues - top_venues
+    if remaining > 0:
+        tail_sum = sum(c for _, c in sorted_venues[top_venues:])
+        lines.append("")
+        lines.append(
+            f"_…and {remaining:,} more venues covering {tail_sum:,} papers._"
+        )
+
+    lines.append("")
+    return "\n".join(lines)
+
+
 def format_research_results(data: dict) -> str:
     """Format research_topic() output as markdown for LLM consumption.
 
