@@ -2,10 +2,63 @@
 
 import asyncio
 import sys
+from typing import Callable
 
 import click
 
 from src.cli._logging import logger
+
+
+async def drain_snapshot_queue(
+    storage,
+    embedder,
+    *,
+    embed_batch_size: int = 64,
+    chunk_size: int = 500,
+    echo: Callable[[str], None] = print,
+) -> int:
+    """Drain the snapshot-queued point IDs into embedded vectors.
+
+    Uses explicit-ack semantics (peek_all + remove) to survive consumer
+    crashes without losing work — see incident 2026-06-30 where a bad
+    drain() destroyed 663K entries in 3 seconds. Chunking is doubled up:
+    Qdrant retrieve() by IDs blows past request body limits at ~1K items,
+    and we ack per-chunk so a crash preserves work-in-progress on the
+    remaining chunks.
+
+    Returns the number of papers successfully embedded.
+    """
+    from src.core.snapshot import embedding_queue
+
+    queued = embedding_queue.peek_all()
+    if not queued:
+        return 0
+
+    echo(f"Consuming {len(queued)} points from snapshot queue...")
+    total_embedded = 0
+    for i in range(0, len(queued), chunk_size):
+        chunk = queued[i:i + chunk_size]
+        pids = [pid for pid, _ in chunk]
+        records = storage.client.retrieve(
+            collection_name=storage.collection_name,
+            ids=pids,
+            with_payload=["title", "abstract", "abstract_structure"],
+            with_vectors=False,
+        )
+        papers = [(str(r.id), r.payload or {}) for r in records]
+        if papers:
+            count = await embedder.embed_and_upsert_batch(
+                papers=papers, storage=storage,
+                embed_batch_size=embed_batch_size,
+            )
+            total_embedded += count
+        # ACK only after the embed+upsert has returned successfully.
+        # If we crash before this line, `chunk` remains in the queue on
+        # the next `peek_all()`.
+        embedding_queue.remove(chunk)
+        if total_embedded and total_embedded % 1000 == 0:
+            echo(f"  consumed {total_embedded} from queue (of {len(queued)} pending)")
+    return total_embedded
 
 
 def register_commands(cli: click.Group):
@@ -124,35 +177,12 @@ def register_commands(cli: click.Group):
                 offset = None
 
                 if consume_snapshot_queue:
-                    from src.core.snapshot import embedding_queue
-                    queued = embedding_queue.peek_all()
-                    if queued:
-                        click.echo(f"Consuming {len(queued)} points from snapshot queue...")
-                        # Chunk both the Qdrant retrieve() and the queue ack —
-                        # 663K-item retrieves blow past Qdrant's request body
-                        # limit, and acking per-chunk preserves work-in-progress
-                        # on consumer crash. See incident 2026-06-30.
-                        CHUNK = 500
-                        for i in range(0, len(queued), CHUNK):
-                            chunk = queued[i:i + CHUNK]
-                            pids = [pid for pid, _ in chunk]
-                            records = storage.client.retrieve(
-                                collection_name=storage.collection_name,
-                                ids=pids,
-                                with_payload=["title", "abstract", "abstract_structure"],
-                                with_vectors=False,
-                            )
-                            papers = [(str(r.id), r.payload or {}) for r in records]
-                            if papers:
-                                queue_embedded = await embedder.embed_and_upsert_batch(
-                                    papers=papers, storage=storage,
-                                    embed_batch_size=embed_batch_size,
-                                )
-                                total_embedded += queue_embedded
-                            # ACK only after successful per-chunk embed+upsert
-                            embedding_queue.remove(chunk)
-                            if total_embedded and total_embedded % 1000 == 0:
-                                click.echo(f"  consumed {total_embedded} from queue (of {len(queued)} pending)")
+                    total_embedded += await drain_snapshot_queue(
+                        storage=storage,
+                        embedder=embedder,
+                        embed_batch_size=embed_batch_size,
+                        echo=click.echo,
+                    )
 
                 while True:
                     # skip_embedded=True uses HasVectorCondition to skip
