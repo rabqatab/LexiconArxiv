@@ -51,7 +51,9 @@ sparkq's real-memory admission gate rounds up the vLLM footprint from `--gpu-mem
 
 Client-side: `label-abstracts --backend vllm --vllm-base-url http://localhost:8000`.
 
-**Not systemd** — the load is bootstrap-shaped, not steady-state. After bootstrap, incremental labeling (~5K papers/week) is small enough that Ollama's serial throughput is fine, and running two labeling backends indefinitely is complexity we don't need.
+**Not systemd** — the load is bootstrap-shaped, but even incremental cycles now prefer vLLM (see next paragraph). Deploying via sparkq lets us start/stop the vLLM job around each labeling run without keeping a service alive between them.
+
+**Policy update (2026-07-04, per user requirement)**: vLLM is the **default backend for all labeling — both bulk AND incremental**. The earlier draft said Ollama was fine for incremental; that was wrong. Ollama's 750/hr ceiling makes even a 152K-paper incremental week ~200 hours of pure labeling. Ollama remains supported via `--backend ollama` for machines without the GPU/vLLM setup (e.g. dev laptops), but production incremental cycles must submit `serve_vllm.sh` via sparkq before running `label-abstracts`. See [`docs/design/bulk-vs-incremental-audit.md`](bulk-vs-incremental-audit.md) §Ollama→vLLM policy for the measurement-backed rationale and the workload-by-workload matrix (chat → vLLM, embedding → Ollama stays, etc.).
 
 ## Interface preservation
 

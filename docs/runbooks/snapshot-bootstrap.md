@@ -3,6 +3,14 @@
 Multi-day staged execution of the four snapshot passes against the local
 OpenAlex `works` snapshot. Spec: `docs/superpowers/specs/2026-06-21-snapshot-utilization-design.md`.
 
+> ⚠️ **Bootstrap alone is NOT enough.** P1→P4 populate ingestion-side payload
+> only. Every downstream stage the incremental pipeline runs — labeling,
+> keywords, references, embed, similarity, graph analysis, topic clusters —
+> is still missing on the new papers. After P4 completes, follow
+> [`post-bootstrap-catchup.md`](post-bootstrap-catchup.md) or the corpus
+> silently degrades on 90% of the newly-added ~2-4M papers. Full audit of
+> what's missing: [`docs/design/bulk-vs-incremental-audit.md`](../design/bulk-vs-incremental-audit.md).
+
 ## Day 0 — pre-checks
 
 ```bash

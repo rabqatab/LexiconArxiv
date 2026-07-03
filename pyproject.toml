@@ -44,6 +44,15 @@ dev = [
     "respx>=0.21.0",
     "ruff>=0.1.0",
 ]
+# GPU serving stack — required only when running the vLLM labeling backend
+# (`label-abstracts --backend vllm` or `scripts/labeling/serve_vllm.sh`).
+# Deliberately optional to keep the base install lightweight on non-GPU
+# hosts. Install with `uv pip install -e ".[gpu]"` or omit; the Ollama
+# backend keeps working unchanged when this extra is absent.
+gpu = [
+    "vllm>=0.6.0",
+    "xgrammar>=0.1.0",  # constrained JSON decoding backend used by vLLM
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -64,6 +64,7 @@
 | [Snapshot Bootstrap](./runbooks/snapshot-bootstrap.md) | Day 0..11+ procedure for quarterly snapshot ingest (P1→P2→P3→P4 + Day 12+ live-mode enable) |
 | [Snapshot Rollback](./runbooks/snapshot-rollback.md) | 4 scenarios: P2 wrong promotions, P3 injection runaway, Qdrant corruption, embedding queue lost |
 | [Embed Drain Strategy](./runbooks/embed-drain-strategy.md) | Post-P3 playbook: 4-lever plan (parallelism, benchmark, P4-in-parallel, tier priority) to get search useful in hours, not days |
+| [Post-Bootstrap Catchup](./runbooks/post-bootstrap-catchup.md) | 7-step sequence to close every gap between the bulk chain (P1→P4) and incremental (labeling, keywords, refs, embed, similarity, graph, topics). Prevents silent quality degradation on the newly-added corpus. |
 | [Dagster Cutover](./runbooks/dagster-cutover.md) | Migrating from bash orchestration to Dagster |
 
 ### Specs & Plans
@@ -89,6 +90,7 @@
 | [Testing Strategy](./testing/strategy.md) | Test strategy and quality assurance |
 | [UX Design](./design/ux.md) | UI/UX design |
 | [vLLM Labeling Migration](./design/vllm-labeling-migration.md) | Post-2026-07-04 shift from Ollama-serial to vLLM-batched labeling for bootstrap-scale (3M papers). Model choice, quality gate, throughput gate, rollback. |
+| [Bulk vs Incremental Audit](./design/bulk-vs-incremental-audit.md) | Systematic mapping of every incremental pipeline step against the bulk chain — surfaces 7 hidden gaps (labeling, keywords, refs, embed, similarity, graph, topics) and codifies the Ollama→vLLM policy. Triggered by the 2026-07-04 labeling discovery. |
 
 ---
 
