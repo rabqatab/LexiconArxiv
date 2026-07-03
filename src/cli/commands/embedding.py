@@ -16,6 +16,7 @@ async def drain_snapshot_queue(
     embed_batch_size: int = 64,
     chunk_size: int = 500,
     echo: Callable[[str], None] = print,
+    priority_filter: Callable[[dict], bool] | None = None,
 ) -> int:
     """Drain the snapshot-queued point IDs into embedded vectors.
 
@@ -26,7 +27,16 @@ async def drain_snapshot_queue(
     and we ack per-chunk so a crash preserves work-in-progress on the
     remaining chunks.
 
-    Returns the number of papers successfully embedded.
+    Args:
+        priority_filter: If provided, only embed papers whose payload
+            passes filter(payload). Non-passing items stay unacked in the
+            queue for a follow-up drain call. Two-phase pattern:
+              ``drain(..., priority_filter=lambda p: (p.get("tier") or 99) <= 1)``
+              followed by ``drain(...)`` picks tier 0/1 first, everything
+              else after.
+
+    Returns:
+        Number of papers successfully embedded in this call.
     """
     from src.core.snapshot import embedding_queue
 
@@ -34,30 +44,66 @@ async def drain_snapshot_queue(
     if not queued:
         return 0
 
-    echo(f"Consuming {len(queued)} points from snapshot queue...")
+    label = "priority-filtered" if priority_filter else "all"
+    echo(f"Consuming {len(queued)} points from snapshot queue ({label})...")
     total_embedded = 0
+    total_skipped = 0
+    payload_fields = ["title", "abstract", "abstract_structure",
+                      "tier", "venue", "year", "cited_by_count"]
     for i in range(0, len(queued), chunk_size):
         chunk = queued[i:i + chunk_size]
         pids = [pid for pid, _ in chunk]
         records = storage.client.retrieve(
             collection_name=storage.collection_name,
             ids=pids,
-            with_payload=["title", "abstract", "abstract_structure"],
+            with_payload=payload_fields,
             with_vectors=False,
         )
-        papers = [(str(r.id), r.payload or {}) for r in records]
+
+        # Papers we intend to embed this chunk. When priority_filter is set,
+        # non-passing items stay unacked in the queue for a follow-up call.
+        selected_records = [
+            r for r in records
+            if priority_filter is None or priority_filter(r.payload or {})
+        ]
+        papers = [(str(r.id), r.payload or {}) for r in selected_records]
+
         if papers:
             count = await embedder.embed_and_upsert_batch(
                 papers=papers, storage=storage,
                 embed_batch_size=embed_batch_size,
             )
             total_embedded += count
-        # ACK only after the embed+upsert has returned successfully.
-        # If we crash before this line, `chunk` remains in the queue on
-        # the next `peek_all()`.
-        embedding_queue.remove(chunk)
+
+        # ACK after successful embed+upsert. Selection semantics:
+        #   - No filter → ack the whole chunk (matches missing-record
+        #     handling: retrieve() may skip deleted IDs but their queue
+        #     entries were live so we clear them anyway).
+        #   - With filter → ack only:
+        #       (a) records that PASSED the filter and got embedded, PLUS
+        #       (b) queue entries whose Qdrant record is missing (dead
+        #           payload, same handling as no-filter case).
+        #     Records that EXIST but were rejected by the filter stay in
+        #     the queue for the follow-up call.
+        if priority_filter is None:
+            ack_chunk = chunk
+        else:
+            selected_pids = {str(r.id) for r in selected_records}
+            retrieved_pids = {str(r.id) for r in records}
+            ack_chunk = [
+                (pid, src) for (pid, src) in chunk
+                if pid in selected_pids or pid not in retrieved_pids
+            ]
+            total_skipped += len(chunk) - len(ack_chunk)
+        embedding_queue.remove(ack_chunk)
+
         if total_embedded and total_embedded % 1000 == 0:
-            echo(f"  consumed {total_embedded} from queue (of {len(queued)} pending)")
+            echo(f"  consumed {total_embedded} from queue "
+                 f"(of {len(queued)} pending{', ' + str(total_skipped) + ' skipped' if total_skipped else ''})")
+
+    if total_skipped:
+        echo(f"Skipped {total_skipped} non-priority items — "
+             f"still in queue for a follow-up call.")
     return total_embedded
 
 
@@ -118,7 +164,12 @@ def register_commands(cli: click.Group):
     @click.option("--dry-run", is_flag=True, help="Count papers to embed without doing it")
     @click.option("--consume-snapshot-queue", is_flag=True,
                   help="Drain points queued by P2/P3 first; then fall through to the default scroll.")
-    def embed_papers(batch_size, embed_batch_size, concurrency, limit, resume, dry_run, consume_snapshot_queue):
+    @click.option("--priority-tier", type=int, default=None,
+                  help="Only embed queued papers with tier <= N (0=top, 1=extended). "
+                       "Non-matching items stay in queue for a follow-up call — lets "
+                       "search become useful on the highest-quality subset first.")
+    def embed_papers(batch_size, embed_batch_size, concurrency, limit, resume, dry_run,
+                     consume_snapshot_queue, priority_tier):
         """Embed paper abstracts with section-level + structured-abstract vectors.
 
         Generates up to 9 dense vectors per paper (abstract, structured-abstract,
@@ -177,11 +228,23 @@ def register_commands(cli: click.Group):
                 offset = None
 
                 if consume_snapshot_queue:
+                    if priority_tier is not None:
+                        max_tier = priority_tier
+
+                        def _tier_filter(payload: dict) -> bool:
+                            # Papers without a tier count as "low priority"
+                            # (99 > any real tier) so they wait for the
+                            # unfiltered follow-up drain.
+                            t = payload.get("tier")
+                            return t is not None and t <= max_tier
+                    else:
+                        _tier_filter = None
                     total_embedded += await drain_snapshot_queue(
                         storage=storage,
                         embedder=embedder,
                         embed_batch_size=embed_batch_size,
                         echo=click.echo,
+                        priority_filter=_tier_filter,
                     )
 
                 while True:

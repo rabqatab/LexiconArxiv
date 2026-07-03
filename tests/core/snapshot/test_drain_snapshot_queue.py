@@ -188,3 +188,133 @@ async def test_drain_acks_missing_records(isolated_queue):
     assert total == 3
     # But whole chunk acked — nothing left dangling
     assert embedding_queue.peek_all() == []
+
+
+# ---------------------------------------------------------------------------
+# priority_filter — tier-based two-phase drain (design D)
+# ---------------------------------------------------------------------------
+
+
+def _tier_le(max_tier: int):
+    """Match the CLI's tier filter.
+
+    Do NOT use ``(p.get("tier") or 99) <= max_tier`` — Python's ``0 or 99``
+    is 99 because 0 is falsy, so a tier-0 paper would be treated as
+    low-priority. The CLI uses this shape for the same reason.
+    """
+    def _f(p: dict) -> bool:
+        t = p.get("tier")
+        return t is not None and t <= max_tier
+    return _f
+
+
+@pytest.mark.asyncio
+async def test_drain_with_priority_filter_only_embeds_matching(isolated_queue):
+    """Records passing the filter get embedded; non-passing records
+    stay unacked in the queue for a follow-up drain call."""
+    for i in range(6):
+        embedding_queue.append(f"pid-{i}", "source")
+
+    # Half tier 0 (priority), half tier 2 (not priority)
+    storage = FakeStorage({
+        "pid-0": {"tier": 0}, "pid-1": {"tier": 0}, "pid-2": {"tier": 0},
+        "pid-3": {"tier": 2}, "pid-4": {"tier": 2}, "pid-5": {"tier": 2},
+    })
+    embedder = FakeEmbedder()
+
+    total = await drain_snapshot_queue(
+        storage=storage, embedder=embedder, chunk_size=10, echo=lambda _: None,
+        priority_filter=_tier_le(1),
+    )
+
+    assert total == 3
+    remaining_pids = {pid for pid, _ in embedding_queue.peek_all()}
+    assert remaining_pids == {"pid-3", "pid-4", "pid-5"}
+
+
+@pytest.mark.asyncio
+async def test_drain_two_phase_drains_everything(isolated_queue):
+    """The intended usage: priority pass first, then unfiltered pass.
+    Together every paper is embedded exactly once, priority-first order."""
+    for i in range(6):
+        embedding_queue.append(f"pid-{i}", "source")
+    storage = FakeStorage({
+        "pid-0": {"tier": 0}, "pid-1": {"tier": 0},
+        "pid-2": {"tier": 1}, "pid-3": {"tier": 1},
+        "pid-4": {"tier": 2}, "pid-5": {"tier": 2},
+    })
+    embedder = FakeEmbedder()
+
+    # Phase 1
+    n1 = await drain_snapshot_queue(
+        storage=storage, embedder=embedder, chunk_size=10, echo=lambda _: None,
+        priority_filter=_tier_le(1),
+    )
+    assert n1 == 4
+    assert {pid for pid, _ in embedding_queue.peek_all()} == {"pid-4", "pid-5"}
+
+    # Phase 2 (no filter)
+    n2 = await drain_snapshot_queue(
+        storage=storage, embedder=embedder, chunk_size=10, echo=lambda _: None,
+    )
+    assert n2 == 2
+    assert embedding_queue.peek_all() == []
+
+    # Order: priority processed first — batch 0 contains only tier<=1 pids
+    assert set(embedder.batches_embedded[0]) == {"pid-0", "pid-1", "pid-2", "pid-3"}
+    assert set(embedder.batches_embedded[1]) == {"pid-4", "pid-5"}
+
+
+@pytest.mark.asyncio
+async def test_priority_drain_still_acks_missing_records(isolated_queue):
+    """A queue entry whose Qdrant record has been deleted mustn't clog
+    the queue just because the filter can't inspect a nonexistent payload."""
+    for i in range(4):
+        embedding_queue.append(f"pid-{i}", "source")
+    # pid-1 and pid-3 have been deleted between queue-write and drain
+    storage = FakeStorage({
+        "pid-0": {"tier": 0},
+        "pid-2": {"tier": 2},
+    })
+    embedder = FakeEmbedder()
+
+    total = await drain_snapshot_queue(
+        storage=storage, embedder=embedder, chunk_size=10, echo=lambda _: None,
+        priority_filter=_tier_le(1),
+    )
+
+    assert total == 1  # only pid-0 embedded
+    # pid-1 and pid-3 (missing from Qdrant) are cleared; pid-2 (tier=2,
+    # exists but low priority) stays.
+    remaining_pids = {pid for pid, _ in embedding_queue.peek_all()}
+    assert remaining_pids == {"pid-2"}
+
+
+@pytest.mark.asyncio
+async def test_priority_drain_survives_mid_batch_crash(isolated_queue):
+    """Crash-safety property from the base drain also holds under
+    priority filtering — acked items are gone; the whole crashed chunk
+    (both filter-passing AND filter-skipped items) stays in the queue."""
+    for i in range(10):
+        embedding_queue.append(f"pid-{i}", "source")
+    storage = FakeStorage({
+        # Chunk 1 (pid-0..4): all tier 0 → all embed, batch 0 succeeds.
+        **{f"pid-{i}": {"tier": 0} for i in range(5)},
+        # Chunk 2 (pid-5..9): 3 pass-filter items — enough to trigger the
+        # embedder call, which raises via fail_on_batch=1.
+        "pid-5": {"tier": 0}, "pid-6": {"tier": 2}, "pid-7": {"tier": 0},
+        "pid-8": {"tier": 0}, "pid-9": {"tier": 2},
+    })
+    embedder = FakeEmbedder(fail_on_batch=1)  # crash on 2nd embed call
+
+    with pytest.raises(RuntimeError):
+        await drain_snapshot_queue(
+            storage=storage, embedder=embedder, chunk_size=5, echo=lambda _: None,
+            priority_filter=_tier_le(1),
+        )
+
+    remaining_pids = {pid for pid, _ in embedding_queue.peek_all()}
+    # Chunk 1 (pid-0..4) processed & acked → gone.
+    # Chunk 2 crashed before ack → ALL 5 items stay (filter-skipped tier-2
+    # items included, since the crash preempted their ack too).
+    assert remaining_pids == {f"pid-{i}" for i in range(5, 10)}
