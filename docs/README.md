@@ -76,6 +76,7 @@
 
 | Document | Date | Severity | Summary |
 |----------|------|----------|---------|
+| [MCP search endpoints broken after P2](./incidents/2026-07-03-mcp-search-endpoints-broken.md) | 2026-07-03 | High | Two independent bugs surfaced when P2's promoted-stub payloads hit downstream search: (1) `get_paper_by_arxiv_id` queried the **unindexed** `source_id` field → 60s scroll timeouts on every arXiv lookup; (2) `apply_citation_boost` / `research_topic` did `r.get("citation_count", 0)` which returns `None` when the payload has the field as `None` → `int + NoneType` TypeError. Fix: query the indexed `arxiv_id` first + add `source_id` to `ensure_identifier_indices()` + `... or 0` normalization at every numeric ranking read + 3 regression tests. |
 | [Embed queue data loss](./incidents/2026-06-30-embed-queue-data-loss.md) | 2026-06-30 | High | `embed-papers --consume-snapshot-queue` failed in 3 sec on a malformed Qdrant Filter, but `drain()` had already cleared the queue file. ~663K queue entries destroyed. Recovery via safe default-scroll mode; permanent fix: explicit-ack `peek_all()` + `remove()` pattern + chunked `client.retrieve()`. |
 | [P2 missing payload indices](./incidents/2026-06-29-p2-missing-payload-indices.md) | 2026-06-29 | High | Bootstrap P2 throughput collapsed to 1.6K writes/hr (260h linear ETA) because `doi`/`openalex_id`/`arxiv_id` lacked Qdrant indices → every promotion did 3 full-collection scans. Fixed with auto-called `ensure_identifier_indices()`; production throughput restored to 225K writes/hr (140×). |
 

@@ -80,13 +80,33 @@ class PaperQuery:
         Returns:
             Tuple of (point_id, payload) if found, None otherwise.
         """
-        # arXiv IDs are stored in source_id for arXiv-sourced papers
-        # or may be in a dedicated field
+        # PRIMARY: query the indexed arxiv_id field (populated by P2 promotion
+        # from OpenAlex ids.arxiv and by the crawler for arXiv-sourced papers).
+        # Without this indexed lookup, the legacy source_id scroll below
+        # full-scans 3.6M points and times out at 60s (2026-07-03 incident).
+        for value in (arxiv_id, f"arXiv:{arxiv_id}"):
+            results = self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=models.Filter(
+                    must=[models.FieldCondition(
+                        key="arxiv_id",
+                        match=models.MatchValue(value=value),
+                    )]
+                ),
+                limit=1,
+                with_payload=True,
+            )
+            points = results[0]
+            if points:
+                return (str(points[0].id), points[0].payload)
+
+        # FALLBACK: legacy crawler-sourced papers only have arXiv id in
+        # source_id. This scroll is slow (source_id is not indexed) but is
+        # last-resort only after the indexed path misses.
         results = self.client.scroll(
             collection_name=self.collection_name,
             scroll_filter=models.Filter(
                 should=[
-                    # Check source_id for arXiv format
                     models.FieldCondition(
                         key="source_id",
                         match=models.MatchValue(value=f"arXiv:{arxiv_id}"),

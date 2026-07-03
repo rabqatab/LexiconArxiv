@@ -30,15 +30,20 @@ def apply_citation_boost(
     if not results:
         return results
 
+    # `.get(k, 0)` returns None when the payload has `k: None` (not missing).
+    # P2 promotion writes some payloads with citation_count=None (source
+    # snapshot lacked the value). Use `... or 0` to normalize both missing
+    # and None to 0. Fixed 2026-07-03 — search endpoints were failing with
+    # 'unsupported operand type(s) for +: int and NoneType'.
     max_citations = (
-        max((math.log(1 + r.get("citation_count", 0)) for r in results), default=1)
+        max((math.log(1 + (r.get("citation_count") or 0)) for r in results), default=1)
         or 1
     )
     max_pagerank = max((r.get("pagerank") or 0 for r in results), default=1) or 1
 
     for r in results:
-        retrieval = r.get("reranker_score") or r.get("score", 0)
-        citations_norm = math.log(1 + r.get("citation_count", 0)) / max_citations
+        retrieval = r.get("reranker_score") or r.get("score") or 0
+        citations_norm = math.log(1 + (r.get("citation_count") or 0)) / max_citations
         pagerank_norm = (r.get("pagerank") or 0) / max_pagerank
 
         r["score"] = alpha * retrieval + beta * citations_norm + gamma * pagerank_norm

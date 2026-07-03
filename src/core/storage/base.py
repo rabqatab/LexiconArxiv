@@ -176,7 +176,7 @@ class QdrantStorage:
             pass  # Already exists
 
     def ensure_identifier_indices(self) -> None:
-        """Create keyword indices on doi/openalex_id/arxiv_id for fast lookups.
+        """Create keyword indices on doi/openalex_id/arxiv_id/source_id for fast lookups.
 
         Without these, every P2 promotion does ~3 filtered scrolls that
         full-scan the collection (~4 sec on 3.6M points = ~13 sec per
@@ -184,10 +184,14 @@ class QdrantStorage:
         for P2 (resolve-stubs-from-snapshot) and used by find_real_by_identifier
         + the OpenAlex / DOI / arXiv enrichment paths.
 
+        `source_id` was added 2026-07-03 to fix the get_paper_by_arxiv_id 60s
+        timeout on legacy arXiv-crawler papers (they store the arxiv id in
+        source_id, not arxiv_id — see incident 2026-07-03).
+
         Idempotent: Qdrant create_payload_index is a no-op if the index already
         exists. Safe to call repeatedly at every phase startup.
         """
-        for field in ("doi", "openalex_id", "arxiv_id"):
+        for field in ("doi", "openalex_id", "arxiv_id", "source_id"):
             try:
                 self.client.create_payload_index(
                     collection_name=self.collection_name,

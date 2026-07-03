@@ -103,19 +103,20 @@ async def research_topic(
     # ------------------------------------------------------------------
     # 2. Score -- compute relevance, notable, and combined scores
     # ------------------------------------------------------------------
-    # Normalize search scores to 0-1
-    max_search_score = max(item.get("score", 0.0) for item in items) or 1.0
-
-    # Collect raw citation and pagerank values for normalization
-    max_citations = max(item.get("citation_count", 0) for item in items) or 1
-    max_pagerank = max(item.get("pagerank", 0.0) or 0.0 for item in items) or 1.0
+    # Normalize search scores to 0-1. `.get(k, default)` returns None when
+    # the payload has `k: None` (not missing) — always use `... or 0` on numeric
+    # fields. P2 promotion writes payloads where some numerics are None. Same
+    # class of bug as postprocess.py; fixed 2026-07-03.
+    max_search_score = max((item.get("score") or 0.0) for item in items) or 1.0
+    max_citations = max((item.get("citation_count") or 0) for item in items) or 1
+    max_pagerank = max((item.get("pagerank") or 0.0) for item in items) or 1.0
 
     scored_papers = []
     for item in items:
-        relevance_score = item.get("score", 0.0) / max_search_score
+        relevance_score = (item.get("score") or 0.0) / max_search_score
 
-        citation_count = item.get("citation_count", 0)
-        pagerank = item.get("pagerank", 0.0) or 0.0
+        citation_count = item.get("citation_count") or 0
+        pagerank = item.get("pagerank") or 0.0
         year = item.get("year")
         tier = item.get("tier")
 
