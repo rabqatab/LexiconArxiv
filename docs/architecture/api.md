@@ -771,18 +771,26 @@ Returns corpus-level statistics for the dashboard UI: total papers, papers by ve
 
 ## 10. MCP Tools (Updated)
 
-The MCP server now exposes 8 tools:
+The MCP server exposes 8 tools as of `main` HEAD 2026-07-03. Every handler runs under an `asyncio.wait_for` **timeout budget** — 5s default, per-handler overrides for legitimately slow endpoints. See [`docs/reference/mcp-server.md`](../reference/mcp-server.md) for the full tool catalog with input schemas, response shapes, resolution ordering, and testing gotchas.
 
-| Tool | Description |
-|------|-------------|
-| `search_papers` | Hybrid search with filters |
-| `get_paper_details` | Single paper metadata |
-| `export_papers` | Export to BibTeX/CSV/JSON |
-| `research_topic` | Deep topic research with trends and combined scoring |
-| `get_similar_papers` | Retrieve similar papers for a given paper ID |
-| `get_graph_subgraph` | Citation graph neighborhood |
-| `get_corpus_stats` | Corpus statistics |
-| `get_paper_citations` | Citation details for a paper |
+| Tool | Description | Timeout budget |
+|------|-------------|----------------|
+| `search_papers` | Hybrid dense+BM25 search with venue/year/tier/section filters | 5s |
+| `get_paper` | Fetch one paper by UUID / DOI / arXiv ID / `10.48550/arxiv.<id>` variant | 5s |
+| `get_citations` | References + cited-by graph for a paper | 5s |
+| `get_similar_papers` | Typed similarity edges: same_method / same_task / same_result / method_transfer / overall | 5s |
+| `get_corpus_stats` | Total-points + top-N venues (default 30, hard-capped at 200) with long-tail summary | 60s* |
+| `expand_search` | Live arXiv + OpenAlex expansion with core/connected/external labeling | 20s |
+| `research_topic` | Deep topic research: notable papers + trends + summary + combined scoring | 15s |
+| `get_mcp_version` | Return `{git sha, startup timestamp, python version}` for stale-subprocess detection | 5s |
+
+_\*`get_corpus_stats` runs a full-collection scroll in `get_venue_stats()`; the elevated budget is a known-perf ticket, not a target._
+
+**On timeout**, the response is a diagnostic text error that names the failure mode ("query hits an unindexed payload field or a stalled backend"). Motivated by the 2026-07-03 incident where an unindexed `source_id` scroll silently blocked 60s per lookup — see [postmortem](../incidents/2026-07-03-mcp-search-endpoints-broken.md) Lesson 4.
+
+### Cross-session staleness protocol
+
+MCP subprocesses are per-Claude-session and have no hot reload. When session A commits a fix and session B's subprocess is still running the old code, session B calls `get_mcp_version`, compares to `git rev-parse --short HEAD` on disk, and reconnects (`/mcp reconnect lexiconarxiv`) if they differ. Reference: [`docs/reference/mcp-server.md#version-identity--stale-subprocess-detection`](../reference/mcp-server.md#version-identity--stale-subprocess-detection).
 
 ---
 

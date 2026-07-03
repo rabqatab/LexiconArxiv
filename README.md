@@ -422,6 +422,17 @@ lexiconarxiv/
 
 ## Recent Updates
 
+### v0.13.2 (Jul 2026) — MCP hardening wave (post-2026-07-03 incident)
+
+Five commits landed the day of the [2026-07-03 incident](docs/incidents/2026-07-03-mcp-search-endpoints-broken.md) postmortem, installing smoke detectors along the failure surfaces the incident exposed. Test count 382 → 417 (+35), MCP subtree 9 → 29 tests, 0 regressions.
+
+- **`get_corpus_stats` top-N cap** (commit `f90934e`) — MCP responses were dumping all ~thousands of unique venues (1.6MB / 38K lines). New `top_venues` arg (default 30, hard cap 200) + long-tail summary `_…and <N> more venues covering <M> papers._` preserves the distribution signal. Extracted pure `format_corpus_stats()` for unit-testability. Bounded to <10KB on a 5000-venue synthetic corpus.
+- **Per-handler timeout budgets** (commit `253afcf`) — Every MCP handler now runs under `asyncio.wait_for` with a strict 5s default (`_DEFAULT_HANDLER_TIMEOUT_SEC`) and per-handler overrides for legitimately-slow endpoints: `research_topic` 15s, `expand_search` 20s, `get_corpus_stats` 60s. Timeout error message names the failure mode ("query hits an unindexed payload field or a stalled backend") so future diagnosis is one message, not a debugging expedition. Refactored dispatch into a testable `_dispatch()` function separate from the SDK-decorated `call_tool` entry point.
+- **`get_mcp_version` tool** (commit `2f8cf12`) — Captures `{sha, startup_ts, python}` at import time, exposes as a tool for cross-session stale-subprocess detection. Compare against `git rev-parse --short HEAD` on disk; mismatch means the MCP subprocess needs `/mcp reconnect lexiconarxiv`. Startup log emits the same fields. Graceful fallback (`sha="unknown"`) when git isn't on PATH.
+- **L3 crash-safety net for embed drain** (commit `25a262a`) — Extracted the queue-consumer loop from the click command into `drain_snapshot_queue()`. Six regression tests lock in the four invariants that the 2026-06-30 663K-loss incident committed us to: mid-batch crash preserves unacked items, resume yields no duplicates, Qdrant retrieve is chunked (default 500 IDs), missing records ack cleanly.
+- **SearchService fixture drift fix** (commit `880c639`) — `test_hybrid_search` was silently broken since the multi-vector migration (fixture hardcoded old single-vector schema, production has 9 dense vectors). Rebuilt from `src.core.constants.ALL_DENSE_VECTORS` — future vector additions won't drift.
+- **New reference doc**: [`docs/reference/mcp-server.md`](docs/reference/mcp-server.md) — tool catalog, timeout budgets, stale-subprocess protocol, formatter contract, testing gotchas.
+
 ### v0.13.1 (Jun 2026) — Snapshot bootstrap perf hardening
 
 - **P2 ~250× scroll speedup** via `ensure_identifier_indices()` — keyword indices on `doi`/`openalex_id`/`arxiv_id` automatically created at `ensure_collection()` and at every P2 startup. Pre-fix: every promotion did ~3 full-collection scans on a 3.6M-point corpus (~4.2s each, ~1.6K writes/hr). Post-fix: 17ms per scroll, ~75K-117K writes/hr in production. The `tests/core/snapshot/test_storage_compat.py` regression test now pins the method on real storage.

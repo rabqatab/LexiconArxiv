@@ -60,3 +60,27 @@ Owner: whoever next has 2–3 hours to spend on cleanup. Reviewer: a fresh pair 
 **20.** `yagni` `QdrantStorage.get_payload` alias added in commit `5cc3bac` as a bootstrap hotfix. Replace by renaming mock + 2 phase callsites + 17 test callsites to `get_paper_by_id`; then drop the alias. The bug it papered over: real storage and mock storage diverged on the name (mock was written first without checking real's interface). The regression test in `tests/core/snapshot/test_storage_compat.py` is permanent and should stay — it catches future drift on any phase-called method. [src/core/storage/base.py:297-305 — the `# ponytail:` block names this exact follow-up]
 
 **21.** `delete` — `find_real_by_identifier` made 1-3 sequential scroll calls per stub promotion. Now O(log N) via `ensure_identifier_indices()` (commit `82ef621`, 2026-06-29). **Full postmortem:** [`docs/incidents/2026-06-29-p2-missing-payload-indices.md`](../incidents/2026-06-29-p2-missing-payload-indices.md). The audit item this fix surfaces: there is **no startup check that warns when query-hot payload fields lack indices**. A quick `assert_indices_for_phases()` that runs at every phase startup and logs `WARNING: field X used by P{n} is unindexed — expect ~250x slowdown` would prevent future repeats. Code lives in `src/core/storage/base.py:ensure_identifier_indices`; pattern extends naturally to P1/P3/P4 fields if any future phase grows new query patterns. [test_storage_compat.py already pins the method's existence on real storage]
+
+## Addendum — 2026-07-03 (MCP polish wave, after 07-03 incident)
+
+Five commits landed to harden the MCP surface after the 2026-07-03 incident.
+The theme was "install smoke detectors along the edges the incident exposed."
+See full context in [`docs/incidents/2026-07-03-mcp-search-endpoints-broken.md`](../incidents/2026-07-03-mcp-search-endpoints-broken.md) §Follow-up hardening.
+
+**22.** `yagni` — Author-shape adapter should live at the storage boundary, not inside every formatter. `_author_name(a)` is currently defined in `src/mcp/formatters.py` and called at three sites (search, detail, research). The right home is a `_normalize_authors_on_read()` hook inside `QdrantStorage.retrieve()` / `.scroll()` return path, so payload consumers always see `list[str]` regardless of what P2 wrote. Cost of the current setup: 3 identical adapter calls, 9 formatter tests that pin the shape at the formatter (should pin at storage). Deferred with the audit — same trigger. When applied, `_author_name` collapses out of formatters entirely; formatter tests migrate to a storage-layer contract test. [`src/mcp/formatters.py:6-29`, applied 3 sites: L59, L122, L248]
+
+**23.** `yagni` — Startup indexed-field linter (from item #21 above and 2026-07-03 incident Lesson 4). The 2026-07-03 hang was `source_id` unindexed — a payload-field-condition scan that nobody's startup would catch. A `verify_indexed_scroll_filters(storage)` at server start could `grep`-equivalent all call sites for `Filter(must=[FieldCondition(key=X, …)])` and emit `WARNING: field X is not indexed — expect scans to full-scan the collection` if `X` isn't in Qdrant's `payload_schema`. Now redundant-with-defense: the per-handler 5s timeout budget (commit `253afcf`) will surface the same failure fast, so this becomes "nice-to-have" rather than "must-have" — the timeout catches the pain, the linter would catch the *cause*.
+
+### Polish work completed 2026-07-03 (not deferred)
+
+These landed during the wave rather than being marked "when the trigger is met" — they were user-pain fixes, not stylistic cleanups.
+
+| ✅ | Item | Commit |
+|---|---|---|
+| ✅ | **MCP polish A** — `get_corpus_stats` top-N venue cap (was 1.6MB / 38K lines) | `f90934e` |
+| ✅ | **MCP polish B** — `get_mcp_version` tool + startup version log for cross-session drift detection | `2f8cf12` |
+| ✅ | **MCP polish C** — Per-handler `asyncio.wait_for` timeout budget (5s default + per-handler overrides) | `253afcf` |
+| ✅ | **Test fix G** — SearchService fixture rebuilt from `ALL_DENSE_VECTORS` (structured-abstract drift) | `880c639` |
+| ✅ | **Test net F** — L3 crash-safety regression suite for `drain_snapshot_queue()` | `25a262a` |
+
+Test count: 382 → 417 passing across suites; MCP subtree grew from 9 → 29 tests.

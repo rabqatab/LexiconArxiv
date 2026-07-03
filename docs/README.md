@@ -55,6 +55,7 @@
 | [CLI](./reference/cli.md) | Complete CLI command reference |
 | [Snapshot Field Mapping](./reference/snapshot-fields.md) | OpenAlex `works` JSONL → Qdrant payload mapping |
 | [Labeling LLM Comparison](./reference/labeling-llm-comparison.md) | granite4.1:8b vs gemma4:e4b vs DiffusionGemma eval results |
+| [MCP Server](./reference/mcp-server.md) | Tool catalog, timeout budgets, `get_mcp_version` stale-subprocess protocol, formatter contract |
 
 ### Runbooks
 
@@ -207,6 +208,7 @@ Infra:          Docker (Qdrant, GROBID) / Kubernetes (optional)
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.13.2 | Jul 2026 | MCP hardening wave after 2026-07-03 incident: `get_corpus_stats` top-N venue cap (1.6MB→<10KB), per-handler `asyncio.wait_for` timeout budgets (5s default + overrides), `get_mcp_version` tool for cross-session stale-subprocess detection, extract `drain_snapshot_queue()` + 6 L3 crash-safety tests, SearchService test fixture rebuilt from `ALL_DENSE_VECTORS` (schema drift fix); +35 tests (382→417), new [MCP reference doc](./reference/mcp-server.md) |
 | 0.13.1 | Jun 2026 | P2 perf hardening: `ensure_identifier_indices()` (~250x scroll speedup), `--min-cites-per-year` age-normalized quality gate, get_payload alias hotfix + compat regression test |
 | 0.13.0 | Jun 2026 | Snapshot Utilization System (5 plans, 47+ commits): 4-phase bootstrap (metadata fill / stub promotion / gap injection / external_cited_by) + live mode (daily OpenAlex API delta) + 9 CLIs + 5 Dagster assets + 3 dormant schedules + 88 unit/12 integration tests |
 | 0.12.0 | Jun 2026 | Ollama-only LLMs — Gemini removed; labeling defaults to granite4.1:8b; data quality asset_checks (Phase 3a/3b) cover search-critical invariants |

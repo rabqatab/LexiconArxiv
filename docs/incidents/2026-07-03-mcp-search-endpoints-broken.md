@@ -148,14 +148,33 @@ noisy 400-error round-trip to Qdrant.
 
 | # | Item | Status |
 |---|---|---|
-| 1 | Query indexed `arxiv_id` field first in `get_paper_by_arxiv_id` | ✅ This commit |
-| 2 | Add `source_id` to `ensure_identifier_indices()` | ✅ This commit |
-| 3 | Normalize `None` → 0 in `postprocess.apply_citation_boost` | ✅ This commit |
-| 4 | Normalize `None` → 0 in `research.research_topic` scoring | ✅ This commit |
-| 5 | Add regression tests for None-safe ranking | ✅ This commit |
-| 6 | Postmortem doc in `docs/incidents/` + index in `docs/README.md` | ✅ This commit |
+| 1 | Query indexed `arxiv_id` field first in `get_paper_by_arxiv_id` | ✅ 2026-07-03 (initial commit) |
+| 2 | Add `source_id` to `ensure_identifier_indices()` | ✅ 2026-07-03 (initial commit) |
+| 3 | Normalize `None` → 0 in `postprocess.apply_citation_boost` | ✅ 2026-07-03 (initial commit) |
+| 4 | Normalize `None` → 0 in `research.research_topic` scoring | ✅ 2026-07-03 (initial commit) |
+| 5 | Add regression tests for None-safe ranking | ✅ 2026-07-03 (initial commit) |
+| 6 | Postmortem doc in `docs/incidents/` + index in `docs/README.md` | ✅ 2026-07-03 (initial commit) |
 | 7 | Startup-check linter for unindexed payload-field filters (audit item #21) | ⏳ Post-bootstrap polish wave |
-| 8 | Ollama-side fix for `get_corpus_stats` returning 1.6MB (top-N venue limit) | ⏳ Post-bootstrap polish wave |
+| 8 | `get_corpus_stats` top-N venue limit (was returning 1.6MB) | ✅ 2026-07-03 (polish A, commit `f90934e`) |
+| 9 | Per-handler timeout budget (fail-fast on unindexed queries; lesson 4) | ✅ 2026-07-03 (polish C, commit `253afcf`) |
+| 10 | `get_mcp_version` tool for stale-subprocess detection across sessions | ✅ 2026-07-03 (polish B, commit `2f8cf12`) |
+| 11 | L3 crash-safety regression net for `drain_snapshot_queue` | ✅ 2026-07-03 (polish F, commit `25a262a`) |
+| 12 | SearchService test fixture rebuilt from `ALL_DENSE_VECTORS` (drift fix uncovered mid-polish) | ✅ 2026-07-03 (fix G, commit `880c639`) |
+| 13 | Storage-layer author boundary adapter (collapse 3 `_author_name` sites) | ⏳ Post-bootstrap (see ponytail audit #22) |
+
+## Follow-up hardening (2026-07-03, later in day)
+
+Five commits landed in the same day as the initial fix, each targeting one
+of the lessons below. The theme: the initial fix stopped the fire, this
+wave installs the smoke detectors.
+
+| Polish | Commit | What it defends against | Root lesson |
+|---|---|---|---|
+| **A** | `f90934e` | 1.6MB / 38K-line MCP responses on a corpus with thousands of unique venues | Response-size assumptions rot as the corpus grows; hard-cap at the boundary |
+| **C** | `253afcf` | Silent 60s hangs on any future unindexed lookup — every handler is now under an `asyncio.wait_for` with a strict 5s default and per-handler overrides for legitimately slow endpoints | Lesson 4 verbatim: the timeout budget the incident implied |
+| **B** | `2f8cf12` | "Did the other Claude session restart MCP after the fix?" — `get_mcp_version` returns the running SHA + startup timestamp so it's a one-call check, not a debug expedition | Cross-session subprocess drift is real and needs a first-class tool |
+| **F** | `25a262a` | Reintroduction of the 2026-06-30 663K-loss failure mode — 6 L3 tests lock in crash-safety of the extracted `drain_snapshot_queue()` function (mid-batch crash preserves unacked items, resume yields no duplicates, chunked retrieve, missing-record ack semantics) | Lesson 5 (parallel-triage) implied a stronger regression net for the sibling incidents |
+| **G** | `880c639` | `test_hybrid_search` had been failing on `structured-abstract` since the multi-vector migration but nobody noticed — fixture rebuilt from `ALL_DENSE_VECTORS` so future vector additions won't drift | Uncovered while running the full suite for polish C — pre-existing drift the incident work exposed |
 
 ## Lessons learned
 
