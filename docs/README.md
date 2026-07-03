@@ -63,6 +63,7 @@
 |----------|-------------|
 | [Snapshot Bootstrap](./runbooks/snapshot-bootstrap.md) | Day 0..11+ procedure for quarterly snapshot ingest (P1→P2→P3→P4 + Day 12+ live-mode enable) |
 | [Snapshot Rollback](./runbooks/snapshot-rollback.md) | 4 scenarios: P2 wrong promotions, P3 injection runaway, Qdrant corruption, embedding queue lost |
+| [Embed Drain Strategy](./runbooks/embed-drain-strategy.md) | Post-P3 playbook: 4-lever plan (parallelism, benchmark, P4-in-parallel, tier priority) to get search useful in hours, not days |
 | [Dagster Cutover](./runbooks/dagster-cutover.md) | Migrating from bash orchestration to Dagster |
 
 ### Specs & Plans

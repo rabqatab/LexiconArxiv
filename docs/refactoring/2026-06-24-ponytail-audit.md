@@ -71,6 +71,16 @@ See full context in [`docs/incidents/2026-07-03-mcp-search-endpoints-broken.md`]
 
 **23.** `yagni` — Startup indexed-field linter (from item #21 above and 2026-07-03 incident Lesson 4). The 2026-07-03 hang was `source_id` unindexed — a payload-field-condition scan that nobody's startup would catch. A `verify_indexed_scroll_filters(storage)` at server start could `grep`-equivalent all call sites for `Filter(must=[FieldCondition(key=X, …)])` and emit `WARNING: field X is not indexed — expect scans to full-scan the collection` if `X` isn't in Qdrant's `payload_schema`. Now redundant-with-defense: the per-handler 5s timeout budget (commit `253afcf`) will surface the same failure fast, so this becomes "nice-to-have" rather than "must-have" — the timeout catches the pain, the linter would catch the *cause*.
 
+**24.** `yagni` `abstract-qwen3-8b` vector is generated for every paper (~33% of every embed drain's GPU time) but never queried by the search pipeline. Only caller: `src/core/analytics/clustering.py:55` (UMAP + HDBSCAN topic clustering, runs weekly at most). Migration path:
+
+1. Change `clustering.py:55,64` to load `structured-abstract` instead of `EMBEDDING_VECTOR_NAME`.
+2. Run one small `compute_clusters(sample=10_000)` before + after; compare HDBSCAN cluster silhouette scores and topic labels. Expect similar or better quality (role-tagged text is at least as semantically rich as raw abstract).
+3. If the eval passes: remove `EMBEDDING_VECTOR_NAME` from `constants.ALL_DENSE_VECTORS`, drop the vector generation block in `embedder.py:183-184`, migrate the collection via `client.delete_vectors(names=["abstract-qwen3-8b"])`.
+
+**Not applied during 2026-07-03 embed drain planning** because the bootstrap is actively mutating the corpus and layering a vector-schema migration on top would confuse root-cause analysis of any drain-side issue. The 33% savings tradeoff was correctly deferred; see the drain runbook for the alternatives (parallelism scaling, batch tuning) that do NOT require schema changes.
+
+Trigger: same as the whole audit — corpus stable ≥1 week AND bootstrap complete. Owner: whoever runs the eval + migration. Reviewer: someone who wasn't in the audit conversation. [full context in [`docs/incidents/2026-07-03-mcp-search-endpoints-broken.md`](../incidents/2026-07-03-mcp-search-endpoints-broken.md) §Follow-up hardening + verification #3]
+
 ### Polish work completed 2026-07-03 (not deferred)
 
 These landed during the wave rather than being marked "when the trigger is met" — they were user-pain fixes, not stylistic cleanups.
