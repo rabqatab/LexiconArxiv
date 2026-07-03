@@ -5,6 +5,7 @@ import respx
 from httpx import Response
 from qdrant_client import QdrantClient, models
 
+from src.core.constants import ALL_DENSE_VECTORS
 from src.core.search.service import SearchService
 from src.core.storage.base import QdrantStorage
 
@@ -19,29 +20,38 @@ class TestSearchService:
             self.client.delete_collection(self.collection)
         except Exception:
             pass
+        # Mirror the production 9-dense-vector schema so RetrievalConfig defaults
+        # (multi_vector over structured-abstract + section-method + section-task)
+        # don't 400 on the test collection. Building from ALL_DENSE_VECTORS keeps
+        # the fixture in sync with production even when new vectors are added.
         self.client.create_collection(
             collection_name=self.collection,
             vectors_config={
-                "abstract-qwen3-8b": models.VectorParams(
-                    size=4, distance=models.Distance.COSINE
-                ),
+                name: models.VectorParams(size=4, distance=models.Distance.COSINE)
+                for name in ALL_DENSE_VECTORS
             },
             sparse_vectors_config={
                 "bm25": models.SparseVectorParams(modifier=models.Modifier.IDF),
             },
         )
+        # Fan a single canonical embedding across all dense vector names so the
+        # search's multi-vector prefetch (structured-abstract + section-method +
+        # section-task by default) can retrieve either point. Mirrors reality:
+        # all dense vectors of a real paper come from the same abstract text.
+        def _vector_bundle(dense_vec: list[float], bm25_text: str) -> dict:
+            bundle: dict = {name: dense_vec for name in ALL_DENSE_VECTORS}
+            bundle["bm25"] = models.Document(text=bm25_text, model="qdrant/bm25")
+            return bundle
+
         self.client.upsert(
             collection_name=self.collection,
             points=[
                 models.PointStruct(
                     id="aaaa0001-0000-0000-0000-000000000001",
-                    vector={
-                        "abstract-qwen3-8b": [0.9, 0.1, 0.1, 0.1],
-                        "bm25": models.Document(
-                            text="retrieval augmented generation for knowledge tasks",
-                            model="qdrant/bm25",
-                        ),
-                    },
+                    vector=_vector_bundle(
+                        [0.9, 0.1, 0.1, 0.1],
+                        "retrieval augmented generation for knowledge tasks",
+                    ),
                     payload={
                         "title": "RAG Paper", "abstract": "About retrieval augmented generation",
                         "authors": ["Author A"], "venue": "NeurIPS 2020", "year": 2020,
@@ -51,13 +61,10 @@ class TestSearchService:
                 ),
                 models.PointStruct(
                     id="aaaa0001-0000-0000-0000-000000000002",
-                    vector={
-                        "abstract-qwen3-8b": [0.1, 0.9, 0.1, 0.1],
-                        "bm25": models.Document(
-                            text="attention is all you need transformer architecture",
-                            model="qdrant/bm25",
-                        ),
-                    },
+                    vector=_vector_bundle(
+                        [0.1, 0.9, 0.1, 0.1],
+                        "attention is all you need transformer architecture",
+                    ),
                     payload={
                         "title": "Transformer Paper", "abstract": "About attention and transformers",
                         "authors": ["Author B"], "venue": "NeurIPS 2017", "year": 2017,
