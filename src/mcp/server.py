@@ -258,28 +258,45 @@ async def list_tools() -> list[Tool]:
 # Tool handlers
 # ---------------------------------------------------------------------------
 
-@app.call_tool()
-async def call_tool(name: str, arguments: dict) -> list[TextContent]:
+# Fail-fast timeout budgets. The default catches the cheap-path failure
+# mode (unindexed field scroll, hung Ollama) — the 2026-07-03 incident had
+# get_paper_by_arxiv_id blocking for 60s on an unindexed source_id scroll.
+# Known-slow handlers get explicit overrides; the table doubles as a "fix
+# this" list. Values in seconds.
+_DEFAULT_HANDLER_TIMEOUT_SEC: float = 5.0
+_HANDLER_TIMEOUTS: dict[str, float] = {
+    "research_topic": 15.0,    # semantic rerank + trend analysis
+    "expand_search": 20.0,     # external arxiv + openalex roundtrips
+    "get_corpus_stats": 60.0,  # ponytail: get_venue_stats() full-scrolls 3.6M points; drop when histogram is cached
+}
+
+
+async def _dispatch(name: str, arguments: dict) -> list[TextContent]:
+    handler = _HANDLERS.get(name)
+    if handler is None:
+        return [TextContent(type="text", text=f"Unknown tool: {name}")]
+    timeout = _HANDLER_TIMEOUTS.get(name, _DEFAULT_HANDLER_TIMEOUT_SEC)
     try:
-        if name == "search_papers":
-            return await _handle_search_papers(arguments)
-        elif name == "get_paper":
-            return await _handle_get_paper(arguments)
-        elif name == "get_citations":
-            return await _handle_get_citations(arguments)
-        elif name == "get_corpus_stats":
-            return await _handle_get_corpus_stats(arguments)
-        elif name == "get_similar_papers":
-            return await _handle_get_similar_papers(arguments)
-        elif name == "expand_search":
-            return await _handle_expand_search(arguments)
-        elif name == "research_topic":
-            return await _handle_research_topic(arguments)
-        else:
-            return [TextContent(type="text", text=f"Unknown tool: {name}")]
+        return await asyncio.wait_for(handler(arguments), timeout=timeout)
+    except asyncio.TimeoutError:
+        logger.warning("MCP tool %s exceeded %.1fs budget", name, timeout)
+        return [TextContent(
+            type="text",
+            text=(
+                f"Error: '{name}' exceeded its {timeout:.0f}s time budget. "
+                f"This typically means the query hits an unindexed payload "
+                f"field or a stalled backend. Try narrower filters, or file "
+                f"a bug if this keeps happening."
+            ),
+        )]
     except Exception as e:
         logger.exception(f"Error in tool {name}")
         return [TextContent(type="text", text=f"Error: {e}")]
+
+
+@app.call_tool()
+async def call_tool(name: str, arguments: dict) -> list[TextContent]:
+    return await _dispatch(name, arguments)
 
 
 async def _handle_search_papers(arguments: dict) -> list[TextContent]:
@@ -571,6 +588,21 @@ async def _handle_research_topic(arguments: dict) -> list[TextContent]:
 
     text = format_research_results(result)
     return [TextContent(type="text", text=text)]
+
+
+# ---------------------------------------------------------------------------
+# Dispatch table (must be after handler defs so name lookup finds them)
+# ---------------------------------------------------------------------------
+
+_HANDLERS: dict[str, callable] = {
+    "search_papers": _handle_search_papers,
+    "get_paper": _handle_get_paper,
+    "get_citations": _handle_get_citations,
+    "get_corpus_stats": _handle_get_corpus_stats,
+    "get_similar_papers": _handle_get_similar_papers,
+    "expand_search": _handle_expand_search,
+    "research_topic": _handle_research_topic,
+}
 
 
 # ---------------------------------------------------------------------------
