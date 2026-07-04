@@ -600,19 +600,16 @@ uv run python -m src.cli.core_collect export-graph-subgraph <paper_id> --hops 2 
 
 ### extract-keywords
 
-Extract keywords using an LLM-first pipeline with regex + KeyBERT as fallback, and optional LLM judge validation.
+Extract keywords using regex + KeyBERT (default, no LLM). The `--llm/--judge` flags remain in the CLI for backward compatibility but are **deprecated at bulk scale** per Path B (2026-07-04): Ollama chat is retired from every pipeline stage, and the incremental runbook forbids them. See [`docs/design/bulk-vs-incremental-audit.md`](../design/bulk-vs-incremental-audit.md) §Ollama→vLLM policy.
 
 ```bash
-# LLM-first pipeline (Ollama, recommended)
-uv run python -m src.cli.core_collect extract-keywords --llm --judge
-
-# Fallback only: regex + KeyBERT (no LLM)
+# Default: regex + KeyBERT (production)
 uv run python -m src.cli.core_collect extract-keywords
 
 # Regex only (faster, no model loading)
 uv run python -m src.cli.core_collect extract-keywords --no-keybert
 
-# Better embedding model for KeyBERT fallback
+# Better embedding model for KeyBERT
 uv run python -m src.cli.core_collect extract-keywords --embedding-model all-mpnet-base-v2
 
 # Preview without saving
@@ -624,8 +621,8 @@ uv run python -m src.cli.core_collect extract-keywords --force
 # With limit
 uv run python -m src.cli.core_collect extract-keywords --limit 1000
 
-# Custom batch size + alternate Ollama model
-uv run python -m src.cli.core_collect extract-keywords --llm --batch-size 200 --ollama-model llama3.1:8b
+# Deprecated: LLM-first pipeline via Ollama (dev-laptop only; do NOT use in production/incremental)
+uv run python -m src.cli.core_collect extract-keywords --llm --judge
 ```
 
 **Options:**
@@ -645,7 +642,7 @@ uv run python -m src.cli.core_collect extract-keywords --llm --batch-size 200 --
 **Behavior:**
 - Default: Skips papers that already have keywords
 - With `--force`: Re-processes all papers, replacing existing keywords
-- With `--llm`: LLM is primary; regex + KeyBERT only run as fallback when LLM fails
+- With `--llm` (deprecated at bulk scale): LLM is primary; regex + KeyBERT only run as fallback when LLM fails
 - With `--llm` or `--judge`: Uses async execution
 
 ### keyword-stats
@@ -674,23 +671,24 @@ uv run python -m src.cli.core_collect clear-keywords --confirm
 
 ### label-abstracts
 
-Classify each sentence of a paper's abstract into 7 rhetorical roles: task, domain, background, approach, method, result, contribution. Results are stored in `abstract_structure`. Backed by Ollama (`granite4.1:8b` default, fallback `gemma4:e4b`).
+Classify each sentence of a paper's abstract into 7 rhetorical roles: task, domain, background, approach, method, result, contribution. Results are stored in `abstract_structure`. **Production backend is vLLM + `ibm-granite/granite-4.1-8b`** per Path B (2026-07-04) — see [`docs/design/vllm-labeling-migration.md`](../design/vllm-labeling-migration.md) and [`docs/runbooks/vllm-labeling.md`](../runbooks/vllm-labeling.md). Ollama chat is retired from every pipeline stage; the `--backend ollama` path is preserved as a dev-laptop fallback only.
 
 ```bash
-# Preview
+# Preview (uses default backend)
 uv run python -m src.cli.core_collect label-abstracts --dry-run --limit 5
 
-# Label unlabeled papers
-uv run python -m src.cli.core_collect label-abstracts --limit 100
+# Production labeling via vLLM (requires serve_vllm.sh running — see vllm-labeling.md runbook)
+uv run python -m src.cli.core_collect label-abstracts --backend vllm \
+    --vllm-base-url http://localhost:8000 --vllm-max-concurrent 128
+
+# Dev-laptop fallback: Ollama (~750 papers/hr — do NOT use for production/incremental)
+uv run python -m src.cli.core_collect label-abstracts --backend ollama --limit 100
 
 # Re-label papers that already have abstract_structure
-uv run python -m src.cli.core_collect label-abstracts --force --limit 50
-
-# Custom Ollama model + timeout
-uv run python -m src.cli.core_collect label-abstracts --ollama-model gemma4:e4b --ollama-timeout 300
+uv run python -m src.cli.core_collect label-abstracts --backend vllm --force --limit 50
 ```
 
-Options: `--dry-run`, `--limit N`, `--batch-size N` (default 500), `--force`, `--ollama-model TEXT`, `--ollama-timeout FLOAT`.
+Options: `--backend {vllm|ollama}`, `--dry-run`, `--limit N`, `--batch-size N` (default 500), `--force`, `--vllm-model TEXT`, `--vllm-base-url URL`, `--vllm-max-concurrent INT`, `--ollama-model TEXT`, `--ollama-timeout FLOAT`.
 
 ---
 
@@ -1185,7 +1183,8 @@ uv run python -m src.cli.core_collect clear-keyword-checkpoint
 | `QDRANT_URL` | Qdrant server URL | Yes |
 | `QDRANT_API_KEY` | Qdrant API key (for cloud) | No |
 | `S2_API_KEYS` | Semantic Scholar API keys (comma-separated for round-robin rotation with per-key rate limiting). Legacy `S2_API_KEY` (singular) still works. | No |
-| `OLLAMA_BASE_URL` | Ollama server URL (default: `http://localhost:11434`). Used by `embed-papers`, `extract-keywords --llm`, and `label-abstracts`. Gemini was removed in v0.12 — Ollama is the only supported LLM backend. | No |
+| `OLLAMA_BASE_URL` | Ollama server URL (default: `http://localhost:11434`). Used by `embed-papers` (bulk + incremental + search) and search-time HyDE. Per Path B (2026-07-04), Ollama chat is retired from every pipeline stage; production labeling runs on vLLM (see `VLLM_*` vars in `.env.example`). `GEMINI_API_KEYS` was removed in v0.12. | No |
+| `VLLM_MODEL`, `VLLM_PORT`, `VLLM_GPU_MEM_UTIL`, `VLLM_MAX_MODEL_LEN`, `VLLM_IMAGE` | vLLM labeling backend configuration (containerized). See `.env.example` and [`docs/runbooks/vllm-labeling.md`](../runbooks/vllm-labeling.md). | No |
 | `GITHUB_TOKEN` | GitHub personal access token for code repo search (30 req/min vs 10/min) | No |
 | `DAGSTER_HOME` | Holds per-phase snapshot checkpoints + embedding queue (default: `$HOME/dagster_home`) | No |
 

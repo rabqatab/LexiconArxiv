@@ -363,11 +363,11 @@ The production collection (`lexicon_arxiv_v3`) uses 9 dense named vectors plus 1
     "referenced_works": "keyword[]",
     "cited_by": "keyword[]",   // Internal paper IDs that cite this paper
     "cited_by_count_internal": "integer",
-    "keywords": "keyword[]",   // Extracted keywords (LLM-first, regex + KeyBERT fallback)
-    "keywords_source": "keyword",  // pipe-delimited: "gemini|judge", "ollama", "regex|keybert", etc.
+    "keywords": "keyword[]",   // Extracted keywords (regex + KeyBERT in production; LLM path deprecated at bulk scale per Path B, 2026-07-04)
+    "keywords_source": "keyword",  // pipe-delimited: "regex|keybert" (production); historical values include "gemini|judge" (Gemini backend removed in v0.12) and "ollama" (Ollama chat retired from pipeline; dev-laptop only)
     "keywords_structured": "object",  // Categorized: {task, method, model, domain, dataset, contribution_type, modality}
     "abstract_structure": "object",   // Sentence-level: {task, domain, background, approach, method, result, contribution}
-    "abstract_structure_source": "keyword",  // "gemini", "ollama", or "none"
+    "abstract_structure_source": "keyword",  // "vllm" (production, granite-4.1-8b), "ollama" (dev-laptop fallback), or "none". Historical values include "gemini" (Gemini backend removed in v0.12). See docs/design/vllm-labeling-migration.md.
     "similar_papers": "object",       // Pre-computed similar paper IDs with scores
     "cluster_id": "integer",          // Cluster assignment from clustering pipeline
     "umap_x": "float",               // UMAP 2D projection x-coordinate (for visualization)

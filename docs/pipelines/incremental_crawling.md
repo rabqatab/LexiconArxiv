@@ -379,7 +379,7 @@ The first real incremental crawling-preprocessing loop ran March 28-30, 2026. Th
 | S2 citations | 369 enriched | 7,229 papers scanned in 12 min after stub-exclusion fix |
 | CrossRef citations | 20,796 enriched | |
 | Keywords | Done | regex + KeyBERT |
-| Labeling | Done | Gemini, ~4,400 calls, ~$3 cost |
+| Labeling | Done | Gemini backend (removed in v0.12); production now runs vLLM + granite-4.1-8b per [`vllm-labeling-migration.md`](../design/vllm-labeling-migration.md) |
 | Reference resolution | Done | |
 | Cited_by | Done | Incremental rebuild |
 | Embedding | 167 new papers | Section-level + BM25 |
@@ -414,7 +414,7 @@ uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --recent-days 
 - Always use `--force` for non-OpenAlex sources in incremental runs, since checkpoints mark them as complete after initial collection.
 - The S2 enricher should always be run with `--recent-days` to avoid scanning the entire corpus.
 - OpenAlex `from_updated_date` requires a Premium plan; without it, expect full-year scans with deduplication.
-- Gemini labeling cost is modest (~$3 for ~4,400 calls) and can be run on every incremental loop.
+- Labeling in the March 2026 loop used the Gemini backend, which was removed in v0.12. **Production labeling now runs on vLLM + `ibm-granite/granite-4.1-8b`** (see [`vllm-labeling-migration.md`](../design/vllm-labeling-migration.md) and [`bulk-vs-incremental-audit.md`](../design/bulk-vs-incremental-audit.md) §Ollama→vLLM policy — Path B, 2026-07-04). Ollama chat is retired from every pipeline stage; the `--backend ollama` labeling path remains as a dev-laptop fallback only.
 
 ---
 

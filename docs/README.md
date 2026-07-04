@@ -75,6 +75,8 @@
 |----------|-------------|
 | [Snapshot Utilization Design](./superpowers/specs/2026-06-21-snapshot-utilization-design.md) | 5-plan architecture for OpenAlex snapshot bootstrap + live mode |
 | [Plan TODO](./plans/TODO.md) | Live backlog and deferred items |
+| [Archived Plans](./plans/archive/) | Superseded / shipped plans kept for provenance (multi-key OpenAlex, MVP phases 1-5). |
+| [Archived Superpowers Plans](./superpowers/plans/archive/) | Superseded / shipped superpowers plans (Dagster phases 1-2, Ollama LLM migration → superseded by Path B vLLM, snapshot utilization plans 1-5). |
 | [Ponytail Audit (2026-06-24)](./refactoring/2026-06-24-ponytail-audit.md) | Over-engineering audit — ~1800 lines / 4 deps removable, deferred until post-bootstrap |
 | [Code Overhaul Plan (2026-07-04)](./refactoring/2026-07-04-code-overhaul-plan.md) | Post-labeling-gap plan: 5 waves (registries, backend abstraction, vector schema migration, deprecation removals, test reorg). Deferred to the same trigger as the ponytail audit; sibling doc. |
 

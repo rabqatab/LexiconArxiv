@@ -635,10 +635,10 @@ results = client.query_points(
 
 ### 8.4 Keyword-Enhanced BM25
 
-The BM25 index covers abstract text, which includes extracted keywords when present. Keyword extraction methods:
-- **LLM extraction** (primary): Structured keyword extraction via Gemini or Ollama
-- **Regex patterns** (fallback): Extract explicit acronyms from title/abstract (e.g., "BERT:", "(RAG)")
-- **KeyBERT** (fallback): Extract semantic keywords from abstracts
+The BM25 index covers abstract text, which includes extracted keywords when present. Keyword extraction methods (per Path B, 2026-07-04):
+- **Regex patterns** (primary): Extract explicit acronyms from title/abstract (e.g., "BERT:", "(RAG)")
+- **KeyBERT** (primary): Extract semantic keywords from abstracts
+- **LLM extraction** (deprecated at bulk scale): The `--llm/--judge` flags remain in the CLI for backward compatibility but are forbidden in the incremental runbook (Gemini backend was removed in v0.12; Ollama chat is retired from every pipeline stage). See [`docs/design/bulk-vs-incremental-audit.md`](../design/bulk-vs-incremental-audit.md) §Ollama→vLLM policy.
 
 See [Keyword Extraction Design](./keyword_extraction.md) for details.
 

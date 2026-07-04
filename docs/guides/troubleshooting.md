@@ -380,7 +380,7 @@ uv run python -m src.cli.core_collect extract-keywords --limit 1000
 ### Ollama Connection Refused
 
 **Symptoms:**
-- `httpx.ConnectError: Connection refused` when using `--llm` or running `embed-papers` / `label-abstracts`
+- `httpx.ConnectError: Connection refused` when running `embed-papers` (bulk + incremental + search), search-time HyDE, or the dev-fallback `label-abstracts --backend ollama` / `extract-keywords --llm` paths.
 
 **Solution:**
 
@@ -390,21 +390,19 @@ uv run python -m src.cli.core_collect extract-keywords --limit 1000
 ollama serve
 ```
 
-2. Pull the required models:
+2. Pull the required model for embedding:
 
 ```bash
-ollama pull qwen3-embedding:8b   # embed-papers
-ollama pull granite4.1:8b         # label-abstracts (default), extract-keywords --llm
-ollama pull gemma4:e4b             # labeling fallback
+ollama pull qwen3-embedding:8b   # embed-papers + search-time query embedding + HyDE
 ```
 
 3. Verify with custom URL if not on default port:
 
 ```bash
-OLLAMA_BASE_URL=http://localhost:11434 uv run python -m src.cli.core_collect extract-keywords --llm
+OLLAMA_BASE_URL=http://localhost:11434 uv run python -m src.cli.core_collect embed-papers --dry-run
 ```
 
-(Gemini was removed in v0.12 — Ollama is the only supported LLM backend.)
+**Policy note (Path B, 2026-07-04):** Ollama chat is retired from every pipeline stage. Production labeling runs on **vLLM + `ibm-granite/granite-4.1-8b`** — see [`docs/design/vllm-labeling-migration.md`](../design/vllm-labeling-migration.md) and [`docs/runbooks/vllm-labeling.md`](../runbooks/vllm-labeling.md). The Gemini backend was removed in v0.12; see `.env.example` for the current env-var set. Only `embed-papers` and search-time HyDE still hit Ollama.
 
 ### LLM Extraction Timeout
 

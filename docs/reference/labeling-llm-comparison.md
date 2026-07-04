@@ -1,5 +1,7 @@
 # Labeling LLM Comparison & Selection
 
+> **Historical eval — kept for the record.** As of 2026-07-04, **production labeling runs on vLLM + `ibm-granite/granite-4.1-8b`**, not Ollama. This document is the historical basis for choosing the **Granite family**; the vLLM migration reuses the same model family so the family-selection numbers below still apply. Ollama chat is retired from every pipeline stage — the `granite4.1:8b` Ollama path in `label-abstracts` (`--backend ollama`) is preserved as a dev-laptop fallback only. See [`docs/design/vllm-labeling-migration.md`](../design/vllm-labeling-migration.md) and [`docs/design/bulk-vs-incremental-audit.md`](../design/bulk-vs-incremental-audit.md) §Ollama→vLLM policy for the current policy.
+
 **Date:** 2026-06-19
 **Decision:** the abstract-labeling and keyword LLM is **`granite4.1:8b`** (local Ollama).
 

@@ -139,11 +139,12 @@ uv run python -m src.cli.core_collect enrich-10-code-repos --parallel 10
 uv run python -m src.cli.core_collect enrich-11-code-repos-via-grobid --parallel 5
 uv run python -m src.cli.core_collect enrich-12-code-repos-via-github --batch-size 50
 
-# 9. Extract keywords (for BM25 search)
-uv run python -m src.cli.core_collect extract-keywords --llm --judge
+# 9. Extract keywords (for BM25 search) — regex + KeyBERT, no LLM (Path B, 2026-07-04)
+uv run python -m src.cli.core_collect extract-keywords
 
-# 10. Label abstracts (rhetorical role classification)
-uv run python -m src.cli.core_collect label-abstracts
+# 10. Label abstracts (rhetorical role classification) — production uses vLLM + granite-4.1-8b
+#     See docs/runbooks/vllm-labeling.md to start the vLLM server via sparkq first.
+uv run python -m src.cli.core_collect label-abstracts --backend vllm
 
 # 11. Check final status
 uv run python -m src.cli.core_collect status
@@ -264,14 +265,10 @@ uv run python -m src.cli.core_collect collect-openreview --all --since-year 2018
 
 ### Keyword Extraction Options
 
+Per Path B (2026-07-04), the production pipeline uses regex + KeyBERT with no LLM. The Gemini backend was removed in v0.12 (see `.env.example`); Ollama chat is retired from every pipeline stage, so the `--llm/--judge` flags remain in the CLI for dev-laptop use only and are forbidden in the incremental runbook.
+
 ```bash
-# LLM-first pipeline (recommended, requires GEMINI_API_KEYS in .env)
-uv run python -m src.cli.core_collect extract-keywords --llm --judge
-
-# Local Ollama pipeline (requires running Ollama server)
-uv run python -m src.cli.core_collect extract-keywords --llm --judge --llm-backend ollama
-
-# Fallback only: regex + KeyBERT (no LLM)
+# Production: regex + KeyBERT (no LLM)
 uv run python -m src.cli.core_collect extract-keywords
 
 # Regex-only extraction (faster, no KeyBERT model loading)
@@ -285,6 +282,9 @@ uv run python -m src.cli.core_collect extract-keywords --force
 
 # Custom batch size
 uv run python -m src.cli.core_collect extract-keywords --batch-size 200
+
+# Deprecated: LLM-first Ollama pipeline (dev-laptop only)
+uv run python -m src.cli.core_collect extract-keywords --llm --judge
 ```
 
 By default, papers with existing keywords are skipped. Use `--force` to re-extract.
