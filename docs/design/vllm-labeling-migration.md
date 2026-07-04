@@ -38,6 +38,8 @@ Migrate labeling to vLLM with continuous batching. Same model family so quality 
 
 ## Deployment
 
+**Containerized on DGX Spark (aarch64)**. The 2026-07-04 first-boot attempt via `uv pip install vllm` failed with `libtorch_cuda.so: cannot open shared object file` — vLLM's PyPI wheels are x86_64 only. NGC's `nvcr.io/nvidia/vllm:25.11-py3` is Nvidia's official arm64 build with matching torch/CUDA and works out of the box. `scripts/labeling/serve_vllm.sh` orchestrates `docker run` with proper GPU / IPC / HF-cache binds. The `[gpu]` extra in `pyproject.toml` (vllm + xgrammar wheels) is preserved for x86_64 dev-laptop use only.
+
 **Serve via sparkq**, single-node:
 
 ```bash

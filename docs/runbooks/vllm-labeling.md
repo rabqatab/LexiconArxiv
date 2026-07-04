@@ -35,25 +35,31 @@ sparkq health --json | jq '.status'   # expect: "healthy"
 # 2. HF cache reachable (both read and write)
 ls /mnt/nfs/ssd1/huggingface_cache/hub >/dev/null && echo "HF cache OK"
 
-# 3. Model weights present (or willing to download ~16 GB on first run)
-HF_HOME=/mnt/nfs/ssd1/huggingface_cache uv run python -c \
-    "from transformers import AutoTokenizer; \
-     AutoTokenizer.from_pretrained('ibm-granite/granite-4.1-8b'); \
-     print('tokenizer OK')"
+# 3. Docker + NGC vLLM image present (containerized deploy on aarch64)
+docker inspect nvcr.io/nvidia/vllm:25.11-py3 --format '{{.Architecture}}' \
+    | grep -q arm64 && echo "vLLM image OK" \
+    || (echo "pulling NGC vLLM image..." && docker pull nvcr.io/nvidia/vllm:25.11-py3)
 
-# 4. No Ollama chat model hogging the GPU (embedder-only is fine)
+# 4. Model weights present (or willing to download ~16 GB on first run).
+#    Optional — vLLM will download on first boot into the mounted HF cache.
+ls /mnt/nfs/ssd1/huggingface_cache/hub/models--ibm-granite--granite-4.1-8b \
+    2>/dev/null && echo "granite present" || echo "will download on boot"
+
+# 5. No Ollama chat model hogging the GPU (embedder-only is fine)
 curl -s http://localhost:11434/api/ps | jq '.models[].name'
 # If a chat model (granite4.1, qwen2.5, etc.) is loaded, unload it
 # via `ollama stop <model>` before submitting vLLM. Embed models
 # (qwen3-embedding, nomic-embed-text) can co-reside if you have headroom
 # but plan for vLLM to want ~38 G of the 128 G unified pool.
 
-# 5. Port 8000 not in use
+# 6. Port 8000 not in use
 ss -ltn '( sport = :8000 )' | grep -q LISTEN && \
     echo "port 8000 busy — investigate" || echo "port free"
 ```
 
-If any check fails, resolve before continuing. In particular a leaked previous vLLM server (check 5 hits) is the number-one reason boot silently succeeds but health checks never turn green.
+If any check fails, resolve before continuing. In particular a leaked previous vLLM server (check 6 hits) or a stale container (`docker ps | grep vllm-labeling`) is the number-one reason boot silently succeeds but health checks never turn green.
+
+**Why containerized:** DGX Spark is aarch64 (Grace-Blackwell). The vLLM PyPI wheels are x86_64/CUDA and fail at import with `libtorch_cuda.so: cannot open shared object file` — the 2026-07-04 first-boot incident. NGC's `nvcr.io/nvidia/vllm:25.11-py3` is Nvidia's arm64 CUDA build and works out of the box. The `[gpu]` extra in `pyproject.toml` is preserved for x86_64 dev-laptop use only.
 
 ---
 
@@ -179,7 +185,9 @@ Common restart triggers and their proper fixes:
 | `OSError: CUDA out of memory` at boot | Footprint too small vs model + KV cache | Raise `VLLM_GPU_MEM_UTIL` to `0.40` (or lower it to `0.20` and reduce `--max-model-len` if OOM is on KV, not weights). Bump sparkq `--gpu-mem` to match. |
 | `Model loading stalled` for >30 min, no log progress | NFS mount slow, or partial/corrupt HF snapshot | `iostat -x 1 /mnt/nfs/ssd1` to confirm; `rm -rf $HF_HOME/hub/models--ibm-granite--granite-4.1-8b` and resubmit for a clean download. |
 | `Port 8000 already in use` in the vLLM log | Previous vLLM process leaked past sparkq cancel | `ss -ltnp '( sport = :8000 )'`, `kill -9 <pid>`, then re-run `sparkq doctor` to confirm clean. Only then resubmit. |
-| `guided_json` decoding raises validation errors from every request | xgrammar version mismatch with installed vLLM | Force reinstall the extras: `uv pip install --force-reinstall 'xgrammar>=0.1.0' vllm`. Verify with `uv pip show xgrammar vllm`. |
+| `guided_json` decoding raises validation errors from every request | xgrammar version mismatch inside the container | Rebuild against a newer NGC vLLM image (`VLLM_IMAGE=nvcr.io/nvidia/vllm:<newer-tag>`); do NOT pip install `xgrammar` inside the wheel install — that pattern is x86_64-only. |
+| `libtorch_cuda.so: cannot open shared object file` at boot | pip-installed vLLM on aarch64 (Grace-Blackwell) — wheels are x86_64 only | Use the NGC container instead (the launcher does this by default). The `[gpu]` extra in `pyproject.toml` only works on x86_64 dev laptops. |
+| `ValueError: Fast download using 'hf_transfer' is enabled...` | The `HF_HUB_ENABLE_HF_TRANSFER=1` env var pointed at a container that doesn't ship `hf_transfer` | Do NOT set `HF_HUB_ENABLE_HF_TRANSFER` when launching the NGC container. The launcher no longer sets it — see `serve_vllm.sh` (2026-07-04 fix). |
 | `/v1/models` 404s but process is running | vLLM crashed inside its own event loop after startup print | Check `sparkq log $JOB --lines 500` for traceback — usually a `xgrammar` compile failure on the first `guided_json` request. Restart with the same idempotency key. |
 | Very low throughput (<5K papers/hr) despite fit | `--vllm-max-concurrent` set too low client-side | Bump `label-abstracts --vllm-max-concurrent` (32 → 64 → 96) and re-measure. Server-side raise `VLLM_GPU_MEM_UTIL` for more KV cache. |
 | sparkq says `deferred_reason: low_free_mem` for 10+ min | Real free RAM below the min_free_mb gate | `sparkq doctor --json` — check `untracked_gpu_procs` for orphans (Ollama chat model?). Unload orphans, then the job admits automatically. |
