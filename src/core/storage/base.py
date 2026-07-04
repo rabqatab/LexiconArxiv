@@ -127,6 +127,14 @@ class QdrantStorage:
                 )
                 for name in ALL_DENSE_VECTORS
             }
+            # Cap background work so search queries can still make progress
+            # under bulk write load. The 2026-07-04 labeling job (b2ab) at
+            # scale saturated all CPU cores with HNSW background indexing +
+            # segment-merge optimizer work; the SearchService's multi-vector
+            # search hit Qdrant's 60s internal "fill query context" timeout.
+            # Caps of 2 leave ~6-10 cores free on GB10 for hybrid queries.
+            # PATCH-able at runtime; setting them here ensures fresh
+            # collections inherit the tuned defaults.
             self.client.create_collection(
                 collection_name=self.collection_name,
                 vectors_config=vectors_config,
@@ -135,11 +143,14 @@ class QdrantStorage:
                         modifier=models.Modifier.IDF,
                     ),
                 },
+                hnsw_config=models.HnswConfigDiff(max_indexing_threads=2),
+                optimizers_config=models.OptimizersConfigDiff(max_optimization_threads=2),
             )
             logger.info(
                 f"Created collection '{self.collection_name}' with "
-                f"{len(ALL_DENSE_VECTORS)} dense vectors ({dense_vector_size}d) "
-                f"and BM25 sparse vector"
+                f"{len(ALL_DENSE_VECTORS)} dense vectors ({dense_vector_size}d), "
+                f"BM25 sparse vector, and search-friendly background thread caps "
+                f"(max_indexing_threads=2, max_optimization_threads=2)"
             )
             self.ensure_venue_text_index()
             self.ensure_stub_payload_index()
