@@ -37,6 +37,12 @@ refs ─────┴─→ citation-graph ─→ (analytics via embedded corp
 
 Specifically: **embed depends on labeling** (section vectors require `abstract_structure`), and **similarity depends on embed** (edges are vector queries).
 
+## Bulk write concurrency — do NOT parallelize
+
+**Serialize Steps 1 → 2 → 3.** The 2026-07-04 catchup attempt tried to run Step 1 (labeling) and Step 2 (keywords) in parallel per the earlier draft of this runbook and hit an immediate wall: Qdrant CPU was already ~78% at baseline (post-P3 indexing), two concurrent bulk clients pushed it into 60 s+ read/write timeouts, and Step 1's `batch_update_abstract_structure` died on the very first batch of 500 papers. See the [`qdrant-tuning.md`](qdrant-tuning.md) runbook for the search-under-load recovery pattern, and [`vllm-labeling.md`](vllm-labeling.md) §Troubleshooting matrix for the `batch_update_abstract_structure` retry note.
+
+**Rule**: never more than one bulk write client against the same Qdrant collection at a time. Use sparkq `--after <job-id>` to chain — the correct commands are shown inline with each step below.
+
 ---
 
 ## Step 1 — Labeling (vLLM)
@@ -70,17 +76,18 @@ sparkq submit "uv run python -m src.cli.core_collect label-abstracts \
 
 ---
 
-## Step 2 — Keyword extraction (parallel with Step 1)
+## Step 2 — Keyword extraction (AFTER Step 1)
 
 **What it fixes:** Gap #6. Populates `keywords` and `keywords_structured` on P2/P3 papers. Powers autocomplete and BM25 term weighting.
 
-**Runs on CPU only** — safe to run in parallel with vLLM labeling on the same node.
+**CPU-only** — but do NOT run in parallel with Step 1 (see §Bulk write concurrency above; 2026-07-04 caused Qdrant read/write timeouts). Chain with `--after`:
 
 ```bash
 sparkq submit "uv run python -m src.cli.core_collect extract-keywords" \
-    --node 1 --gpu-mem 0 --cpu-mem 8G --max-runtime 24h \
-    --tag extract-keywords-catchup --workdir /home/alphabridge/LexiconArxiv \
-    --idempotency-key kw-catchup-$(date -u +%Y%m%d) --json
+    --node 1 --gpu-mem 0 --cpu-mem 8G --max-runtime 48h \
+    --tag catchup-keywords --workdir /home/alphabridge/LexiconArxiv \
+    --idempotency-key catchup-keywords-$(date -u +%Y%m%d) \
+    --after <STEP1_JOB_ID> --json
 ```
 
 Default is regex + KeyBERT (no LLM). Don't add `--llm` at bootstrap scale — Ollama keyword extraction has the same serial-chat ceiling as labeling did.
@@ -89,15 +96,18 @@ Default is regex + KeyBERT (no LLM). Don't add `--llm` at bootstrap scale — Ol
 
 ---
 
-## Step 3 — Reference resolution
+## Step 3 — Reference resolution (AFTER Step 2)
 
 **What it fixes:** Gap #3. `resolve-refs --create-stubs` walks each paper's `references` list and creates stub records for any target that doesn't exist as a Qdrant point. Without this, the citation graph out of P2/P3 papers has dangling edges.
+
+Serial chain per §Bulk write concurrency:
 
 ```bash
 sparkq submit "uv run python -m src.cli.core_collect resolve-refs --create-stubs" \
     --node 1 --gpu-mem 0 --cpu-mem 8G --max-runtime 48h \
-    --tag resolve-refs-catchup --workdir /home/alphabridge/LexiconArxiv \
-    --idempotency-key resolve-refs-catchup-$(date -u +%Y%m%d) --json
+    --tag catchup-refs --workdir /home/alphabridge/LexiconArxiv \
+    --idempotency-key catchup-refs-$(date -u +%Y%m%d) \
+    --after <STEP2_JOB_ID> --json
 ```
 
 **Warning — new stubs need enrichment.** After Step 3 completes, the freshly-created stubs have only reference identifiers (DOI/OpenAlex ID) in payload. Run [`enrich-8-metadata-by-stub-via-openalex`](../pipelines/enrichment.md) to fill title/authors/venue/year on the new stubs before treating them as searchable.
@@ -109,6 +119,8 @@ sparkq submit "uv run python -m src.cli.core_collect resolve-refs --create-stubs
 **What it fixes:** Gap #2. Generates all 9 dense vectors + BM25 for every paper in the embedding queue (populated by P3, plus any papers added by Step 3's stub creation).
 
 **Depends on Step 1.** Do not start until labeling is complete on the papers you want fully-vectorized. Papers embedded before their labeling completes will only get 2 dense vectors (raw abstract + structured-fallback) — you'd have to `--force` re-embed them later.
+
+**Also serial with Steps 2/3** per §Bulk write concurrency. Chain via `--after <STEP3_JOB_ID>` on the priority pass. Two concurrent bulk write clients against Qdrant have been proven to fail (2026-07-04 catchup Step 1 + Step 2 experiment).
 
 Full playbook: [`docs/runbooks/embed-drain-strategy.md`](embed-drain-strategy.md). Executive summary:
 

@@ -83,6 +83,18 @@ Ollama's ceiling is workload-dependent. Measurements on GB10:
 
 **MCP-level implication (verified 2026-07-04):** the default `search_papers` path (HyDE off in the shipped `RetrievalConfig`) touches only Ollama embed + Qdrant; ~400-600 ms total against the 5 s handler budget. If HyDE is ever enabled, the ~2-5 s Ollama chat call still fits under the 5 s budget for the same low-volume reason.
 
+### Bulk-write concurrency rule (added 2026-07-04 after runtime discovery)
+
+Qdrant cannot serve two heavy bulk write clients + user-facing search simultaneously. The 2026-07-04 catchup attempt tried Step 1 (labeling) and Step 2 (keywords) in parallel per the earlier post-bootstrap runbook — Step 1 died on the first batch of 500 papers with a `set_payload` timeout, and search hit Qdrant's own 60 s "fill query context" internal timeout.
+
+**Rule:** post-bootstrap catchup phases run **strictly serial** (Step 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8), using sparkq `--after <job-id>` chaining. Under-the-hood defenses:
+
+1. **Client-side retry on all bulk write paths.** `_retry_qdrant_call` (commit `c61a652`) wraps every `set_payload` in exponential backoff. `batch_update_abstract_structure` uses it today; the code overhaul plan Wave 1 generalizes to `batch_update_code_repos`, `batch_extend_external_cited_by`, `batch_inject_papers`.
+2. **Qdrant background-thread caps.** `hnsw_config.max_indexing_threads=2` + `optimizers_config.max_optimization_threads=2` (commit `9636d66`) leaves 6-10 cores free for search under any bulk write load. Applies to fresh collections automatically; run the PATCH in [`docs/runbooks/qdrant-tuning.md`](../runbooks/qdrant-tuning.md) for existing ones.
+3. **QdrantStorage default timeout 300 s** (`QDRANT_TIMEOUT` env override). Search/MCP callsites are still under their own 5 s handler budget.
+
+Together these turn what was a hard failure ("cannot label under production Qdrant load") into a soft slowdown ("search takes ~2 s instead of ~500 ms while labeling runs"). Search remains functional; MCP remains within budget.
+
 ---
 
 ## Action items
