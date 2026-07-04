@@ -5,14 +5,52 @@ Provides methods for updating paper fields in bulk.
 
 import logging
 import threading
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
+from qdrant_client.http.exceptions import ResponseHandlingException, UnexpectedResponse
 
 logger = logging.getLogger(__name__)
+
+
+def _retry_qdrant_call(fn, *, max_attempts: int = 5, op_label: str = "qdrant call"):
+    """Retry a Qdrant client call on transient timeout / 5xx errors.
+
+    The 2026-07-04 labeling job (b2ab) died on a single ``set_payload``
+    timeout after ~10 minutes of otherwise-successful vLLM labeling. The
+    500-paper batch's client-side loop had zero retry: one transient
+    Qdrant timeout under bulk contention lost the entire batch's work.
+
+    This helper wraps a call in exponential backoff (1, 2, 4, 8, 16s) on
+    transient exceptions; permanent errors (400/404 payload validation)
+    propagate immediately. Callers use it around every set_payload /
+    upsert / delete in the bulk write path so one bad second doesn't
+    torch the whole batch.
+    """
+    delay = 1.0
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return fn()
+        except (ResponseHandlingException, UnexpectedResponse) as e:
+            # UnexpectedResponse with 4xx (except 429) is a real error — don't retry.
+            if isinstance(e, UnexpectedResponse) and 400 <= e.status_code < 500 \
+                    and e.status_code != 429:
+                raise
+            if attempt >= max_attempts:
+                logger.error(
+                    "%s failed after %d attempts: %s", op_label, max_attempts, e,
+                )
+                raise
+            logger.warning(
+                "%s failed (attempt %d/%d), retrying in %.0fs: %s",
+                op_label, attempt, max_attempts, delay, e,
+            )
+            time.sleep(delay)
+            delay = min(delay * 2, 30.0)
 
 _POINT_LOCKS: dict[str, threading.Lock] = {}
 _POINT_LOCKS_GUARD = threading.Lock()
@@ -327,13 +365,16 @@ class BatchWriter:
             Number of papers updated.
         """
         for point_id, structure, source in updates:
-            self.client.set_payload(
-                collection_name=self.collection_name,
-                payload={
-                    "abstract_structure": structure,
-                    "abstract_structure_source": source,
-                },
-                points=[point_id],
+            _retry_qdrant_call(
+                lambda: self.client.set_payload(
+                    collection_name=self.collection_name,
+                    payload={
+                        "abstract_structure": structure,
+                        "abstract_structure_source": source,
+                    },
+                    points=[point_id],
+                ),
+                op_label=f"set_payload(abstract_structure, {point_id})",
             )
         return len(updates)
 
