@@ -45,6 +45,7 @@ class QdrantStorage:
         collection_name: str = DEFAULT_COLLECTION,
         url: str | None = None,
         api_key: str | None = None,
+        timeout: float | None = None,
     ):
         """Initialize Qdrant storage.
 
@@ -52,16 +53,27 @@ class QdrantStorage:
             collection_name: Name of the Qdrant collection.
             url: Qdrant server URL. Defaults to QDRANT_URL env var.
             api_key: Qdrant API key. Defaults to QDRANT_API_KEY env var.
+            timeout: HTTP client timeout in seconds. Defaults to
+                ``QDRANT_TIMEOUT`` env var if set, else 300s. Bumped from
+                the historical 60s after the 2026-07-04 label-abstracts
+                500-paper bench: heavy filters (labeling-eligible count
+                over 3.7M real papers) and payload set-writes both blew
+                past 60s under P3-completion load. 300s is a safe headroom
+                for the catchup-scale work; caller / env can drop it back
+                down for latency-sensitive callsites (search, MCP handlers).
         """
         self.collection_name = collection_name
         self.url = url or os.getenv("QDRANT_URL", "http://localhost:6333")
         self.api_key = api_key or os.getenv("QDRANT_API_KEY") or None
+        if timeout is None:
+            timeout = float(os.getenv("QDRANT_TIMEOUT", "300"))
+        self.timeout = timeout
 
         # Initialize client
+        client_kwargs = {"url": self.url, "timeout": timeout}
         if self.api_key:
-            self.client = QdrantClient(url=self.url, api_key=self.api_key, timeout=60)
-        else:
-            self.client = QdrantClient(url=self.url, timeout=60)
+            client_kwargs["api_key"] = self.api_key
+        self.client = QdrantClient(**client_kwargs)
 
         # Compose helper objects
         self.queries = PaperQuery(self.client, self.collection_name)
