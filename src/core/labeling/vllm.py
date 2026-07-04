@@ -60,15 +60,27 @@ class VLLMAbstractLabeler(BaseAbstractLabeler):
         user_prompt = LABELING_USER_PROMPT.format(
             title=title, abstract=abstract, sentences=numbered_sentences
         )
+        # vLLM's OpenAI-compatible endpoint accepts constrained JSON via a
+        # top-level `response_format` field (OpenAI standard). Older docs
+        # referenced `extra_body: {guided_json: ...}` — that's the OpenAI
+        # Python SDK's client-side unpack convention, but when we POST raw
+        # JSON via httpx it goes across the wire nested under extra_body
+        # and vLLM ignores it (verified 2026-07-04: "fields ignored:
+        # {'extra_body'}" warning in the server log). Response_format is
+        # the wire-safe form.
         payload = {
             "model": self._model,
             "messages": [
                 {"role": "system", "content": LABELING_SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},
             ],
-            # vLLM extension for constrained JSON — enforces the schema
-            # at decode time, no need to retry on parse failures.
-            "extra_body": {"guided_json": SentenceLabels.model_json_schema()},
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "SentenceLabels",
+                    "schema": SentenceLabels.model_json_schema(),
+                },
+            },
             "temperature": 0.1,
             "stream": False,
         }
