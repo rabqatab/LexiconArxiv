@@ -4,15 +4,17 @@
 
 **Rationale:** See [`docs/design/bulk-vs-incremental-audit.md`](../design/bulk-vs-incremental-audit.md). The bootstrap chain focuses on ingestion + payload correctness. Everything the incremental pipeline does *after* payload correctness (steps 5-13 in `run_incremental_pipeline.sh`) is missing from the bootstrap. This runbook is that "everything else."
 
-**Wall clock (estimated for a 3M-paper post-P3 catchup):**
-- Labeling (vLLM): ~4 days
+**Wall clock (measured 2026-07-04 for a ~3.74 M-paper post-P3 catchup):**
+- Labeling (vLLM @ 35.6 K/hr at `--vllm-max-concurrent 128` on GB10): **~4.4 days** (~105 h). Ollama baseline projection at 750/hr was ~208 days — infeasible.
 - Keyword extraction (regex+KeyBERT, no LLM): ~1 day
 - Reference resolution: ~1-2 days
-- Embed drain: ~5-7 days (parallel with labeling of remaining papers if desired)
+- Embed drain: ~5-7 days (can start on already-labeled subset while remaining labeling continues)
 - Similarity + graph analysis: ~1 day (weekly rerun)
 - Topic clustering: ~2 hours (quarterly rerun)
 
-**Total: ~2 weeks** with the vLLM labeling migration in place; ~6 months with Ollama-only labeling.
+**Total: ~2 weeks** with the Phase 1-verified vLLM labeling backend; ~6+ months with the Ollama fallback.
+
+Throughput gate detail: [`vllm-labeling-migration.md`](../design/vllm-labeling-migration.md) §Throughput gate; [`vllm-labeling.md`](vllm-labeling.md) has the scaling table for future capacity-planning re-measures.
 
 ---
 

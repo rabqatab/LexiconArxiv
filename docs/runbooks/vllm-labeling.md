@@ -22,6 +22,17 @@
 
 Rule of thumb: if wall-clock at Ollama's ~750/hr would take **less than an hour**, keep Ollama. Everything else → vLLM.
 
+**Measured throughput (2026-07-04, DGX Spark Node 1, `ibm-granite/granite-4.1-8b` BF16, `--gpu-memory-utilization 0.30`):**
+
+| `--vllm-max-concurrent` | Throughput (papers/hr) |
+|---|---|
+| 4 | 2,444 |
+| 16 | 8,287 |
+| 64 | 22,185 |
+| **128** | **35,618** ← Phase 1 gate pass |
+
+The 30K/hr Phase 1 gate is met at `-p 128`. All 400 sampled requests across the four configs were schema-valid — vLLM's continuous batching doesn't sacrifice output quality under load. Full context: [`vllm-labeling-migration.md`](../design/vllm-labeling-migration.md) §Throughput gate.
+
 ---
 
 ## Preconditions
@@ -189,7 +200,9 @@ Common restart triggers and their proper fixes:
 | `libtorch_cuda.so: cannot open shared object file` at boot | pip-installed vLLM on aarch64 (Grace-Blackwell) — wheels are x86_64 only | Use the NGC container instead (the launcher does this by default). The `[gpu]` extra in `pyproject.toml` only works on x86_64 dev laptops. |
 | `ValueError: Fast download using 'hf_transfer' is enabled...` | The `HF_HUB_ENABLE_HF_TRANSFER=1` env var pointed at a container that doesn't ship `hf_transfer` | Do NOT set `HF_HUB_ENABLE_HF_TRANSFER` when launching the NGC container. The launcher no longer sets it — see `serve_vllm.sh` (2026-07-04 fix). |
 | `/v1/models` 404s but process is running | vLLM crashed inside its own event loop after startup print | Check `sparkq log $JOB --lines 500` for traceback — usually a `xgrammar` compile failure on the first `guided_json` request. Restart with the same idempotency key. |
-| Very low throughput (<5K papers/hr) despite fit | `--vllm-max-concurrent` set too low client-side | Bump `label-abstracts --vllm-max-concurrent` (32 → 64 → 96) and re-measure. Server-side raise `VLLM_GPU_MEM_UTIL` for more KV cache. |
+| Very low throughput (<5K papers/hr) despite fit | `--vllm-max-concurrent` set too low client-side | Bump `label-abstracts --vllm-max-concurrent`; 2026-07-04 scaling bench measured **2.4K/hr @ -p 4 → 8.3K @ -p 16 → 22.2K @ -p 64 → 35.6K @ -p 128**. Server-side raise `VLLM_GPU_MEM_UTIL` for more KV cache. |
+| `httpx.ReadTimeout` from `count_papers_for_abstract_labeling` or `batch_update_abstract_structure` | Qdrant slow under bulk load; default client timeout was 60 s | Bumped to 300 s in `src/core/storage/base.py` (2026-07-04 fix commit `c342171`). If ops needs longer for a particularly heavy batch, set `QDRANT_TIMEOUT=600` in the sparkq job env. |
+| `POST /v1/chat/completions ... "fields ignored: {'extra_body'}"` in the vLLM log AND labeler retries five times with schema-invalid content | Old `VLLMAbstractLabeler` used `extra_body` (OpenAI-Python-SDK convention) which vLLM drops over the wire. Fixed 2026-07-04 commit `24b7439` — use `response_format` with `type=json_schema` instead. | Verify `src/core/labeling/vllm.py` payload has `response_format`, not `extra_body`. If a stale checkout regressed, roll forward. |
 | sparkq says `deferred_reason: low_free_mem` for 10+ min | Real free RAM below the min_free_mb gate | `sparkq doctor --json` — check `untracked_gpu_procs` for orphans (Ollama chat model?). Unload orphans, then the job admits automatically. |
 | `pid_alive: false` while `status: running` | Daemon lost track of the child (rare) | `sparkq doctor` will flag `drifted_jobs`. Cancel the drifted id and resubmit. |
 

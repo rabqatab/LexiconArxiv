@@ -438,8 +438,12 @@ The 2026-07-04 verification revealed that **P2-promoted (~940K) and P3-injected 
 - **[gpu] extra** in `pyproject.toml` — installs vLLM + xgrammar for the labeling server; base install unchanged for non-GPU hosts.
 - **Docs sweep**: `docs/pipelines/abstract_labeling.md`, `docs/pipelines/keyword_extraction.md`, `docs/guides/crawling.md` updated for Path B (vLLM backend documented, `--llm --judge` explicitly deprecated at bulk scale, historical Gemini refs cleared). `.gitignore` extended to silence local scratch (`poc_*.py`, `audit_*.py`, `run_complete_chain_*.sh`).
 - **Overhaul plan** ([`docs/refactoring/2026-07-04-code-overhaul-plan.md`](docs/refactoring/2026-07-04-code-overhaul-plan.md)) — waves of cleanup queued for the post-bootstrap stability window: DQ registry, CLI reorg, storage layer consolidation, vector schema versioning, dep prune, deprecation removals. Executes on the same trigger as the ponytail audit (corpus stable ≥ 1 week AND bootstrap complete).
+- **Phase 1 gate verified (2026-07-04)** — vLLM served from `nvcr.io/nvidia/vllm:25.11-py3` (aarch64 GB10). Quality: 60/60 schema-valid on both baselines, per-role micro-F1 0.83–0.93, overall Jaccard 0.834 accepted after multi-label-lens review. Throughput scaling: 2.4K/hr @ -p 4 → 8.3K @ -p 16 → 22K @ -p 64 → **35.6K/hr @ -p 128**. Projected wall-clock for the 3.74M-paper labeling gap: **~4.4 days** on vLLM vs ~208 days on Ollama (~47× speedup).
+- **Qdrant client timeout raised** (`60s → 300s`, `QDRANT_TIMEOUT` env override, commit `c342171`) after the CLI bench hit read-timeouts on the `count_papers_for_abstract_labeling` filter and sequential `set_payload` writes at catchup scale.
+- **NGC vLLM container required on DGX Spark** (commit `5495eda`) — the PyPI vLLM wheels are x86_64/CUDA and fail to import on aarch64 (Grace-Blackwell) with `libtorch_cuda.so cannot open shared object file`. `serve_vllm.sh` now wraps `docker run nvcr.io/nvidia/vllm:25.11-py3`. The `[gpu]` pyproject extra is preserved for x86_64 dev-laptop use only.
+- **`response_format` not `extra_body`** (commit `24b7439`) — `VLLMAbstractLabeler` originally passed the JSON schema via OpenAI-Python-SDK's `extra_body` convention; that field is client-side-unpacked, so posting raw JSON via httpx sends the wrapper over the wire and vLLM drops it. Fix: top-level `response_format: {type: json_schema, json_schema: {name, schema}}`.
 
-Tests: 417 → 419+ (+2 net after the DQ check tests; older MCP additions still in place). Zero regressions across the full suite.
+Tests: 417 → 481+ (+64 net across DQ, drain-priority, timeout, throughput bench harness). Zero regressions across the full suite.
 
 ### v0.13.2 (Jul 2026) — MCP hardening wave (post-2026-07-03 incident)
 
