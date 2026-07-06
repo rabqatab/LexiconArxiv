@@ -339,6 +339,8 @@ The production collection (`lexicon_arxiv_v3`) uses 9 dense named vectors plus 1
 
 ### 5.2 paper_embeddings collection (Payload Schema)
 
+> **Authoritative reference:** [`docs/reference/qdrant-payload-catalog.md`](../reference/qdrant-payload-catalog.md) — full field catalog with per-field descriptions, the field × pipeline-stage write matrix, DQ rules, and the current payload_schema index status. The subset below is a design snapshot kept for historical continuity; if the two disagree, the catalog wins.
+
 ```json
 {
   "collection_name": "lexicon_arxiv",

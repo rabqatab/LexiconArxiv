@@ -53,6 +53,7 @@
 |----------|-------------|
 | [Venues](./reference/venues.md) | Venue tiers, IDs, and classifications |
 | [CLI](./reference/cli.md) | Complete CLI command reference |
+| [Qdrant Payload Catalog](./reference/qdrant-payload-catalog.md) | Every payload field written to `lexicon_arxiv_v3`: description, which stage writes it, DQ rule, index status. The single reference for filter-shape decisions and DQ authoring. |
 | [Snapshot Field Mapping](./reference/snapshot-fields.md) | OpenAlex `works` JSONL → Qdrant payload mapping |
 | [Labeling LLM Comparison](./reference/labeling-llm-comparison.md) | granite4.1:8b vs gemma4:e4b vs DiffusionGemma eval results |
 | [MCP Server](./reference/mcp-server.md) | Tool catalog, timeout budgets, `get_mcp_version` stale-subprocess protocol, formatter contract |
