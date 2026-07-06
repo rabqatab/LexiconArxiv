@@ -8,6 +8,8 @@ import logging
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 
+from src.core.storage.writer import _retry_qdrant_call
+
 logger = logging.getLogger(__name__)
 
 
@@ -127,12 +129,20 @@ class PaperReader:
             must_not=must_not_conditions if must_not_conditions else None,
         )
 
-        results, next_offset = self.client.scroll(
-            collection_name=self.collection_name,
-            scroll_filter=scroll_filter,
-            limit=limit,
-            offset=offset,
-            with_payload=True,
+        # 2026-07-06 incremental 830c fatal: Qdrant server-side 60s
+        # "scroll_by_id timed out" killed the enricher on a single
+        # transient scroll page. Wrap in _retry_qdrant_call so bulk
+        # reads survive the same class of contention that the writer
+        # path already recovers from.
+        results, next_offset = _retry_qdrant_call(
+            lambda: self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=scroll_filter,
+                limit=limit,
+                offset=offset,
+                with_payload=True,
+            ),
+            op_label=f"scroll(get_papers_missing_abstracts, offset={offset})",
         )
 
         return [(str(p.id), p.payload) for p in results], next_offset
@@ -408,8 +418,14 @@ class PaperReader:
         return result.count
 
     def count_papers_for_abstract_labeling(self, skip_existing: bool = True) -> int:
-        """Count papers eligible for abstract labeling."""
+        """Count papers eligible for abstract labeling.
+
+        Same filter shape as ``get_papers_for_abstract_labeling`` — see
+        that method's docstring for the 2026-07-05 IsEmpty/IsNull filter
+        gotcha.
+        """
         must_not_conditions = [
+            models.IsEmptyCondition(is_empty=models.PayloadField(key="abstract")),
             models.IsNullCondition(is_null=models.PayloadField(key="abstract")),
             models.FieldCondition(key="abstract", match=models.MatchValue(value="")),
         ]
@@ -445,12 +461,19 @@ class PaperReader:
         Returns:
             Tuple of (list of (point_id, payload), next_offset).
         """
+        # Qdrant filter gotcha (discovered 2026-07-05): `IsNullCondition`
+        # matches only when the field EXISTS with null value; papers where
+        # the field is entirely missing from the payload (many P3
+        # snapshot injections) slip past. Use `IsEmptyCondition` — which
+        # covers missing / null / empty-collection — plus the explicit
+        # empty-string match to catch the "" case that IsEmpty does not.
         must_not_conditions = [
-            # Exclude papers with null abstract
+            models.IsEmptyCondition(
+                is_empty=models.PayloadField(key="abstract"),
+            ),
             models.IsNullCondition(
                 is_null=models.PayloadField(key="abstract"),
             ),
-            # Exclude papers with empty string abstract
             models.FieldCondition(
                 key="abstract",
                 match=models.MatchValue(value=""),
