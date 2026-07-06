@@ -171,7 +171,13 @@ uv run python -m src.cli.core_collect collect-incremental --days "$DAYS"
 # Step 2: Enrich abstracts
 echo ""
 echo "[Step 2] Enriching abstracts..."
-uv run python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --parallel "$PARALLEL"
+# Path B (2026-07-06): --recent-days derived from the pipeline's --days arg
+# with a small safety margin. Without it the enricher scans all 3.7M+
+# papers for empty abstracts on the unindexed field, hitting Qdrant's
+# 60s scroll_by_id timeout. See docs/design/bulk-vs-incremental-audit.md.
+uv run python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex \
+    --parallel "$PARALLEL" \
+    --recent-days "$((DAYS + 2))"
 
 # Step 3a: Enrich citations via Semantic Scholar — NEW papers only (fast)
 echo ""
@@ -192,37 +198,28 @@ echo ""
 echo "[Step 4] Enriching citations (CrossRef)..."
 uv run python -m src.cli.core_collect enrich-2-refs-by-doi-via-crossref --parallel "$PARALLEL"
 
-# Steps 5+6: Keywords & Labeling (parallel — independent fields)
-KEYWORDS_PID=""
-LABELING_PID=""
+# Steps 5+6: Keywords & Labeling — SERIAL per Path B (2026-07-04).
+# The prior parallel pattern crashed Qdrant with concurrent bulk write
+# clients during the 2026-07-04 catchup (be19 + 09a1). See:
+# - docs/design/bulk-vs-incremental-audit.md §Bulk-write concurrency rule
+# - docs/runbooks/post-bootstrap-catchup.md §Bulk write concurrency
+# Labeling backend is vLLM at bulk scale (Ollama chat retired from
+# pipelines); server must be running per docs/runbooks/vllm-labeling.md.
 
 echo ""
-echo "[Step 5] Extracting keywords..."
-uv run python -m src.cli.core_collect extract-keywords &
-KEYWORDS_PID=$!
+echo "[Step 5] Extracting keywords (regex + KeyBERT; no LLM)..."
+if ! uv run python -m src.cli.core_collect extract-keywords; then
+    echo "[ERROR] Keyword extraction failed."
+    exit 1
+fi
 
 if [ "$SKIP_LABELING" = false ]; then
     echo ""
-    echo "[Step 6] Labeling abstracts..."
-    uv run python -m src.cli.core_collect label-abstracts &
-    LABELING_PID=$!
-fi
-
-# Wait for parallel steps to complete
-FAILED=false
-if ! wait "$KEYWORDS_PID"; then
-    echo "[ERROR] Keyword extraction failed."
-    FAILED=true
-fi
-if [ -n "$LABELING_PID" ]; then
-    if ! wait "$LABELING_PID"; then
+    echo "[Step 6] Labeling abstracts (vLLM backend)..."
+    if ! uv run python -m src.cli.core_collect label-abstracts --backend vllm; then
         echo "[ERROR] Abstract labeling failed."
-        FAILED=true
+        exit 1
     fi
-fi
-if [ "$FAILED" = true ]; then
-    echo "One or more parallel steps failed."
-    exit 1
 fi
 
 # Step 7: Resolve references and create stubs

@@ -99,7 +99,8 @@ async def collect_incremental_stage(days: int = 3, source: str = "all") -> dict[
 
 
 async def enrich_abstracts_stage(
-    limit: int | None = None, batch_size: int = 100, delay: float = 0.1, parallel: int = 10
+    limit: int | None = None, batch_size: int = 100, delay: float = 0.1, parallel: int = 10,
+    fetched_since: str | None = None,
 ) -> dict[str, int]:
     """Fill missing abstracts via OpenAlex for papers that have a DOI.
 
@@ -107,12 +108,18 @@ async def enrich_abstracts_stage(
 
     Note: `parallel` defaults to 10 here (vs. 1 in the CLI) intentionally —
     Dagster batch runs benefit from higher concurrency than an interactive CLI default.
+
+    ``fetched_since`` (ISO date) narrows the scroll to recently-fetched
+    papers via the indexed ``fetched_at`` field. Set for incremental
+    cycles; leave unset for full-corpus reruns.
     """
     storage = QdrantStorage()
     async with PaperEnricher(
         storage=storage, batch_size=batch_size, delay=delay, max_concurrent=parallel
     ) as enricher:
-        progress = await enricher.enrich_abstracts(dry_run=False, limit=limit)
+        progress = await enricher.enrich_abstracts(
+            dry_run=False, limit=limit, fetched_since=fetched_since,
+        )
     return {
         "processed": progress.processed,
         "enriched": progress.enriched,

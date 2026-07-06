@@ -382,8 +382,11 @@ class QdrantStorage:
         has_doi: bool = True,
         limit: int = 100,
         offset: str | None = None,
+        fetched_since: str | None = None,
     ) -> tuple[list[tuple[str, dict]], str | None]:
-        return self.readers.get_papers_missing_abstracts(has_doi, limit, offset)
+        return self.readers.get_papers_missing_abstracts(
+            has_doi, limit, offset, fetched_since=fetched_since,
+        )
 
     def iter_enrichment_candidates(self, batch_size: int = 1000):
         return self.readers.iter_enrichment_candidates(batch_size=batch_size)

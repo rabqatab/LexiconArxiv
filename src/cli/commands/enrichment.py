@@ -90,6 +90,13 @@ def register_commands(cli: click.Group):
     @click.option("--delay", type=float, default=0.1, help="Delay between API calls")
     @click.option("--parallel", "-p", type=int, default=1, help="Number of concurrent requests")
     @click.option("--retry-incomplete", is_flag=True, help="Re-process papers still missing data (clears checkpoint)")
+    @click.option(
+        "--recent-days", type=int, default=None,
+        help="Only enrich papers fetched in the last N days (incremental cycles). "
+             "Uses the indexed fetched_at field — critical at corpus scale, "
+             "avoids the 60s Qdrant scroll_by_id timeout on full-corpus scans "
+             "(2026-07-06 incremental fatal).",
+    )
     def enrich_6_abstracts_by_doi_via_openalex(
         dry_run: bool,
         limit: int | None,
@@ -97,6 +104,7 @@ def register_commands(cli: click.Group):
         delay: float,
         parallel: int,
         retry_incomplete: bool,
+        recent_days: int | None,
     ) -> None:
         """Enrich papers with abstracts from OpenAlex.
 
@@ -119,11 +127,17 @@ def register_commands(cli: click.Group):
         """
         from src.core.enrichment.openalex import EnrichmentType, PaperEnricher
         from src.core.pipeline.stages import enrich_abstracts_stage
+        from datetime import datetime, timedelta, timezone
+
+        fetched_since = None
+        if recent_days is not None:
+            fetched_since = (datetime.now(timezone.utc) - timedelta(days=recent_days)).strftime("%Y-%m-%d")
 
         async def run_enrichment():
             if not dry_run and not retry_incomplete:
                 counts = await enrich_abstracts_stage(
-                    limit=limit, batch_size=batch_size, delay=delay, parallel=parallel
+                    limit=limit, batch_size=batch_size, delay=delay, parallel=parallel,
+                    fetched_since=fetched_since,
                 )
                 _echo_enrichment_counts(counts)
             else:
@@ -137,7 +151,9 @@ def register_commands(cli: click.Group):
                     if retry_incomplete:
                         enricher.clear_checkpoint(EnrichmentType.ABSTRACTS)
                         click.echo("Checkpoint cleared — retrying papers still missing abstracts.")
-                    progress = await enricher.enrich_abstracts(dry_run=dry_run, limit=limit)
+                    progress = await enricher.enrich_abstracts(
+                        dry_run=dry_run, limit=limit, fetched_since=fetched_since,
+                    )
 
                     click.echo(f"\nAbstract Enrichment Results:")
                     click.echo(f"  Processed: {progress.processed}")

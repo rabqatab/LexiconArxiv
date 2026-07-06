@@ -618,12 +618,19 @@ class PaperEnricher(BaseEnricher, OpenAlexMixin):
         self,
         dry_run: bool = False,
         limit: int | None = None,
+        fetched_since: str | None = None,
     ) -> EnrichmentProgress:
         """Enrich all papers missing abstracts.
 
         Args:
             dry_run: If True, only count papers without updating.
             limit: Maximum papers to process (None for all).
+            fetched_since: ISO date string (e.g., "2026-07-06"). When set,
+                only scans papers fetched after this date — critical for
+                incremental cycles at corpus scale. Without this, Qdrant
+                does a full scan on the unindexed ``abstract`` field and
+                blows past its 60s scroll_by_id server-side timeout
+                (2026-07-06 incremental fatal).
 
         Returns:
             EnrichmentProgress with final statistics.
@@ -632,6 +639,7 @@ class PaperEnricher(BaseEnricher, OpenAlexMixin):
             enrichment_type=EnrichmentType.ABSTRACTS,
             dry_run=dry_run,
             limit=limit,
+            fetched_since=fetched_since,
         )
 
     async def _enrich(
@@ -639,6 +647,7 @@ class PaperEnricher(BaseEnricher, OpenAlexMixin):
         enrichment_type: EnrichmentType,
         dry_run: bool = False,
         limit: int | None = None,
+        fetched_since: str | None = None,
     ) -> EnrichmentProgress:
         """Internal enrichment method.
 
@@ -668,6 +677,7 @@ class PaperEnricher(BaseEnricher, OpenAlexMixin):
                     has_doi=True,
                     limit=self.batch_size,
                     offset=offset,
+                    fetched_since=fetched_since,
                 )
 
             if not papers:

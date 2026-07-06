@@ -97,6 +97,7 @@ class PaperReader:
         has_doi: bool = True,
         limit: int = 100,
         offset: str | None = None,
+        fetched_since: str | None = None,
     ) -> tuple[list[tuple[str, dict]], str | None]:
         """Get papers with DOI but empty/missing abstract.
 
@@ -104,6 +105,13 @@ class PaperReader:
             has_doi: If True, only return papers that have a DOI.
             limit: Maximum number of papers to return.
             offset: Scroll offset for pagination.
+            fetched_since: ISO date string (e.g., "2026-07-06"). Only papers
+                fetched after this date will be returned. When set, uses the
+                indexed ``fetched_at`` field to bound the scroll — critical
+                at corpus scale: without this filter Qdrant does a full
+                scan on the unindexed ``abstract`` field and blows past its
+                60s server-side scroll_by_id timeout (2026-07-06 incremental
+                830c / d582 fatal).
 
         Returns:
             Tuple of (list of (point_id, payload), next_offset).
@@ -115,6 +123,17 @@ class PaperReader:
                 match=models.MatchValue(value=""),
             )
         ]
+        if fetched_since:
+            # Narrow the scroll to recently-fetched papers using the indexed
+            # ``fetched_at`` field. Incremental cycles enrich just today's
+            # additions (~thousands of papers); prior corpus (~3.7M) is
+            # already enriched and doesn't need re-scrolling.
+            filter_conditions.append(
+                models.FieldCondition(
+                    key="fetched_at",
+                    range=models.DatetimeRange(gte=fetched_since),
+                )
+            )
         # Exclude papers where DOI is null/missing (we need DOI for lookup)
         must_not_conditions = []
         if has_doi:
