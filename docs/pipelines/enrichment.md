@@ -337,6 +337,12 @@ Features:
 - Automatic rate limit handling with retry
 - Checkpoint-based resumption
 
+### `--recent-days` on every enricher (mandatory at corpus scale)
+
+`--recent-days` is not an S2-only convenience flag. As of 2026-07-06 it is also on `enrich-6-abstracts-by-doi-via-openalex` and `enrich-2-refs-by-doi-via-crossref` — and **omitting it on any of them at the current 6.2 M-point scale is a deterministic pipeline failure**. Every reader path (`get_papers_missing_abstracts`, `get_papers_missing_references`) filters on an unindexed payload field (`abstract`, `referenced_works`); without the `fetched_at` bound the scroll goes to 6.2 M points and hits Qdrant's server-side 60-148 s scroll_by_id / retrieve timeout. Details: [`../design/bulk-vs-incremental-audit.md`](../design/bulk-vs-incremental-audit.md) §Qdrant filter-index gap.
+
+`run_incremental_pipeline.sh` derives the value from its `--days` arg (with a +2 day safety margin) and threads it through all three enrichers automatically. For manual runs on the CLI, set the flag explicitly.
+
 ---
 
 ## 5. PDF Reference Extraction (Step 5)

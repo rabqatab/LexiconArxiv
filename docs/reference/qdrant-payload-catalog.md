@@ -226,18 +226,20 @@ Full source of truth is `curl http://localhost:6333/collections/lexicon_arxiv_v3
 
 | Field | Type | Points populated | Added |
 |---|---|---:|---|
-| `fetched_at` | datetime | 178 704 | pre-existing |
-| `source_id` | keyword | 178 704 | pre-existing |
+| `fetched_at` | datetime | 178 705 | pre-existing |
+| `source_id` | keyword | 178 705 | pre-existing |
 | `is_stub` | bool | 6 033 943 | pre-existing |
-| `doi` | keyword | 4 509 663 | pre-existing |
-| `openalex_id` | keyword | 4 654 369 | pre-existing |
+| `doi` | keyword | 4 509 664 | pre-existing |
+| `openalex_id` | keyword | 4 654 370 | pre-existing |
 | `arxiv_id` | keyword | 105 777 | pre-existing |
-| `venue` | text | 4 292 756 | pre-existing |
-| `abstract_structure_source` | keyword | 240 020 | 2026-07-06 |
-| `injected_from_snapshot` | bool | 2 590 221 | 2026-07-06 |
-| `snapshot_filled_at` | datetime | 4 745 799 | 2026-07-06 |
-| `year` | integer | 4 776 714 | 2026-07-06 |
-| `type` | keyword | 2 967 107 | 2026-07-06 |
+| `venue` | text | 4 292 757 | pre-existing |
+| `abstract_structure_source` | keyword | 240 020 | 2026-07-06 (batch 1) |
+| `injected_from_snapshot` | bool | 2 590 221 | 2026-07-06 (batch 1) |
+| `snapshot_filled_at` | datetime | 4 745 799 | 2026-07-06 (batch 1) |
+| `year` | integer | 4 776 715 | 2026-07-06 (batch 1) |
+| `type` | keyword | 4 600 242 | 2026-07-06 (batch 1) |
+| `promoted_from_stub` | bool | 974 457 | 2026-07-06 (batch 2 — Wave 4c gate) |
+| `tier` | integer | 3 056 | 2026-07-06 (batch 2 — only 178 K OpenAlex venue-crawled papers carry it) |
 
 **Rule** (see [`../design/bulk-vs-incremental-audit.md`](../design/bulk-vs-incremental-audit.md) §Third rule): any new bulk-scroll filter must use only fields from this list. Adding a filter on an unindexed payload field at 6.2 M-scale is a deterministic 60 s server-side timeout.
 

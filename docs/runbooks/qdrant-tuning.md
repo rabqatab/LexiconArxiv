@@ -91,9 +91,9 @@ curl -sf -X PATCH http://localhost:6333/collections/lexicon_arxiv_v3 \
 
 **How this differs from the CPU tuning above:** the CPU tuning helps when search competes with bulk-write background work. The payload indices fix a different failure mode — a single filter query going deterministically over the time budget because Qdrant has no index for the field being filtered on.
 
-### The five indices we added
+### The seven indices we added
 
-Fields chosen by walking every scroll/count callsite in `src/core/storage/reader.py` and `src/core/enrichment/` for what the incremental pipeline actually filters on. All are online-buildable (no downtime).
+Fields chosen by walking every scroll/count callsite in `src/core/storage/reader.py` and `src/core/enrichment/` for what the incremental pipeline actually filters on, then extended when the Wave 4b/4c cleanup planning needed `tier` and `promoted_from_stub`. All are online-buildable (no downtime).
 
 | Field | Type | Points at build | Fixes |
 |---|---|---:|---|
@@ -101,7 +101,9 @@ Fields chosen by walking every scroll/count callsite in `src/core/storage/reader
 | `injected_from_snapshot` | bool | 2 590 221 | P2/P3 subset queries |
 | `snapshot_filled_at` | datetime | 4 745 799 | P2/P3 date-bucket queries |
 | `year` | integer | 4 776 714 | year-based chronological chunking of the labeling backlog |
-| `type` | keyword | 2 967 107 | non-article cleanup (book / peer-review / editorial per [Wave 4b](../refactoring/2026-07-04-code-overhaul-plan.md)) |
+| `type` | keyword | 4 600 242 | non-article cleanup (book / peer-review / editorial per [Wave 4b](../refactoring/2026-07-04-code-overhaul-plan.md)) |
+| `promoted_from_stub` | bool | 974 457 | P2-promoted subset queries (Wave 4c topic gate) |
+| `tier` | integer | 3 056 | tier-priority labeling — most points don't carry it, incremental crawler sets it only on the 178 K OpenAlex venue-crawled slice |
 
 Prior indices (fetched_at, doi, openalex_id, arxiv_id, source_id, venue, is_stub) already existed — see the collection payload_schema for the current full list.
 
@@ -113,7 +115,9 @@ for entry in \
     "injected_from_snapshot:bool" \
     "snapshot_filled_at:datetime" \
     "year:integer" \
-    "type:keyword"
+    "type:keyword" \
+    "promoted_from_stub:bool" \
+    "tier:integer"
 do
     field="${entry%:*}"
     schema="${entry#*:}"

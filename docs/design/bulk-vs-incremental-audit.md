@@ -167,12 +167,14 @@ When we inspected `payload_schema` on the running collection, only seven fields 
 
 **Fix (this ships during the incident, not post-catchup):**
 
-1. **Add the five missing indices online.** No collection downtime, ~10–30 min per field in parallel. Fields chosen by walking every scroll/count callsite in `src/core/storage/reader.py`:
+1. **Add the seven missing indices online.** No collection downtime, ~10–30 min per field in parallel. Fields chosen by walking every scroll/count callsite in `src/core/storage/reader.py`, then extended when the Wave 4b/4c cleanup planning needed provenance-based cuts:
    - `abstract_structure_source` (keyword)
    - `injected_from_snapshot` (bool)
    - `snapshot_filled_at` (datetime)
    - `year` (integer)
    - `type` (keyword)
+   - `promoted_from_stub` (bool)
+   - `tier` (integer)
 2. **Add a `fetched_since` filter to the reader** where a scroll had none, using the indexed `fetched_at` — so the enricher only scans papers we actually just crawled, not the full 6 M corpus. Wired through `enrich-6-abstracts-by-doi-via-openalex`, `enrich-4-refs-by-doi-via-s2`, `enrich-2-refs-by-doi-via-crossref` as `--recent-days N`. Set in `run_incremental_pipeline.sh` to `DAYS + 2`.
 3. **Wrap reader scrolls in `_retry_qdrant_call`** so transient contention (real Qdrant hiccups, not the deterministic-slow-query class) is survivable.
 

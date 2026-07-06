@@ -340,13 +340,19 @@ uv run python -m src.cli.core_collect collect-incremental --days 90
 
 ---
 
-### 6.8 --recent-days for S2 Enrichment and force=True for Collection
+### 6.8 --recent-days across every enricher (2026-07-06)
 
-The Semantic Scholar enrichment step supports a `--recent-days N` flag to limit enrichment to papers added within the last N days, reducing API calls during incremental runs:
+**Every incremental enricher now takes `--recent-days N`.** Originally added to `enrich-4-refs-by-doi-via-s2` in March 2026; extended to `enrich-6-abstracts-by-doi-via-openalex` and `enrich-2-refs-by-doi-via-crossref` on 2026-07-06 after cascading Qdrant scroll timeouts (see [`../design/bulk-vs-incremental-audit.md`](../design/bulk-vs-incremental-audit.md) §Qdrant filter-index gap). At 6.2 M-point corpus scale, an enricher that scrolls the full collection blows past Qdrant's 60-148 s server-side timeout; the `--recent-days` filter narrows the scan via the indexed `fetched_at` field so the enricher only touches papers the crawler actually just added.
 
 ```bash
-uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --recent-days 7
+uv run python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --recent-days 7
+uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2       --recent-days 7
+uv run python -m src.cli.core_collect enrich-2-refs-by-doi-via-crossref --recent-days 7
 ```
+
+`run_incremental_pipeline.sh` derives the value from its `--days` arg (with a 2-day safety margin) and threads it into all three enrichers automatically. Manual runs on the CLI must set the flag explicitly; leaving it off means full-corpus scan and — at current corpus size — a deterministic pipeline failure.
+
+**Coverage caveat:** `fetched_at` is only populated on ~178 K of 6.2 M points because P2/P3 snapshot injections don't write it. See [`../runbooks/qdrant-tuning.md`](../runbooks/qdrant-tuning.md) §Coverage gap and Wave 1e-quater in [`../refactoring/2026-07-04-code-overhaul-plan.md`](../refactoring/2026-07-04-code-overhaul-plan.md) for the backfill plan.
 
 For collection commands, passing `force=True` (or `--force` on the CLI) skips checkpoint-based deduplication and re-collects all papers for the target venue/year range. This is useful after fixing a collector bug or when checkpoint data is stale:
 
@@ -412,7 +418,7 @@ uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2 --recent-days 
 
 **Key takeaways:**
 - Always use `--force` for non-OpenAlex sources in incremental runs, since checkpoints mark them as complete after initial collection.
-- The S2 enricher should always be run with `--recent-days` to avoid scanning the entire corpus.
+- **Every enricher (`enrich-6-abstracts`, `enrich-4-refs-s2`, `enrich-2-refs-crossref`)** should always be run with `--recent-days` to avoid scanning the entire corpus — otherwise Qdrant hits its server-side scroll timeout and the pipeline dies. See §6.8 above. Not just S2 anymore.
 - OpenAlex `from_updated_date` requires a Premium plan; without it, expect full-year scans with deduplication.
 - Labeling in the March 2026 loop used the Gemini backend, which was removed in v0.12. **Production labeling now runs on vLLM + `ibm-granite/granite-4.1-8b`** (see [`vllm-labeling-migration.md`](../design/vllm-labeling-migration.md) and [`bulk-vs-incremental-audit.md`](../design/bulk-vs-incremental-audit.md) §Ollama→vLLM policy — Path B, 2026-07-04). Ollama chat is retired from every pipeline stage; the `--backend ollama` labeling path remains as a dev-laptop fallback only.
 
