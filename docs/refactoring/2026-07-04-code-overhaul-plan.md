@@ -117,6 +117,25 @@ Scope is **cross-provenance** — not just P3 — because Issue B touches origin
 
 Total operator time ~5 days spread across a couple of weeks.
 
+### Wave 4c — Corpus CS-relevance cleanup (data + code — full plan in a separate doc)
+
+Full plan: [`../plans/2026-07-06-corpus-cs-cleanup.md`](../plans/2026-07-06-corpus-cs-cleanup.md).
+
+TL;DR: the 2026-07-06 audit sampled 100 K non-stub real papers by `primary_topic.field` and found only 32.6 % are AI-adjacent. Wave 4c deletes the ~2.4 M non-CS papers (Medicine, Engineering, Biochemistry, Physics, ...) AND adds a durable `KEEP_FIELDS` gate to `phase3_gap_discovery.process_one` and `writer.batch_promote_stubs_from_snapshot` so the next quarterly bootstrap doesn't re-inject them. The code items land in the same PR as the delete script:
+
+| Item | Files / actions |
+|---|---|
+| **4c-1. Enumerate + snapshot the delete list** | new: `scripts/analytics/count_by_topic.py`, `snapshots/2026-07-06-cs-cleanup/delete-ids.jsonl` (untracked). Compare against sampling estimate. |
+| **4c-2. Add P3 topic gate** | `src/core/snapshot/phase3_gap_discovery.py::process_one` — `primary_topic.field IN KEEP_FIELDS OR subfield == "Language and Linguistics"` gate + rejected-by-topic log line. |
+| **4c-3. Add P2 topic gate** | `src/core/snapshot/writer.py::batch_promote_stubs_from_snapshot` — same gate. Non-matching stubs stay stubs. |
+| **4c-4. Two new DQ checks** | `src/core/pipeline/dq.py`: `nontarget_topic_share()`, `no_primary_topic_share()`. |
+| **4c-5. Delete script + downstream cleanup** | new: `scripts/analytics/delete_by_topic.sh`. Year-bucketed filter delete + `cited_by` / `similar_papers` cleanup + pagerank / cluster / notable-papers recompute. |
+| **4c-6. Update payload catalog** | `docs/reference/qdrant-payload-catalog.md` §3 DQ table + §1.5 primary_topic entry. |
+
+**Estimated effort:** 4 days total (see plan doc's Phase 1-4 estimates).
+
+Note: complements Wave 4b (`type`-based cleanup); the two whitelists compose (a paper must pass both to survive).
+
 ### Wave 5 — Test suite reorganization
 
 | Item | Files | Notes |
