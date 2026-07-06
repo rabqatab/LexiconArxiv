@@ -118,6 +118,74 @@ Together these turn what was a hard failure ("cannot label under production Qdra
 
 ---
 
+## P3 data-quality gap (added 2026-07-06)
+
+While running the catchup labeling, we discovered a **different** class of P3 gap — not "downstream stages didn't run" (the original 7 gaps above) but "P3 injected the wrong kind of points to begin with."
+
+**Root cause.** `discover_corpus_gaps` (P3) filters OpenAlex snapshot works by anchor + concept classification but **does not filter by `type`**. As a result the ~2 M P3-injected points include:
+
+- `book` — full table-of-contents + preface stored in the `abstract` field.
+- `peer-review` — an entire peer-review thread (26 K-char single "abstract") stored as if it were a paper.
+- `editorial` — opinion-piece body text stored as an "abstract".
+- `letter`, `erratum`, `retraction`, `other` — likely present at lower volume; not yet enumerated.
+
+The catchup labeling exposed this because these non-article "abstracts" are far longer than legitimate paper abstracts (measured p90 = 25 647 chars, some >30 000 chars), which blows past vLLM's `max_model_len`. Sampling five random long-abstract papers hit 3 non-article types in the sample.
+
+**Impact today:**
+
+- **Labeling** wastes vLLM cycles trying to structure body text into rhetorical roles that don't apply.
+- **Search** surfaces book chapters and peer-review threads as "papers."
+- **Similarity edges** into these are semantically meaningless.
+- **Downstream analytics** (topic clusters, notable-paper scoring) treats them as first-class papers.
+
+**Estimated share.** Not yet enumerated; sampling suggests ≥ 10-20 % of the P3-injected subset.
+
+**Fix plan (deferred to post-catchup — see live backlog [`docs/plans/TODO.md`](../plans/TODO.md)):**
+
+1. Count `type` distribution across P2/P3-injected papers.
+2. Design keep/delete policy — probably keep `article`, `preprint`, `conference-paper`, `dissertation`; drop `book`, `peer-review`, `editorial`, `letter`, `erratum`, `retraction`, `other`.
+3. Delete + cleanup similarity/cited_by/graph refs pointing at the deleted points.
+4. Add a DQ warn-check for non-article proportion so this doesn't recur silently.
+5. Add a `type` filter to `discover_corpus_gaps` (P3) so the next quarterly bootstrap doesn't reintroduce them.
+
+Trigger: after post-bootstrap catchup completes stably (same rule as [ponytail audit](../refactoring/2026-06-24-ponytail-audit.md) and [code overhaul plan](../refactoring/2026-07-04-code-overhaul-plan.md)).
+
+## Qdrant filter-index gap (added 2026-07-06)
+
+A **third** class of gap surfaced during the same catchup effort. This one is not about missing pipeline stages or wrong point types — it's about **Qdrant filter shapes that were fine at 100 K corpus scale silently becoming unusable at 6 M**.
+
+**Root cause.** Every enricher scroll uses a payload filter like `abstract == ""` or `IsEmpty(referenced_works)`. At small corpus size Qdrant's brute-force filter path returns in milliseconds. At 6 M points with **no payload index on the filtered field**, the same query goes over Qdrant's server-side 60-second `scroll_by_id` / 148-second `retrieve` timeout and returns a 500. Retry doesn't help: the second scan is the same speed as the first.
+
+**How we found it.** Incremental cycles `830c`, `d582`, `7e38` all died at Step 2 or Step 3a. Each traceback pointed at a different reader function — `get_papers_missing_abstracts`, then `get_papers_missing_references` — but the pattern was identical:
+
+```
+qdrant_client.http.exceptions.UnexpectedResponse: 500
+Timeout error: Operation 'scroll_by_id' timed out after 60s
+```
+
+When we inspected `payload_schema` on the running collection, only seven fields were indexed (`fetched_at`, `source_id`, `is_stub`, `doi`, `openalex_id`, `arxiv_id`, `venue`). Every enricher filter was hitting an unindexed field.
+
+**Fix (this ships during the incident, not post-catchup):**
+
+1. **Add the five missing indices online.** No collection downtime, ~10–30 min per field in parallel. Fields chosen by walking every scroll/count callsite in `src/core/storage/reader.py`:
+   - `abstract_structure_source` (keyword)
+   - `injected_from_snapshot` (bool)
+   - `snapshot_filled_at` (datetime)
+   - `year` (integer)
+   - `type` (keyword)
+2. **Add a `fetched_since` filter to the reader** where a scroll had none, using the indexed `fetched_at` — so the enricher only scans papers we actually just crawled, not the full 6 M corpus. Wired through `enrich-6-abstracts-by-doi-via-openalex`, `enrich-4-refs-by-doi-via-s2`, `enrich-2-refs-by-doi-via-crossref` as `--recent-days N`. Set in `run_incremental_pipeline.sh` to `DAYS + 2`.
+3. **Wrap reader scrolls in `_retry_qdrant_call`** so transient contention (real Qdrant hiccups, not the deterministic-slow-query class) is survivable.
+
+**Follow-up gaps still open** (queued as [Wave 1e / 4b](../refactoring/2026-07-04-code-overhaul-plan.md) items):
+
+- `fetched_at` only exists on 178 K of 6.2 M points — P2/P3 injections don't write it. The `--recent-days` filter therefore only reaches original-crawler papers. Enough for incremental cycles; not enough if we ever need enrichers to hit snapshot-injected papers. Backfill via `snapshot_filled_at` (now indexed).
+- Every OTHER bulk-scroll reader path — `get_papers_missing_references_no_doi`, `get_papers_for_abstract_labeling`, etc. — is the same shape of landmine. Today's fix touches only the two that killed the pipeline; Wave 1e generalizes.
+- A payload-schema lint check that fails CI if any bulk-scroll filter shape references a field not in `payload_schema`.
+
+**Rule** (added to Lessons below): at 6M+ corpus scale, **payload filters treated as free at 100K become deterministic 60s failures**. Any new bulk-read path should either use one of the already-indexed fields or add its own index; never merge a bulk scroll whose filter shape hits an unindexed field.
+
+Instrumentation runbook: [`../runbooks/qdrant-tuning.md`](../runbooks/qdrant-tuning.md) §Payload indices.
+
 ## Lessons
 
 **The gap wasn't the labeling code — it was the schema of "bootstrap complete."** No single test could catch it because both pipelines were internally correct. What was wrong was the *seam* between them, and the seam was in nobody's head.
@@ -125,6 +193,10 @@ Together these turn what was a hard failure ("cannot label under production Qdra
 **Preventive rule going forward**: **any new bulk phase must include a "gap check" against the incremental pipeline before it's declared production-ready.** The check is: for every downstream consumer of the corpus (search, MCP, analytics), what fields does it read? Are all those fields populated by the bulk phase? If not, the bulk phase is not done — it queues a follow-up job or it's a documented incomplete state.
 
 This audit is that check for the current bootstrap. Future bootstraps repeat the process.
+
+**Second rule (added 2026-07-06 after the P3 type-cleanup discovery)**: **any new bulk phase must also filter by document type**. `discover_corpus_gaps` filtered by anchor + AI-concept classification but not by `type`; the result was a mix of non-paper entities in the "corpus." Downstream stages assumed everything was a paper. Explicit type whitelist at the source of the bulk write is cheaper than corpus cleanup after the fact.
+
+**Third rule (added 2026-07-06 after the Qdrant filter-index gap)**: **the shape of a bulk-read filter changes with corpus scale — treat it as a load-bearing decision, not incidental syntax**. A filter that used an unindexed payload field was fine at 100 K corpus and fatal at 6 M. Every bulk-scroll reader in `src/core/storage/reader.py` should either filter on an already-indexed field, add its own index at collection creation, or bound the scan with an indexed `fetched_at` / `snapshot_filled_at` range. Payload indexing is not a performance tweak — it is a correctness precondition for the enrichment pipeline at real corpus scale.
 
 ---
 
