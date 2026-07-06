@@ -153,6 +153,97 @@ def register_commands(cli: click.Group):
         )
         click.echo(summary.to_log_line())
 
+    @cli.command("retrofit-tier-from-source-id")
+    @click.option("--limit", type=int, default=None, help="Cap points scanned (for testing)")
+    @click.option("--batch-size", type=int, default=500)
+    @click.option("--dry-run", is_flag=True, help="Count matches, do not write.")
+    def retrofit_tier_from_source_id(limit, batch_size, dry_run):
+        """Retroactively assign ``tier`` to P2/P3-injected papers by joining
+        ``openalex_source_id`` against the venue tier config.
+
+        Prerequisite: run ``enrich-corpus-fields`` (P1) FIRST so that the
+        ``openalex_source_id`` payload field (added 2026-07-06) has been
+        backfilled from the snapshot. This CLI is a cheap Python join —
+        no OpenAlex API calls, no snapshot re-scan.
+
+        Motivation: incremental crawlers set ``tier=venue.tier`` at write
+        time because they query OpenAlex per venue source_id. P2/P3 scanned
+        the snapshot without a per-venue query, so the tier field never
+        got set — this is why ``label-abstracts --priority-tier N`` returns
+        zero papers on the P2/P3 subset. Setting ``tier`` here fixes that.
+        """
+        from src.core.storage.base import QdrantStorage
+        from src.core.config import VENUES
+        from qdrant_client.http import models as qmodels
+
+        source_id_to_tier: dict[str, int] = {}
+        for venue in VENUES:
+            for sid in venue.all_source_ids:
+                source_id_to_tier[sid] = venue.tier
+        click.echo(f"tier map: {len(source_id_to_tier)} source ids (Tier 0/1/2)")
+
+        s = QdrantStorage()
+        # Scroll all papers that have openalex_source_id set but no tier yet
+        scroll_filter = qmodels.Filter(
+            must=[qmodels.IsEmptyCondition(is_empty=qmodels.PayloadField(key="tier"))],
+            must_not=[qmodels.IsEmptyCondition(is_empty=qmodels.PayloadField(key="openalex_source_id"))],
+        )
+        offset = None
+        scanned = 0
+        matched = 0
+        by_tier = {0: 0, 1: 0, 2: 0}
+        updates: list[tuple[str, int]] = []
+        while True:
+            records, next_offset = s.client.scroll(
+                collection_name=s.collection_name,
+                scroll_filter=scroll_filter,
+                limit=batch_size,
+                offset=offset,
+                with_payload=["openalex_source_id"],
+                with_vectors=False,
+            )
+            if not records:
+                break
+            for r in records:
+                sid = (r.payload or {}).get("openalex_source_id")
+                if sid and sid in source_id_to_tier:
+                    tier = source_id_to_tier[sid]
+                    matched += 1
+                    by_tier[tier] = by_tier.get(tier, 0) + 1
+                    updates.append((str(r.id), tier))
+                scanned += 1
+                if limit and scanned >= limit:
+                    break
+            if not dry_run and updates:
+                # Batch-write ``tier`` per matched point. Uses batch_update_points
+                # so 500 writes = 1 HTTP call — same pattern as batch_update_
+                # abstract_structure. wait=False keeps latency down; papers
+                # only need the field for label-abstracts priority filter,
+                # which tolerates a 5-second flush lag.
+                ops = [
+                    qmodels.SetPayloadOperation(
+                        set_payload=qmodels.SetPayload(
+                            payload={"tier": tier}, points=[pid],
+                        ),
+                    ) for pid, tier in updates
+                ]
+                s.client.batch_update_points(
+                    collection_name=s.collection_name,
+                    update_operations=ops,
+                    wait=False,
+                )
+                updates = []
+            offset = next_offset
+            if offset is None or (limit and scanned >= limit):
+                break
+
+        click.echo(f"scanned:   {scanned:,}")
+        click.echo(f"matched:   {matched:,} ({100*matched/max(1,scanned):.1f}%)")
+        click.echo(f"  by tier: {by_tier}")
+        if dry_run:
+            click.echo("(dry-run — no writes performed)")
+
+
     @cli.command("snapshot-status")
     def snapshot_status():
         """Print checkpoint progress + embedding queue depth for all 4 phases."""

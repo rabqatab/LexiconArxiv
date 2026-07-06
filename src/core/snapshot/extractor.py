@@ -67,6 +67,18 @@ def extract_p1_fields(work: dict, existing_payload: dict | None = None) -> dict[
         if url:
             out["best_oa_pdf_url"] = url
 
+    # OpenAlex primary venue Source ID (2026-07-06). Incremental crawlers
+    # already write `tier` because they query by Source ID; P2/P3 grabbed
+    # only the venue display_name and skipped the Source ID entirely, so
+    # `tier` retrofits (join against TIER_0_VENUES.source_id in Config)
+    # were impossible without this field. Store the bare ID (no full URL)
+    # for cheap keyword equality filters in Qdrant.
+    if not _has_value(existing, "openalex_source_id"):
+        src = ((work.get("primary_location") or {}).get("source") or {}).get("id")
+        if src:
+            # normalize "https://openalex.org/S123..." → "S123..."
+            out["openalex_source_id"] = src.rsplit("/", 1)[-1]
+
     # orcid_map from authorships
     if not _has_value(existing, "orcid_map"):
         m = _orcid_map(work)
