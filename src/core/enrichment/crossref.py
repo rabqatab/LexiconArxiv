@@ -282,6 +282,7 @@ class CrossRefEnricher(BaseEnricher, CrossRefMixin):
         self,
         dry_run: bool = False,
         limit: int | None = None,
+        fetched_since: str | None = None,
     ) -> CrossRefEnrichmentProgress:
         """Enrich papers with DOIs using CrossRef.
 
@@ -290,10 +291,15 @@ class CrossRefEnricher(BaseEnricher, CrossRefMixin):
         Args:
             dry_run: Only count papers without updating.
             limit: Maximum papers to process.
+            fetched_since: ISO date. When set, scoped to recently fetched
+                papers via the indexed ``fetched_at`` field — avoids the
+                60s Qdrant scroll_by_id timeout on full-corpus scans (see
+                storage/reader.py::get_papers_missing_references).
 
         Returns:
             CrossRefEnrichmentProgress with statistics.
         """
+        self.fetched_since = fetched_since
         progress = self._load_checkpoint()
         offset = progress.last_offset
 
@@ -305,6 +311,7 @@ class CrossRefEnricher(BaseEnricher, CrossRefMixin):
                 has_doi=True,
                 limit=self.batch_size,
                 offset=offset,
+                fetched_since=getattr(self, "fetched_since", None),
             )
 
             if not papers:

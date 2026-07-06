@@ -196,7 +196,7 @@ fi
 # Step 4: Enrich citations via CrossRef (for papers S2 missed)
 echo ""
 echo "[Step 4] Enriching citations (CrossRef)..."
-uv run python -m src.cli.core_collect enrich-2-refs-by-doi-via-crossref --parallel "$PARALLEL"
+uv run python -m src.cli.core_collect enrich-2-refs-by-doi-via-crossref --parallel "$PARALLEL" --recent-days "$((DAYS + 2))"
 
 # Steps 5+6: Keywords & Labeling — SERIAL per Path B (2026-07-04).
 # The prior parallel pattern crashed Qdrant with concurrent bulk write

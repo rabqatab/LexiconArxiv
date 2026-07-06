@@ -422,6 +422,12 @@ def register_commands(cli: click.Group):
     @click.option("--delay", type=float, default=0.1, help="Delay between API calls (default: 0.1s = 10 req/sec)")
     @click.option("--parallel", "-p", type=int, default=5, help="Concurrent requests (default: 5)")
     @click.option("--retry-incomplete", is_flag=True, help="Re-process papers still missing data (clears checkpoint)")
+    @click.option(
+        "--recent-days", type=int, default=None,
+        help="Only enrich papers fetched in the last N days (incremental cycles). "
+             "Uses the indexed fetched_at field — critical at corpus scale, "
+             "avoids the 60s Qdrant scroll_by_id timeout on full-corpus scans.",
+    )
     def enrich_2_refs_by_doi_via_crossref(
         dry_run: bool,
         limit: int | None,
@@ -429,6 +435,7 @@ def register_commands(cli: click.Group):
         delay: float,
         parallel: int,
         retry_incomplete: bool,
+        recent_days: int | None,
     ) -> None:
         """Enrich papers with references from CrossRef.
 
@@ -456,6 +463,11 @@ def register_commands(cli: click.Group):
         import asyncio
         from src.core.enrichment.crossref import CrossRefEnricher
 
+        from datetime import datetime, timedelta, timezone
+        fetched_since = None
+        if recent_days is not None:
+            fetched_since = (datetime.now(timezone.utc) - timedelta(days=recent_days)).strftime("%Y-%m-%d")
+
         async def run():
             async with CrossRefEnricher(
                 batch_size=batch_size,
@@ -468,6 +480,7 @@ def register_commands(cli: click.Group):
                 progress = await enricher.enrich_by_doi(
                     dry_run=dry_run,
                     limit=limit,
+                    fetched_since=fetched_since,
                 )
                 return progress
 

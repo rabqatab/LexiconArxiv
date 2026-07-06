@@ -59,10 +59,18 @@ class PaperReader:
                 is_empty=models.PayloadField(key="referenced_works"),
             )
         ]
-
-        # Note: fetched_since is NOT applied server-side because qdrant-client 1.16
-        # Range model doesn't accept ISO date strings. The caller (S2 enricher)
-        # filters by fetched_at client-side instead.
+        if fetched_since:
+            # 2026-07-06: apply fetched_since server-side via DatetimeRange
+            # (indexed field). The prior "client-side only" comment was for
+            # an older qdrant-client that didn't accept ISO strings — the
+            # current DatetimeRange handles them and this is the ONLY way to
+            # avoid the full-scan-timeout that killed d582/7e38.
+            filter_conditions.append(
+                models.FieldCondition(
+                    key="fetched_at",
+                    range=models.DatetimeRange(gte=fetched_since),
+                )
+            )
 
         # Exclude stubs and optionally papers without DOI
         must_not_conditions = [
@@ -82,12 +90,19 @@ class PaperReader:
             must_not=must_not_conditions if must_not_conditions else None,
         )
 
-        results, next_offset = self.client.scroll(
-            collection_name=self.collection_name,
-            scroll_filter=scroll_filter,
-            limit=limit,
-            offset=offset,
-            with_payload=True,
+        # 2026-07-06 7e38 fatal: same class as get_papers_missing_abstracts.
+        # Unindexed IsEmpty(referenced_works) → full scan → Qdrant 148s
+        # server-side timeout. Retry wrapper survives transient contention;
+        # fetched_since above is what makes the query actually cheap.
+        results, next_offset = _retry_qdrant_call(
+            lambda: self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=scroll_filter,
+                limit=limit,
+                offset=offset,
+                with_payload=True,
+            ),
+            op_label=f"scroll(get_papers_missing_references, offset={offset})",
         )
 
         return [(str(p.id), p.payload) for p in results], next_offset
