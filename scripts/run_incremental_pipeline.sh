@@ -210,9 +210,49 @@ uv run python -m src.cli.core_collect enrich-2-refs-by-doi-via-crossref --parall
 # Only touches recent papers via --recent-days so it stays a
 # true-incremental fallback rather than a full-corpus sweep.
 GROBID_URL="${GROBID_URL:-http://localhost:8070}"
+GROBID_IMAGE="${GROBID_IMAGE:-lfoppiano/grobid:0.8.0}"
+GROBID_CONTAINER="${GROBID_CONTAINER:-lexicon-grobid}"
+GROBID_AUTO_START="${GROBID_AUTO_START:-true}"   # set to "false" to disable auto-start
+GROBID_STARTED_BY_US=false
+
 echo ""
 echo "[Step 4b] GROBID PDF refs (fallback for papers CrossRef+S2 missed) — recent papers only..."
-if curl -sf --max-time 3 "${GROBID_URL}/api/isalive" > /dev/null 2>&1; then
+
+# Auto-start GROBID container when unreachable. Docker socket is
+# assumed available on the DGX Spark node; falls through to skip if
+# not. Detached (-d) so the pipeline can proceed; container name is
+# stable so a re-run finds and reuses the existing one instead of
+# duplicating. We tear it down at pipeline end only when we were the
+# ones who launched it (see cleanup at the bottom of this script).
+grobid_alive() {
+    curl -sf --max-time 3 "${GROBID_URL}/api/isalive" > /dev/null 2>&1
+}
+
+if ! grobid_alive && [ "$GROBID_AUTO_START" = "true" ]; then
+    if command -v docker > /dev/null 2>&1; then
+        # Reuse a stopped container if one exists; otherwise start fresh.
+        if docker ps -a --format '{{.Names}}' | grep -q "^${GROBID_CONTAINER}$"; then
+            echo "[Step 4b] Restarting existing GROBID container ${GROBID_CONTAINER}..."
+            docker start "$GROBID_CONTAINER" > /dev/null || true
+        else
+            echo "[Step 4b] Starting GROBID container ${GROBID_CONTAINER} (${GROBID_IMAGE})..."
+            docker run -d --rm --name "$GROBID_CONTAINER" -p 8070:8070 "$GROBID_IMAGE" > /dev/null || true
+        fi
+        GROBID_STARTED_BY_US=true
+        # Poll /api/isalive up to 90 s — first-time image pull can be slow.
+        for i in $(seq 1 45); do
+            if grobid_alive; then
+                echo "[Step 4b] GROBID ready after ${i}×2s poll."
+                break
+            fi
+            sleep 2
+        done
+    else
+        echo "[Step 4b] docker CLI not found — cannot auto-start GROBID."
+    fi
+fi
+
+if grobid_alive; then
     if ! uv run python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid \
         --parallel "$PARALLEL" --recent-days "$DAYS_MARGIN" \
         --grobid-url "$GROBID_URL"; then
@@ -230,8 +270,17 @@ if curl -sf --max-time 3 "${GROBID_URL}/api/isalive" > /dev/null 2>&1; then
     fi
 else
     echo "[SKIP] GROBID not reachable at ${GROBID_URL} — Step 4b/4c skipped."
-    echo "       Start GROBID with: docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.0"
-    echo "       Then re-run the GROBID enrichers manually or wait for next incremental."
+    echo "       Manual start: docker run --rm -p 8070:8070 ${GROBID_IMAGE}"
+    echo "       Or disable auto-start: GROBID_AUTO_START=false"
+fi
+
+# GROBID container teardown — only if we were the ones who launched it.
+# Detached container keeps running otherwise so an operator who started
+# it manually retains their instance for reuse.
+if [ "$GROBID_STARTED_BY_US" = "true" ]; then
+    echo ""
+    echo "[Step 4d] Stopping GROBID container ${GROBID_CONTAINER}..."
+    docker stop "$GROBID_CONTAINER" > /dev/null 2>&1 || true
 fi
 
 # Steps 5+6: Keywords & Labeling — SERIAL per Path B (2026-07-04).
