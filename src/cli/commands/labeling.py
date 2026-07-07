@@ -51,6 +51,13 @@ def register_commands(cli: click.Group):
         default=64,
         help="Concurrent in-flight requests to vLLM (default: 64)",
     )
+    @click.option(
+        "--recent-days", type=int, default=None,
+        help="Only label papers fetched in the last N days (true-incremental "
+             "Step 6 behaviour). Uses the indexed fetched_at field — without "
+             "this the pipeline sweeps the multi-million-point unlabeled "
+             "backlog on every incremental cycle (2026-07-07: c0c7 discovery).",
+    )
     def label_abstracts(
         dry_run: bool,
         limit: int | None,
@@ -62,6 +69,7 @@ def register_commands(cli: click.Group):
         vllm_model: str,
         vllm_base_url: str,
         vllm_max_concurrent: int,
+        recent_days: int | None,
     ) -> None:
         """Classify abstract sentences into rhetorical roles.
 
@@ -80,6 +88,10 @@ def register_commands(cli: click.Group):
           # Re-label all papers
           uv run python -m src.cli.core_collect label-abstracts --force --limit 50
         """
+        from datetime import datetime, timedelta, timezone
+        fetched_since = None
+        if recent_days is not None:
+            fetched_since = (datetime.now(timezone.utc) - timedelta(days=recent_days)).strftime("%Y-%m-%d")
         asyncio.run(
             _label_abstracts_async(
                 dry_run=dry_run,
@@ -92,6 +104,7 @@ def register_commands(cli: click.Group):
                 vllm_model=vllm_model,
                 vllm_base_url=vllm_base_url,
                 vllm_max_concurrent=vllm_max_concurrent,
+                fetched_since=fetched_since,
             )
         )
 
@@ -107,6 +120,7 @@ async def _label_abstracts_async(
     vllm_model: str,
     vllm_base_url: str,
     vllm_max_concurrent: int,
+    fetched_since: str | None = None,
 ) -> None:
     """Async abstract labeling pipeline."""
     from src.core.labeling import AbstractLabeler
@@ -135,6 +149,7 @@ async def _label_abstracts_async(
             limit=limit,
             force=force,
             dry_run=dry_run,
+            fetched_since=fetched_since,
         )
 
         _display_results(processed, labeled, samples, dry_run)
@@ -149,10 +164,13 @@ async def _run_labeling_loop(
     limit: int | None,
     force: bool,
     dry_run: bool,
+    fetched_since: str | None = None,
 ) -> tuple[int, int, list[tuple[str, str, dict]]]:
     """Async labeling loop."""
     try:
-        total_eligible = storage.count_papers_for_abstract_labeling(skip_existing=not force)
+        total_eligible = storage.count_papers_for_abstract_labeling(
+            skip_existing=not force, fetched_since=fetched_since,
+        )
         if limit:
             total_eligible = min(total_eligible, limit)
         click.echo(f"Papers to process: {total_eligible:,}\n")
@@ -170,6 +188,7 @@ async def _run_labeling_loop(
             limit=batch_size,
             offset=offset,
             skip_existing=not force,
+            fetched_since=fetched_since,
         )
 
         if not papers:

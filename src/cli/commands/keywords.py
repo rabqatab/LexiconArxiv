@@ -38,6 +38,13 @@ def register_commands(cli: click.Group):
         default=180.0,
         help="Ollama request timeout in seconds (default: 180)",
     )
+    @click.option(
+        "--recent-days", type=int, default=None,
+        help="Only process papers fetched in the last N days (true-incremental "
+             "Step 5 behaviour). Uses the indexed fetched_at field — without "
+             "this the pipeline sweeps the entire ~4 M-paper unlabeled backlog "
+             "on every incremental cycle (2026-07-07: c0c7 discovery).",
+    )
     def extract_keywords(
         dry_run: bool,
         limit: int | None,
@@ -49,6 +56,7 @@ def register_commands(cli: click.Group):
         use_judge: bool,
         ollama_model: str,
         ollama_timeout: float,
+        recent_days: int | None,
     ) -> None:
         """Extract keywords from paper titles and abstracts.
 
@@ -74,6 +82,11 @@ def register_commands(cli: click.Group):
           # Preview full pipeline
           uv run python -m src.cli.core_collect extract-keywords --llm --judge --dry-run --limit 10
         """
+        from datetime import datetime, timedelta, timezone
+        fetched_since = None
+        if recent_days is not None:
+            fetched_since = (datetime.now(timezone.utc) - timedelta(days=recent_days)).strftime("%Y-%m-%d")
+
         needs_async = use_llm or use_judge
 
         if needs_async:
@@ -89,6 +102,7 @@ def register_commands(cli: click.Group):
                     use_judge=use_judge,
                     ollama_model=ollama_model,
                     ollama_timeout=ollama_timeout,
+                    fetched_since=fetched_since,
                 )
             )
         else:
@@ -99,6 +113,7 @@ def register_commands(cli: click.Group):
                 no_keybert=no_keybert,
                 force=force,
                 embedding_model=embedding_model,
+                fetched_since=fetched_since,
             )
 
     @cli.command("keyword-stats")
@@ -218,6 +233,7 @@ def _extract_keywords_sync(
     no_keybert: bool,
     force: bool,
     embedding_model: str,
+    fetched_since: str | None = None,
 ) -> None:
     """Synchronous keyword extraction (regex + KeyBERT only)."""
     from src.core.keyword import KeywordExtractor
@@ -243,6 +259,7 @@ def _extract_keywords_sync(
         limit=limit,
         force=force,
         dry_run=dry_run,
+        fetched_since=fetched_since,
     )
 
     _display_results(processed, papers_with_keywords, total_keywords, samples, dry_run)
@@ -259,6 +276,7 @@ async def _extract_keywords_async(
     use_judge: bool,
     ollama_model: str,
     ollama_timeout: float,
+    fetched_since: str | None = None,
 ) -> None:
     """Async keyword extraction (with LLM and/or judge via Ollama)."""
     from src.core.keyword import KeywordExtractor
@@ -299,6 +317,7 @@ async def _extract_keywords_async(
                 limit=limit,
                 force=force,
                 dry_run=dry_run,
+                fetched_since=fetched_since,
             )
         )
 
@@ -316,10 +335,13 @@ def _run_extraction_loop(
     limit: int | None,
     force: bool,
     dry_run: bool,
+    fetched_since: str | None = None,
 ) -> tuple[int, int, int, list[tuple[str, str, list[str]]]]:
     """Synchronous extraction loop (regex + KeyBERT only)."""
     try:
-        total_eligible = storage.count_papers_for_keyword_extraction(skip_existing=not force)
+        total_eligible = storage.count_papers_for_keyword_extraction(
+            skip_existing=not force, fetched_since=fetched_since,
+        )
         if limit:
             total_eligible = min(total_eligible, limit)
         click.echo(f"Papers to process: {total_eligible:,}\n")
@@ -338,6 +360,7 @@ def _run_extraction_loop(
             limit=batch_size,
             offset=offset,
             skip_existing=not force,
+            fetched_since=fetched_since,
         )
 
         if not papers:
@@ -392,10 +415,13 @@ async def _run_extraction_loop_async(
     limit: int | None,
     force: bool,
     dry_run: bool,
+    fetched_since: str | None = None,
 ) -> tuple[int, int, int, list[tuple[str, str, list[str], dict | None]]]:
     """Async extraction loop (with LLM and/or judge)."""
     try:
-        total_eligible = storage.count_papers_for_keyword_extraction(skip_existing=not force)
+        total_eligible = storage.count_papers_for_keyword_extraction(
+            skip_existing=not force, fetched_since=fetched_since,
+        )
         if limit:
             total_eligible = min(total_eligible, limit)
         click.echo(f"Papers to process: {total_eligible:,}\n")
@@ -414,6 +440,7 @@ async def _run_extraction_loop_async(
             limit=batch_size,
             offset=offset,
             skip_existing=not force,
+            fetched_since=fetched_since,
         )
 
         if not papers:

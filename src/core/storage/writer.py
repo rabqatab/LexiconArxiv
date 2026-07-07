@@ -358,24 +358,49 @@ class BatchWriter:
     ) -> int:
         """Batch update abstract structure and source for multiple papers.
 
+        Uses Qdrant's ``batch_update_points`` API — one HTTP call for the
+        entire batch instead of N sequential ``set_payload`` calls — plus
+        ``wait=False`` (async ack, no fsync wait). At bootstrap scale the
+        legacy loop hit ~7 K papers/hr because every 500-paper batch spent
+        15-30 s in sequential HTTP + Qdrant lock churn. The batched form is
+        expected to lift that to ~35-70 K papers/hr (verified 2026-07-05).
+
+        Safety: ``wait=False`` means Qdrant confirms without waiting for
+        flush (5 s flush_interval). On crash, up to ~5 s of writes can be
+        lost — labeling is idempotent (``skip_existing=True`` filter on
+        the next run picks them up), so this is safe for the labeling
+        workload but must be reconsidered for any non-idempotent bulk
+        write path.
+
         Args:
             updates: List of (point_id, structure_dict, source) tuples.
 
         Returns:
-            Number of papers updated.
+            Number of papers updated (per Qdrant's operation ACK; not
+            per-point confirmation).
         """
-        for point_id, structure, source in updates:
-            _retry_qdrant_call(
-                lambda: self.client.set_payload(
-                    collection_name=self.collection_name,
+        if not updates:
+            return 0
+        operations = [
+            models.SetPayloadOperation(
+                set_payload=models.SetPayload(
                     payload={
                         "abstract_structure": structure,
                         "abstract_structure_source": source,
                     },
                     points=[point_id],
-                ),
-                op_label=f"set_payload(abstract_structure, {point_id})",
+                )
             )
+            for point_id, structure, source in updates
+        ]
+        _retry_qdrant_call(
+            lambda: self.client.batch_update_points(
+                collection_name=self.collection_name,
+                update_operations=operations,
+                wait=False,
+            ),
+            op_label=f"batch_update_abstract_structure({len(updates)} points)",
+        )
         return len(updates)
 
     def batch_update_code_repos(

@@ -91,11 +91,48 @@ class VLLMAbstractLabeler(BaseAbstractLabeler):
                         f"{self._base_url}/v1/chat/completions",
                         json=payload,
                     )
+
+                    # 400 Bad Request — deterministic client-side error
+                    # (prompt exceeds max_model_len, malformed schema, etc.).
+                    # Retrying the same input yields the same 400. 2026-07-05:
+                    # burnt ~31s (1+2+4+8+16) per outlier paper before this
+                    # short-circuit. Log the reason so ops can spot outliers.
+                    if response.status_code == 400:
+                        try:
+                            err_body = response.json().get("error", {})
+                            msg = err_body.get("message") or str(err_body)[:200]
+                        except Exception:
+                            msg = response.text[:200]
+                        logger.warning(
+                            "vLLM returned 400 (deterministic — skip, no retry): %s",
+                            msg,
+                        )
+                        return None
+
                     response.raise_for_status()
                     body = response.json()
+
+                    # Skip retry when vLLM truncated the output (length limit)
+                    # — same input will produce the same truncation. 2026-07-05:
+                    # ~77% of long-abstract papers failed 5x retries with EOF
+                    # JSON errors before we caught this. finish_reason=length
+                    # means the output was cut mid-generation; short-circuit.
+                    finish_reason = body["choices"][0].get("finish_reason")
+                    if finish_reason == "length":
+                        logger.warning(
+                            "vLLM output hit length limit (finish_reason=length); "
+                            "abstract likely too long for max_model_len. Giving up."
+                        )
+                        return None
+
                     content = body["choices"][0]["message"]["content"]
                     return SentenceLabels.model_validate_json(content)
                 except Exception as e:
+                    # JSON validation errors on well-formed non-truncated
+                    # output are deterministic — retry won't help. But since
+                    # finish_reason=length short-circuits above, any
+                    # ValidationError reaching here is a rare model-quality
+                    # issue where retry may help.
                     if attempt < self._max_retries - 1:
                         wait_time = 2 ** attempt
                         logger.warning(

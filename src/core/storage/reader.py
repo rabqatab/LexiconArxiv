@@ -322,48 +322,70 @@ class PaperReader:
         self,
         limit: int = 100,
         offset: str | None = None,
+        fetched_since: str | None = None,
     ) -> tuple[list[tuple[str, dict]], str | None]:
         """Get papers with referenced_works but no resolved_references.
 
         Args:
             limit: Maximum number of papers to return.
             offset: Scroll offset for pagination.
+            fetched_since: ISO date. When set, scoped to recently-fetched
+                papers via the indexed ``fetched_at`` field — makes this a
+                true-incremental operation instead of a full-corpus sweep
+                (2026-07-07: c0c7 discovery — labeling / keywords / refs
+                stages were unintentionally bulk-processing multi-million
+                point backlog on every incremental cycle).
 
         Returns:
             Tuple of (list of (point_id, payload), next_offset).
         """
-        scroll_filter = models.Filter(
-            must=[
-                # Has referenced_works
+        must = [
+            models.FieldCondition(
+                key="referenced_works",
+                match=models.MatchExcept(**{"except": []}),
+            ),
+        ]
+        must_not = [
+            models.FieldCondition(
+                key="resolved_references",
+                match=models.MatchExcept(**{"except": []}),
+            ),
+        ]
+        if fetched_since:
+            must.append(
                 models.FieldCondition(
-                    key="referenced_works",
-                    match=models.MatchExcept(**{"except": []}),  # Not empty
-                ),
-            ],
-            must_not=[
-                # But no resolved_references yet (null or empty)
-                models.FieldCondition(
-                    key="resolved_references",
-                    match=models.MatchExcept(**{"except": []}),  # Not empty
-                ),
-            ],
-        )
+                    key="fetched_at",
+                    range=models.DatetimeRange(gte=fetched_since),
+                )
+            )
 
         # Simpler approach: just get papers with refs and check in Python
+        must_simpler = []
+        if fetched_since:
+            must_simpler.append(
+                models.FieldCondition(
+                    key="fetched_at",
+                    range=models.DatetimeRange(gte=fetched_since),
+                )
+            )
         scroll_filter = models.Filter(
+            must=must_simpler if must_simpler else None,
             must_not=[
                 models.IsEmptyCondition(
                     is_empty=models.PayloadField(key="referenced_works"),
                 )
-            ]
+            ],
         )
 
-        results, next_offset = self.client.scroll(
-            collection_name=self.collection_name,
-            scroll_filter=scroll_filter,
-            limit=limit,
-            offset=offset,
-            with_payload=["title", "doi", "referenced_works", "resolved_references"],
+        results, next_offset = _retry_qdrant_call(
+            lambda: self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=scroll_filter,
+                limit=limit,
+                offset=offset,
+                with_payload=["title", "doi", "referenced_works", "resolved_references"],
+            ),
+            op_label=f"scroll(get_papers_needing_resolution, offset={offset})",
         )
 
         # Filter to papers without resolved_references
@@ -380,6 +402,7 @@ class PaperReader:
         limit: int = 100,
         offset: str | None = None,
         skip_existing: bool = True,
+        fetched_since: str | None = None,
     ) -> tuple[list[tuple[str, dict]], str | None]:
         """Get papers for keyword extraction.
 
@@ -391,6 +414,9 @@ class PaperReader:
             limit: Maximum number of papers to return.
             offset: Scroll offset for pagination.
             skip_existing: If True, only return papers without keywords.
+            fetched_since: ISO date. Scope to recently-fetched papers via
+                the indexed ``fetched_at`` field — required for true-
+                incremental Step 5 behaviour (2026-07-07: c0c7 discovery).
 
         Returns:
             Tuple of (list of (point_id, payload), next_offset).
@@ -415,23 +441,35 @@ class PaperReader:
                     is_empty=models.PayloadField(key="keywords"),
                 )
             )
+        if fetched_since:
+            must_conditions.append(
+                models.FieldCondition(
+                    key="fetched_at",
+                    range=models.DatetimeRange(gte=fetched_since),
+                )
+            )
 
         scroll_filter = models.Filter(
             must=must_conditions if must_conditions else None,
             must_not=must_not_conditions,
         )
 
-        results, next_offset = self.client.scroll(
-            collection_name=self.collection_name,
-            scroll_filter=scroll_filter,
-            limit=limit,
-            offset=offset,
-            with_payload=["title", "abstract", "keywords"],
+        results, next_offset = _retry_qdrant_call(
+            lambda: self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=scroll_filter,
+                limit=limit,
+                offset=offset,
+                with_payload=["title", "abstract", "keywords"],
+            ),
+            op_label=f"scroll(get_papers_for_keyword_extraction, offset={offset})",
         )
 
         return [(str(p.id), p.payload) for p in results], next_offset
 
-    def count_papers_for_keyword_extraction(self, skip_existing: bool = True) -> int:
+    def count_papers_for_keyword_extraction(
+        self, skip_existing: bool = True, fetched_since: str | None = None,
+    ) -> int:
         """Count papers eligible for keyword extraction."""
         must_conditions = []
         must_not_conditions = [
@@ -442,16 +480,28 @@ class PaperReader:
             must_conditions.append(
                 models.IsEmptyCondition(is_empty=models.PayloadField(key="keywords"))
             )
-        result = self.client.count(
-            collection_name=self.collection_name,
-            count_filter=models.Filter(
-                must=must_conditions if must_conditions else None,
-                must_not=must_not_conditions,
+        if fetched_since:
+            must_conditions.append(
+                models.FieldCondition(
+                    key="fetched_at",
+                    range=models.DatetimeRange(gte=fetched_since),
+                )
+            )
+        result = _retry_qdrant_call(
+            lambda: self.client.count(
+                collection_name=self.collection_name,
+                count_filter=models.Filter(
+                    must=must_conditions if must_conditions else None,
+                    must_not=must_not_conditions,
+                ),
             ),
+            op_label="count_papers_for_keyword_extraction",
         )
         return result.count
 
-    def count_papers_for_abstract_labeling(self, skip_existing: bool = True) -> int:
+    def count_papers_for_abstract_labeling(
+        self, skip_existing: bool = True, fetched_since: str | None = None,
+    ) -> int:
         """Count papers eligible for abstract labeling.
 
         Same filter shape as ``get_papers_for_abstract_labeling`` — see
@@ -468,12 +518,22 @@ class PaperReader:
             must_conditions.append(
                 models.IsEmptyCondition(is_empty=models.PayloadField(key="abstract_structure"))
             )
-        result = self.client.count(
-            collection_name=self.collection_name,
-            count_filter=models.Filter(
-                must=must_conditions if must_conditions else None,
-                must_not=must_not_conditions,
+        if fetched_since:
+            must_conditions.append(
+                models.FieldCondition(
+                    key="fetched_at",
+                    range=models.DatetimeRange(gte=fetched_since),
+                )
+            )
+        result = _retry_qdrant_call(
+            lambda: self.client.count(
+                collection_name=self.collection_name,
+                count_filter=models.Filter(
+                    must=must_conditions if must_conditions else None,
+                    must_not=must_not_conditions,
+                ),
             ),
+            op_label="count_papers_for_abstract_labeling",
         )
         return result.count
 
@@ -482,6 +542,7 @@ class PaperReader:
         limit: int = 100,
         offset: str | None = None,
         skip_existing: bool = True,
+        fetched_since: str | None = None,
     ) -> tuple[list[tuple[str, dict]], str | None]:
         """Get papers for abstract sentence labeling.
 
@@ -491,6 +552,11 @@ class PaperReader:
             limit: Maximum number of papers to return.
             offset: Scroll offset for pagination.
             skip_existing: If True, only return papers without abstract_structure.
+            fetched_since: ISO date. Scope to recently-fetched papers via
+                the indexed ``fetched_at`` field — required for true-
+                incremental Step 6 behaviour (2026-07-07: c0c7 discovery
+                the pipeline was labeling the full 2 M+ backlog on every
+                cycle instead of just today's papers).
 
         Returns:
             Tuple of (list of (point_id, payload), next_offset).
@@ -522,18 +588,28 @@ class PaperReader:
                     is_empty=models.PayloadField(key="abstract_structure"),
                 )
             )
+        if fetched_since:
+            must_conditions.append(
+                models.FieldCondition(
+                    key="fetched_at",
+                    range=models.DatetimeRange(gte=fetched_since),
+                )
+            )
 
         scroll_filter = models.Filter(
             must=must_conditions if must_conditions else None,
             must_not=must_not_conditions,
         )
 
-        results, next_offset = self.client.scroll(
-            collection_name=self.collection_name,
-            scroll_filter=scroll_filter,
-            limit=limit,
-            offset=offset,
-            with_payload=["title", "abstract", "abstract_structure"],
+        results, next_offset = _retry_qdrant_call(
+            lambda: self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=scroll_filter,
+                limit=limit,
+                offset=offset,
+                with_payload=["title", "abstract", "abstract_structure"],
+            ),
+            op_label=f"scroll(get_papers_for_abstract_labeling, offset={offset})",
         )
 
         return [(str(p.id), p.payload) for p in results], next_offset
@@ -672,11 +748,17 @@ class PaperReader:
         limit: int = 100,
         offset: str | None = None,
         skip_embedded: bool = True,
+        fetched_since: str | None = None,
     ) -> tuple[list[tuple[str, dict]], str | None]:
         """Get non-stub papers with abstracts for embedding.
 
         Args:
             skip_embedded: If True, exclude papers that already have dense vectors.
+            fetched_since: ISO date. Scope to recently-fetched papers via
+                the indexed ``fetched_at`` field — required for true-
+                incremental Step 10 behaviour (2026-07-07: c0c7 discovery
+                the pipeline was embedding the full unembedded backlog
+                on every cycle instead of just today's papers).
 
         Returns (list of (point_id, payload), next_offset).
         """
@@ -698,13 +780,27 @@ class PaperReader:
             must_not.append(
                 models.HasVectorCondition(has_vector="structured-abstract"),
             )
+        must = []
+        if fetched_since:
+            must.append(
+                models.FieldCondition(
+                    key="fetched_at",
+                    range=models.DatetimeRange(gte=fetched_since),
+                )
+            )
 
-        results, next_offset = self.client.scroll(
-            collection_name=self.collection_name,
-            scroll_filter=models.Filter(must_not=must_not),
-            limit=limit,
-            offset=offset,
-            with_payload=["title", "abstract", "abstract_structure"],
+        results, next_offset = _retry_qdrant_call(
+            lambda: self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=models.Filter(
+                    must=must if must else None,
+                    must_not=must_not,
+                ),
+                limit=limit,
+                offset=offset,
+                with_payload=["title", "abstract", "abstract_structure"],
+            ),
+            op_label=f"scroll(get_papers_for_embedding, offset={offset})",
         )
         return [
             (str(point.id), point.payload)

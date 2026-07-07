@@ -206,28 +206,47 @@ uv run python -m src.cli.core_collect enrich-2-refs-by-doi-via-crossref --parall
 # Labeling backend is vLLM at bulk scale (Ollama chat retired from
 # pipelines); server must be running per docs/runbooks/vllm-labeling.md.
 
+# Path B + true-incremental rule (2026-07-07): every step must be
+# scoped via --recent-days so the incremental script processes only
+# today's new papers, not the multi-million-point unlabeled/
+# unkeyworded/unembedded backlog (2026-07-06 c0c7 discovery — the
+# label-abstracts + extract-keywords + embed-papers CLIs default to
+# full-corpus sweep, which turned a "fill 33-day gap" incremental
+# run into a 40-day bulk labeling job). Backlog cleanup remains a
+# separate concern (Wave 4b/4c type + topic filters + explicit
+# bulk-labeling script).
+DAYS_MARGIN=$((DAYS + 2))
+
 echo ""
-echo "[Step 5] Extracting keywords (regex + KeyBERT; no LLM)..."
-if ! uv run python -m src.cli.core_collect extract-keywords; then
+echo "[Step 5] Extracting keywords (regex + KeyBERT; no LLM) — recent papers only..."
+if ! uv run python -m src.cli.core_collect extract-keywords --recent-days "$DAYS_MARGIN"; then
     echo "[ERROR] Keyword extraction failed."
     exit 1
 fi
 
 if [ "$SKIP_LABELING" = false ]; then
     echo ""
-    echo "[Step 6] Labeling abstracts (vLLM backend)..."
-    if ! uv run python -m src.cli.core_collect label-abstracts --backend vllm; then
+    echo "[Step 6] Labeling abstracts (vLLM backend) — recent papers only..."
+    if ! uv run python -m src.cli.core_collect label-abstracts --backend vllm --recent-days "$DAYS_MARGIN"; then
         echo "[ERROR] Abstract labeling failed."
         exit 1
     fi
 fi
 
 # Step 7: Resolve references and create stubs
+# NOTE: resolver still sweeps papers that have referenced_works but no
+# resolved_references — this is a full-corpus scan. Left as-is for
+# 2026-07-07 c0c7 v6 resubmit; add --recent-days plumbing in a follow-up
+# once the resolver's per-step methods (normalize / arxiv / internal)
+# accept fetched_since. Tracked in Wave 1e-quinquies.
 echo ""
 echo "[Step 7] Resolving references..."
 uv run python -m src.cli.core_collect resolve-refs --create-stubs
 
 # Step 8: Enrich stub papers
+# Similar to Step 7 — enrich-8 sweeps all stubs missing metadata.
+# Left as-is; new stubs from Step 7 are the main target and the sweep
+# converges quickly on a healthy corpus.
 echo ""
 echo "[Step 8] Enriching stub papers..."
 uv run python -m src.cli.core_collect enrich-8-metadata-by-stub-via-openalex --parallel "$PARALLEL"
@@ -239,15 +258,15 @@ if [ "$SKIP_GRAPH" = false ]; then
     uv run python -m src.cli.core_collect build-cited-by --incremental
 fi
 
-# Step 10: Embed new papers (incremental — skips already-embedded)
+# Step 10: Embed new papers (true-incremental — recent papers only)
 if [ "$SKIP_LABELING" = true ] && [ "$SKIP_EMBED" = false ]; then
     echo "[WARNING] --skip-labeling with embedding: new papers will be embedded without section vectors."
     echo "          Re-run without --skip-labeling later, then re-embed with --no-resume to get section vectors."
 fi
 if [ "$SKIP_EMBED" = false ]; then
     echo ""
-    echo "[Step 10] Embedding new papers (section-level + BM25)..."
-    uv run python -m src.cli.core_collect embed-papers --batch-size 16 --embed-batch-size 128
+    echo "[Step 10] Embedding new papers (section-level + BM25) — recent papers only..."
+    uv run python -m src.cli.core_collect embed-papers --batch-size 16 --embed-batch-size 128 --recent-days "$DAYS_MARGIN"
 fi
 
 # Weekly maintenance steps

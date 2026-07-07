@@ -134,6 +134,7 @@ async def embed_papers_stage(
     concurrency: int = 4,
     limit: int | None = None,
     resume: bool = True,
+    fetched_since: str | None = None,
 ) -> dict[str, int]:
     """Embed new papers (section + structured-abstract + BM25 vectors) via Ollama.
 
@@ -164,7 +165,8 @@ async def embed_papers_stage(
         offset = None
         while True:
             papers, next_offset = storage.get_papers_for_embedding(
-                limit=batch_size, offset=offset, skip_embedded=resume
+                limit=batch_size, offset=offset, skip_embedded=resume,
+                fetched_since=fetched_since,
             )
             if not papers:
                 break
@@ -214,7 +216,7 @@ async def enrich_refs_crossref_stage(
 
 async def extract_keywords_stage(
     limit: int | None = None, batch_size: int = 100, force: bool = False,
-    use_keybert: bool = True,
+    use_keybert: bool = True, fetched_since: str | None = None,
 ) -> dict[str, int]:
     """Extract BM25/display keywords (sync KeyBERT path) for papers missing them."""
     storage = QdrantStorage()
@@ -223,7 +225,8 @@ async def extract_keywords_stage(
     offset = None
     while True:
         papers, next_offset = storage.get_papers_for_keyword_extraction(
-            limit=batch_size, offset=offset, skip_existing=not force
+            limit=batch_size, offset=offset, skip_existing=not force,
+            fetched_since=fetched_since,
         )
         if not papers:
             break
@@ -250,7 +253,7 @@ async def extract_keywords_stage(
 
 async def label_abstracts_stage(
     limit: int | None = None, batch_size: int = 500, force: bool = False,
-    llm_backend: str = "ollama",
+    llm_backend: str = "ollama", fetched_since: str | None = None,
 ) -> dict[str, int]:
     """Label abstract sentences (rhetorical roles -> abstract_structure)."""
     storage = QdrantStorage()
@@ -260,7 +263,8 @@ async def label_abstracts_stage(
     try:
         while True:
             papers, next_offset = storage.get_papers_for_abstract_labeling(
-                limit=batch_size, offset=offset, skip_existing=not force
+                limit=batch_size, offset=offset, skip_existing=not force,
+                fetched_since=fetched_since,
             )
             if not papers:
                 break

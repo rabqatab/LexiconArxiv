@@ -168,8 +168,13 @@ def register_commands(cli: click.Group):
                   help="Only embed queued papers with tier <= N (0=top, 1=extended). "
                        "Non-matching items stay in queue for a follow-up call — lets "
                        "search become useful on the highest-quality subset first.")
+    @click.option("--recent-days", type=int, default=None,
+                  help="Only embed papers fetched in the last N days (true-incremental "
+                       "Step 10 behaviour). Uses the indexed fetched_at field — "
+                       "without this the pipeline sweeps the full unembedded backlog "
+                       "on every incremental cycle (2026-07-07: c0c7 discovery).")
     def embed_papers(batch_size, embed_batch_size, concurrency, limit, resume, dry_run,
-                     consume_snapshot_queue, priority_tier):
+                     consume_snapshot_queue, priority_tier, recent_days):
         """Embed paper abstracts with section-level + structured-abstract vectors.
 
         Generates up to 9 dense vectors per paper (abstract, structured-abstract,
@@ -190,6 +195,11 @@ def register_commands(cli: click.Group):
         from src.core.constants import ALL_DENSE_VECTORS
 
         storage = QdrantStorage()
+
+        from datetime import datetime, timedelta, timezone
+        fetched_since = None
+        if recent_days is not None:
+            fetched_since = (datetime.now(timezone.utc) - timedelta(days=recent_days)).strftime("%Y-%m-%d")
 
         if dry_run:
             total = storage.count_papers_for_embedding()
@@ -254,6 +264,7 @@ def register_commands(cli: click.Group):
                         limit=batch_size,
                         offset=offset,
                         skip_embedded=resume,
+                        fetched_since=fetched_since,
                     )
 
                     if not papers:

@@ -102,22 +102,36 @@ class AbstractLabeler:
         return self._llm_labeler
 
     async def label_abstract(
-        self, title: str, abstract: str
+        self, title: str, abstract: str,
+        max_sentences_to_label: int = 25,
     ) -> tuple[dict | None, str]:
         """Label an abstract's sentences into rhetorical roles.
 
         1. Split abstract into sentences with pysbd
-        2. Send numbered sentences to LLM
+        2. Send first ``max_sentences_to_label`` numbered sentences to LLM
+           (2026-07-06 discovery: real corpus abstracts have p90=25647 chars
+           / ~50 sentences; sending everything blows past vLLM's
+           max_model_len and drops generation throughput to ~460 papers/hr.
+           Truncating to the first 25 sentences keeps the labeling prompt
+           short enough for vLLM's continuous batching to actually help.
+           Trade-off: role labels for sentences beyond N are not
+           produced. Full-abstract embedding vectors (abstract-qwen3-8b
+           and the structured-abstract fallback) still see the whole
+           text, so semantic search remains unaffected — only the
+           section-* vectors are biased toward the abstract's opening.)
         3. LLM returns index → labels mapping
         4. Map indices back to verbatim sentences
 
         Args:
             title: Paper title.
             abstract: Paper abstract.
+            max_sentences_to_label: Cap on how many sentences we send to
+                the LLM. Defaults to 25. Set to ``None`` to disable
+                truncation (matches the pre-2026-07-06 behaviour).
 
         Returns:
             Tuple of (structure_dict, source) where source is
-            "ollama" or "none".
+            "ollama" / "vllm" / "none".
         """
         labeler = self._ensure_llm_labeler()
         if labeler is None:
@@ -130,16 +144,27 @@ class AbstractLabeler:
         if not sentences:
             return None, "none"
 
-        # Step 2: Format numbered sentences for LLM
-        numbered = format_numbered_sentences(sentences)
+        # Step 1b: Cap for LLM only. Downstream vectorization still sees
+        # the full abstract via the storage payload.
+        if max_sentences_to_label is not None:
+            llm_sentences = sentences[:max_sentences_to_label]
+        else:
+            llm_sentences = sentences
 
-        # Step 3: LLM classifies by index (full abstract passed for context)
-        labels = await labeler.label_sentences(title, clean, numbered, len(sentences))
+        # Step 2: Format numbered sentences for LLM
+        numbered = format_numbered_sentences(llm_sentences)
+
+        # Step 3: LLM classifies by index (truncated abstract passed for context)
+        # Provide the LLM the same slice it will be scoring against so the
+        # sentence indices match the "abstract" context it sees.
+        llm_context = " ".join(llm_sentences)
+        labels = await labeler.label_sentences(title, llm_context, numbered, len(llm_sentences))
         if labels is None:
             return None, "none"
 
-        # Step 4: Map indices back to verbatim sentences
-        structure = build_abstract_structure(sentences, labels)
+        # Step 4: Map indices back to verbatim sentences from the SAME
+        # slice we sent to the LLM (or the full list when truncation off).
+        structure = build_abstract_structure(llm_sentences, labels)
         return structure.to_dict(), self.llm_backend
 
     async def close(self) -> None:

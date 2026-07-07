@@ -421,30 +421,47 @@ class QdrantStorage:
         self,
         limit: int = 100,
         offset: str | None = None,
+        fetched_since: str | None = None,
     ) -> tuple[list[tuple[str, dict]], str | None]:
-        return self.readers.get_papers_needing_resolution(limit, offset)
+        return self.readers.get_papers_needing_resolution(
+            limit, offset, fetched_since=fetched_since,
+        )
 
     def get_papers_for_keyword_extraction(
         self,
         limit: int = 100,
         offset: str | None = None,
         skip_existing: bool = True,
+        fetched_since: str | None = None,
     ) -> tuple[list[tuple[str, dict]], str | None]:
-        return self.readers.get_papers_for_keyword_extraction(limit, offset, skip_existing)
+        return self.readers.get_papers_for_keyword_extraction(
+            limit, offset, skip_existing, fetched_since=fetched_since,
+        )
 
     def get_papers_for_abstract_labeling(
         self,
         limit: int = 100,
         offset: str | None = None,
         skip_existing: bool = True,
+        fetched_since: str | None = None,
     ) -> tuple[list[tuple[str, dict]], str | None]:
-        return self.readers.get_papers_for_abstract_labeling(limit, offset, skip_existing)
+        return self.readers.get_papers_for_abstract_labeling(
+            limit, offset, skip_existing, fetched_since=fetched_since,
+        )
 
-    def count_papers_for_keyword_extraction(self, skip_existing: bool = True) -> int:
-        return self.readers.count_papers_for_keyword_extraction(skip_existing)
+    def count_papers_for_keyword_extraction(
+        self, skip_existing: bool = True, fetched_since: str | None = None,
+    ) -> int:
+        return self.readers.count_papers_for_keyword_extraction(
+            skip_existing, fetched_since=fetched_since,
+        )
 
-    def count_papers_for_abstract_labeling(self, skip_existing: bool = True) -> int:
-        return self.readers.count_papers_for_abstract_labeling(skip_existing)
+    def count_papers_for_abstract_labeling(
+        self, skip_existing: bool = True, fetched_since: str | None = None,
+    ) -> int:
+        return self.readers.count_papers_for_abstract_labeling(
+            skip_existing, fetched_since=fetched_since,
+        )
 
     def get_papers_missing_code_repos(
         self,
@@ -479,9 +496,12 @@ class QdrantStorage:
         limit: int = 100,
         offset: str | None = None,
         skip_embedded: bool = True,
+        fetched_since: str | None = None,
     ) -> tuple[list[tuple[str, dict]], str | None]:
         """Get non-stub papers with abstracts for embedding."""
-        return self.readers.get_papers_for_embedding(limit, offset, skip_embedded)
+        return self.readers.get_papers_for_embedding(
+            limit, offset, skip_embedded, fetched_since=fetched_since,
+        )
 
     def build_referenced_openalex_id_set(self) -> dict[str, int]:
         return self.readers.build_referenced_openalex_id_set()
