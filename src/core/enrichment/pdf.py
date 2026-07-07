@@ -418,6 +418,7 @@ class PDFReferenceExtractor:
         limit: int | None = None,
         venues: list[str] | None = None,
         doi_prefix: str | None = None,
+        fetched_since: str | None = None,
     ) -> PDFExtractionProgress:
         """Extract references from PDFs for papers missing citation data.
 
@@ -426,6 +427,12 @@ class PDFReferenceExtractor:
             limit: Maximum papers to process.
             venues: Filter by venue names.
             doi_prefix: Only process papers whose DOI starts with this prefix.
+            fetched_since: ISO date. Scope to recently-fetched papers via
+                the indexed ``fetched_at`` field — required for true-
+                incremental Step 4b behaviour (2026-07-07: added to plug
+                the "17 K recent papers missing refs" gap after the
+                CrossRef/S2 pass. Without this the GROBID pass would
+                sweep the full corpus-wide backlog on every cycle).
 
         Returns:
             PDFExtractionProgress with statistics.
@@ -442,6 +449,7 @@ class PDFReferenceExtractor:
                 offset=offset,
                 venues=venues,
                 doi_prefix=doi_prefix,
+                fetched_since=fetched_since,
             )
 
             if not papers:
@@ -565,6 +573,7 @@ class PDFReferenceExtractor:
         dry_run: bool = False,
         limit: int | None = None,
         venues: list[str] | None = None,
+        fetched_since: str | None = None,
     ) -> PDFAbstractProgress:
         """Extract abstracts from PDFs for papers missing abstract data.
 
@@ -572,6 +581,7 @@ class PDFReferenceExtractor:
             dry_run: Only count papers without processing.
             limit: Maximum papers to process.
             venues: Filter by venue names.
+            fetched_since: ISO date. Scope to recently-fetched papers.
 
         Returns:
             PDFAbstractProgress with statistics.
@@ -586,6 +596,7 @@ class PDFReferenceExtractor:
                 limit=self.batch_size,
                 offset=offset,
                 venues=venues,
+                fetched_since=fetched_since,
             )
 
             if not papers:
@@ -627,6 +638,7 @@ class PDFReferenceExtractor:
         limit: int,
         offset: str | None,
         venues: list[str] | None = None,
+        fetched_since: str | None = None,
     ) -> tuple[list[tuple[str, dict]], str | None]:
         """Get papers with PDF URLs that are missing abstracts."""
         from qdrant_client.http import models
@@ -649,6 +661,14 @@ class PDFReferenceExtractor:
                 models.FieldCondition(
                     key="venue",
                     match=models.MatchAny(any=venues),
+                )
+            )
+
+        if fetched_since:
+            filter_conditions.append(
+                models.FieldCondition(
+                    key="fetched_at",
+                    range=models.DatetimeRange(gte=fetched_since),
                 )
             )
 
@@ -784,6 +804,7 @@ class PDFReferenceExtractor:
         offset: str | None,
         venues: list[str] | None = None,
         doi_prefix: str | None = None,
+        fetched_since: str | None = None,
     ) -> tuple[list[tuple[str, dict]], str | None]:
         """Get papers with PDF URLs that are missing references.
 
@@ -820,6 +841,14 @@ class PDFReferenceExtractor:
                 models.FieldCondition(
                     key="doi",
                     match=models.MatchText(text=doi_prefix),
+                )
+            )
+
+        if fetched_since:
+            filter_conditions.append(
+                models.FieldCondition(
+                    key="fetched_at",
+                    range=models.DatetimeRange(gte=fetched_since),
                 )
             )
 

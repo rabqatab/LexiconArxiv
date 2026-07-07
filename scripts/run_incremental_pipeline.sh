@@ -198,6 +198,42 @@ echo ""
 echo "[Step 4] Enriching citations (CrossRef)..."
 uv run python -m src.cli.core_collect enrich-2-refs-by-doi-via-crossref --parallel "$PARALLEL" --recent-days "$((DAYS + 2))"
 
+# Step 4b: GROBID PDF-based refs (fallback for ACL/DBLP papers where
+# CrossRef+S2 failed — 2026-07-07 discovery: 90% of recent non-stub
+# real papers still had no referenced_works after Step 3a+4 because
+# CrossRef doesn't cover ACL and S2 doesn't cover a huge chunk of
+# older refs). GROBID needs a running Docker container (see doc
+# comment in enrich-5 CLI). Gracefully skipped when GROBID is
+# unreachable so a missing server does not stop the whole pipeline —
+# a WARNING is logged, the next steps continue, and the incremental
+# script's next weekly run picks up the backlog once GROBID is up.
+# Only touches recent papers via --recent-days so it stays a
+# true-incremental fallback rather than a full-corpus sweep.
+GROBID_URL="${GROBID_URL:-http://localhost:8070}"
+echo ""
+echo "[Step 4b] GROBID PDF refs (fallback for papers CrossRef+S2 missed) — recent papers only..."
+if curl -sf --max-time 3 "${GROBID_URL}/api/isalive" > /dev/null 2>&1; then
+    if ! uv run python -m src.cli.core_collect enrich-5-refs-by-pdf-via-grobid \
+        --parallel "$PARALLEL" --recent-days "$DAYS_MARGIN" \
+        --grobid-url "$GROBID_URL"; then
+        echo "[WARNING] GROBID refs extraction returned non-zero — continuing pipeline."
+    fi
+    # Step 4c: GROBID PDF-based abstracts. Small volume (2026-07-07:
+    # ~700 recent non-stub papers with empty abstract) but valuable —
+    # every unlabeled non-stub abstract is a search-relevance gap.
+    echo ""
+    echo "[Step 4c] GROBID PDF abstracts (fallback for papers OpenAlex missed) — recent papers only..."
+    if ! uv run python -m src.cli.core_collect enrich-7-abstracts-by-pdf-via-grobid \
+        --parallel "$PARALLEL" --recent-days "$DAYS_MARGIN" \
+        --grobid-url "$GROBID_URL"; then
+        echo "[WARNING] GROBID abstract extraction returned non-zero — continuing pipeline."
+    fi
+else
+    echo "[SKIP] GROBID not reachable at ${GROBID_URL} — Step 4b/4c skipped."
+    echo "       Start GROBID with: docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.0"
+    echo "       Then re-run the GROBID enrichers manually or wait for next incremental."
+fi
+
 # Steps 5+6: Keywords & Labeling — SERIAL per Path B (2026-07-04).
 # The prior parallel pattern crashed Qdrant with concurrent bulk write
 # clients during the 2026-07-04 catchup (be19 + 09a1). See:

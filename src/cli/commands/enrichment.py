@@ -524,6 +524,12 @@ def register_commands(cli: click.Group):
     @click.option("--grobid-url", type=str, help="GROBID server URL (default: http://localhost:8070)")
     @click.option("--retry-incomplete", is_flag=True,
                   help="Clear checkpoint and re-process all papers still missing references")
+    @click.option("--recent-days", type=int, default=None,
+                  help="Only process papers fetched in the last N days. Uses the "
+                       "indexed fetched_at field — required for incremental Step 4b "
+                       "to touch just today's crawled papers instead of the full "
+                       "corpus PDF backlog (2026-07-07: 17 K papers-missing-refs "
+                       "gap after CrossRef/S2 pass).")
     def enrich_5_refs_by_pdf_via_grobid(
         dry_run: bool,
         limit: int | None,
@@ -533,6 +539,7 @@ def register_commands(cli: click.Group):
         doi_prefix: str | None,
         grobid_url: str | None,
         retry_incomplete: bool,
+        recent_days: int | None,
     ) -> None:
         """Extract references from PDFs using GROBID.
 
@@ -562,8 +569,12 @@ def register_commands(cli: click.Group):
               --doi-prefix 10.1145/ --parallel 5
         """
         from src.core.enrichment.pdf import PDFReferenceExtractor
+        from datetime import datetime, timedelta, timezone
 
         venues_list = list(venue) if venue else None
+        fetched_since = None
+        if recent_days is not None:
+            fetched_since = (datetime.now(timezone.utc) - timedelta(days=recent_days)).strftime("%Y-%m-%d")
 
         async def run_extraction():
             storage = QdrantStorage()
@@ -581,6 +592,7 @@ def register_commands(cli: click.Group):
                     limit=limit,
                     venues=venues_list,
                     doi_prefix=doi_prefix,
+                    fetched_since=fetched_since,
                 )
 
                 click.echo(f"\nPDF Reference Extraction Results:")
@@ -604,6 +616,8 @@ def register_commands(cli: click.Group):
     @click.option("--parallel", "-p", type=int, default=20, help="Concurrent extractions")
     @click.option("--venue", "-v", multiple=True, help="Filter by venue")
     @click.option("--grobid-url", type=str, help="GROBID server URL (default: http://localhost:8070)")
+    @click.option("--recent-days", type=int, default=None,
+                  help="Only process papers fetched in the last N days (incremental).")
     def enrich_7_abstracts_by_pdf_via_grobid(
         dry_run: bool,
         limit: int | None,
@@ -611,6 +625,7 @@ def register_commands(cli: click.Group):
         parallel: int,
         venue: tuple[str, ...],
         grobid_url: str | None,
+        recent_days: int | None,
     ) -> None:
         """Extract abstracts from PDFs using GROBID.
 
@@ -633,8 +648,12 @@ def register_commands(cli: click.Group):
           python -m src.cli.core_collect enrich-7-abstracts-by-pdf-via-grobid -v "PACLIC"
         """
         from src.core.enrichment.pdf import PDFReferenceExtractor
+        from datetime import datetime, timedelta, timezone
 
         venues_list = list(venue) if venue else None
+        fetched_since = None
+        if recent_days is not None:
+            fetched_since = (datetime.now(timezone.utc) - timedelta(days=recent_days)).strftime("%Y-%m-%d")
 
         async def run_extraction():
             storage = QdrantStorage()
@@ -648,6 +667,7 @@ def register_commands(cli: click.Group):
                     dry_run=dry_run,
                     limit=limit,
                     venues=venues_list,
+                    fetched_since=fetched_since,
                 )
 
                 click.echo(f"\nPDF Abstract Extraction Results:")
