@@ -240,6 +240,7 @@ Full source of truth is `curl http://localhost:6333/collections/lexicon_arxiv_v3
 | `type` | keyword | 4 600 242 | 2026-07-06 (batch 1) |
 | `promoted_from_stub` | bool | 974 457 | 2026-07-06 (batch 2 — Wave 4c gate) |
 | `tier` | integer | 3 056 | 2026-07-06 (batch 2 — only 178 K OpenAlex venue-crawled papers carry it) |
+| `graph_indexed` | bool | 1 809 430 | 2026-07-07 (Wave 1e-sexies — Step 9 `build-cited-by --incremental` filter) |
 
 **Rule** (see [`../design/bulk-vs-incremental-audit.md`](../design/bulk-vs-incremental-audit.md) §Third rule): any new bulk-scroll filter must use only fields from this list. Adding a filter on an unindexed payload field at 6.2 M-scale is a deterministic 60 s server-side timeout.
 

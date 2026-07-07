@@ -104,6 +104,7 @@ Fields chosen by walking every scroll/count callsite in `src/core/storage/reader
 | `type` | keyword | 4 600 242 | non-article cleanup (book / peer-review / editorial per [Wave 4b](../refactoring/2026-07-04-code-overhaul-plan.md)) |
 | `promoted_from_stub` | bool | 974 457 | P2-promoted subset queries (Wave 4c topic gate) |
 | `tier` | integer | 3 056 | tier-priority labeling — most points don't carry it, incremental crawler sets it only on the 178 K OpenAlex venue-crawled slice |
+| `graph_indexed` | bool | 1 809 430 | Step 9 `build-cited-by --incremental` filter — before this the incremental scan was O(N) on 6.2 M points even though the update set was small |
 
 Prior indices (fetched_at, doi, openalex_id, arxiv_id, source_id, venue, is_stub) already existed — see the collection payload_schema for the current full list.
 
