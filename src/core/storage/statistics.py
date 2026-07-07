@@ -576,19 +576,26 @@ class StorageStatistics:
 
         logger.info("Building cited_by index (incremental)...")
 
-        # Phase 1: Find papers with resolved_references that haven't been indexed
+        # Phase 1: Find papers with resolved_references that haven't been indexed.
+        # 2026-07-08 (7a34 fatal): the old filter had
+        # ``must=[FieldCondition(resolved_references, MatchExcept([]))]`` —
+        # resolved_references is UNINDEXED, so that must-clause forced a
+        # full 6.2 M-point scan that blew Qdrant's 60 s scroll_by_id
+        # timeout even after graph_indexed got its index. Fix: filter on
+        # indexed fields only (graph_indexed + is_stub, both bool-indexed)
+        # and do the resolved_references non-empty check client-side —
+        # stubs never carry resolved_references, and the non-stub
+        # not-yet-indexed slice is small after the initial full build.
         unindexed_papers: list[tuple[str, list[str]]] = []
 
         unindexed_filter = models.Filter(
-            must=[
-                models.FieldCondition(
-                    key="resolved_references",
-                    match=models.MatchExcept(**{"except": []}),
-                ),
-            ],
             must_not=[
                 models.FieldCondition(
                     key="graph_indexed",
+                    match=models.MatchValue(value=True),
+                ),
+                models.FieldCondition(
+                    key="is_stub",
                     match=models.MatchValue(value=True),
                 ),
             ],
@@ -604,6 +611,7 @@ class StorageStatistics:
 
             for point in results:
                 paper_id = str(point.id)
+                # Client-side check replaces the unindexed MatchExcept filter.
                 resolved_refs = point.payload.get("resolved_references", [])
                 if resolved_refs:
                     unindexed_papers.append((paper_id, resolved_refs))

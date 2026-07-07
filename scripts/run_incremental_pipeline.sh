@@ -210,7 +210,10 @@ uv run python -m src.cli.core_collect enrich-2-refs-by-doi-via-crossref --parall
 # Only touches recent papers via --recent-days so it stays a
 # true-incremental fallback rather than a full-corpus sweep.
 GROBID_URL="${GROBID_URL:-http://localhost:8070}"
-GROBID_IMAGE="${GROBID_IMAGE:-lfoppiano/grobid:0.8.0}"
+# grobid-arm64:latest is a locally-built aarch64 image — lfoppiano/grobid
+# is amd64-only and silently fails to boot on the DGX Spark (2026-07-07
+# 7a34: container started, never answered /api/isalive, auto-skip fired).
+GROBID_IMAGE="${GROBID_IMAGE:-grobid-arm64:latest}"
 GROBID_CONTAINER="${GROBID_CONTAINER:-lexicon-grobid}"
 GROBID_AUTO_START="${GROBID_AUTO_START:-true}"   # set to "false" to disable auto-start
 GROBID_STARTED_BY_US=false
