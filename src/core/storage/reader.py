@@ -248,30 +248,48 @@ class PaperReader:
         self,
         limit: int = 100,
         offset: str | None = None,
+        fetched_since: str | None = None,
     ) -> tuple[list[tuple[str, dict]], str | None]:
         """Get papers that have referenced_works (non-empty).
 
         Args:
             limit: Maximum number of papers to return.
             offset: Scroll offset for pagination.
+            fetched_since: ISO date. Scope to recently-fetched papers via
+                the indexed ``fetched_at`` field — required for true-
+                incremental Step 7 behaviour (2026-07-07: 21fe spent ~7 h
+                in Step 7.1 sweeping the full 2.8 M-paper referenced_works
+                backlog on every incremental cycle).
 
         Returns:
             Tuple of (list of (point_id, payload), next_offset).
         """
+        must = []
+        if fetched_since:
+            must.append(
+                models.FieldCondition(
+                    key="fetched_at",
+                    range=models.DatetimeRange(gte=fetched_since),
+                )
+            )
         scroll_filter = models.Filter(
+            must=must if must else None,
             must_not=[
                 models.IsEmptyCondition(
                     is_empty=models.PayloadField(key="referenced_works"),
                 )
-            ]
+            ],
         )
 
-        results, next_offset = self.client.scroll(
-            collection_name=self.collection_name,
-            scroll_filter=scroll_filter,
-            limit=limit,
-            offset=offset,
-            with_payload=True,
+        results, next_offset = _retry_qdrant_call(
+            lambda: self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=scroll_filter,
+                limit=limit,
+                offset=offset,
+                with_payload=True,
+            ),
+            op_label=f"scroll(get_papers_with_references, offset={offset})",
         )
 
         return [(str(p.id), p.payload) for p in results], next_offset

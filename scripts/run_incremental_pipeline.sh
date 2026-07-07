@@ -318,15 +318,15 @@ if [ "$SKIP_LABELING" = false ]; then
     fi
 fi
 
-# Step 7: Resolve references and create stubs
-# NOTE: resolver still sweeps papers that have referenced_works but no
-# resolved_references — this is a full-corpus scan. Left as-is for
-# 2026-07-07 c0c7 v6 resubmit; add --recent-days plumbing in a follow-up
-# once the resolver's per-step methods (normalize / arxiv / internal)
-# accept fetched_since. Tracked in Wave 1e-quinquies.
+# Step 7: Resolve references and create stubs — recent papers only
+# (Wave 1e-quinquies, 2026-07-07: 21fe spent 7+ h in Step 7.1 Normalize
+# alone because the resolver's 3 sub-steps swept the full 2.8 M-paper
+# referenced_works backlog on every incremental cycle. --recent-days
+# now threads through normalize / arxiv / internal via the resolver's
+# run_full_pipeline signature.)
 echo ""
-echo "[Step 7] Resolving references..."
-uv run python -m src.cli.core_collect resolve-refs --create-stubs
+echo "[Step 7] Resolving references — recent papers only..."
+uv run python -m src.cli.core_collect resolve-refs --create-stubs --recent-days "$DAYS_MARGIN"
 
 # Step 8: Enrich stub papers
 # Similar to Step 7 — enrich-8 sweeps all stubs missing metadata.

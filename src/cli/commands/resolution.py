@@ -24,6 +24,12 @@ def register_commands(cli: click.Group):
     @click.option("--create-stubs/--no-create-stubs", default=True, help="Create stub papers for unresolved references (default: enabled)")
     @click.option("--batch-size", type=int, default=100, help="Batch size")
     @click.option("--parallel", "-p", type=int, default=5, help="Concurrent requests")
+    @click.option("--recent-days", type=int, default=None,
+                  help="Only resolve refs for papers fetched in the last N days "
+                       "(true-incremental Step 7 behaviour). Uses the indexed "
+                       "fetched_at field — without this the resolver sweeps the "
+                       "full 2.8 M-paper referenced_works backlog on every cycle "
+                       "(2026-07-07: 21fe spent 7+ h in Step 7.1 Normalize alone).")
     def resolve_refs(
         dry_run: bool,
         limit: int | None,
@@ -33,6 +39,7 @@ def register_commands(cli: click.Group):
         create_stubs: bool,
         batch_size: int,
         parallel: int,
+        recent_days: int | None,
     ) -> None:
         """Resolve raw reference identifiers to internal paper IDs.
 
@@ -70,6 +77,11 @@ def register_commands(cli: click.Group):
           python -m src.cli.core_collect resolve-refs --limit 1000
         """
         from src.core.resolution.resolver import ReferenceResolver
+        from datetime import datetime, timedelta, timezone
+
+        fetched_since = None
+        if recent_days is not None:
+            fetched_since = (datetime.now(timezone.utc) - timedelta(days=recent_days)).strftime("%Y-%m-%d")
 
         async def run_resolution():
             storage = QdrantStorage()
@@ -85,6 +97,7 @@ def register_commands(cli: click.Group):
                         fuzzy_matching=fuzzy_matching,
                         external_search=external_search,
                         create_stubs=create_stubs,
+                        fetched_since=fetched_since,
                     )
 
                     click.echo(f"\n{'=' * 50}")
@@ -111,7 +124,7 @@ def register_commands(cli: click.Group):
 
                 elif step == "normalize":
                     progress = await resolver.normalize_references(
-                        dry_run=dry_run, limit=limit
+                        dry_run=dry_run, limit=limit, fetched_since=fetched_since,
                     )
                     click.echo(f"\nNormalization Results:")
                     click.echo(f"  Processed:       {progress.processed}")
@@ -120,7 +133,7 @@ def register_commands(cli: click.Group):
 
                 elif step == "arxiv":
                     progress = await resolver.resolve_arxiv_to_doi(
-                        dry_run=dry_run, limit=limit
+                        dry_run=dry_run, limit=limit, fetched_since=fetched_since,
                     )
                     click.echo(f"\narXiv->DOI Resolution Results:")
                     click.echo(f"  Processed:      {progress.processed}")
@@ -134,6 +147,7 @@ def register_commands(cli: click.Group):
                         fuzzy_matching=fuzzy_matching,
                         external_search=external_search,
                         create_stubs=create_stubs,
+                        fetched_since=fetched_since,
                     )
                     click.echo(f"\nInternal ID Resolution Results:")
                     click.echo(f"  Processed:         {progress.processed}")

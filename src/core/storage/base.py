@@ -407,8 +407,11 @@ class QdrantStorage:
         self,
         limit: int = 100,
         offset: str | None = None,
+        fetched_since: str | None = None,
     ) -> tuple[list[tuple[str, dict]], str | None]:
-        return self.readers.get_papers_with_references(limit, offset)
+        return self.readers.get_papers_with_references(
+            limit, offset, fetched_since=fetched_since,
+        )
 
     def get_papers_with_title_refs(
         self,

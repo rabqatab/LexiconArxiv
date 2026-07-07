@@ -295,6 +295,7 @@ class ReferenceResolver(OpenAlexMixin):
         self,
         dry_run: bool = False,
         limit: int | None = None,
+        fetched_since: str | None = None,
     ) -> ResolutionProgress:
         """Step 1: Normalize raw reference identifiers.
 
@@ -306,6 +307,8 @@ class ReferenceResolver(OpenAlexMixin):
         Args:
             dry_run: If True, count without updating.
             limit: Maximum papers to process.
+            fetched_since: ISO date. Scope to recently-fetched papers via
+                the indexed ``fetched_at`` field. Wave 1e-quinquies.
 
         Returns:
             ResolutionProgress with statistics.
@@ -320,6 +323,7 @@ class ReferenceResolver(OpenAlexMixin):
                 lambda: self.storage.get_papers_with_references(
                     limit=self.batch_size,
                     offset=offset,
+                    fetched_since=fetched_since,
                 ),
                 description="scroll(normalize)",
             )
@@ -401,6 +405,7 @@ class ReferenceResolver(OpenAlexMixin):
         self,
         dry_run: bool = False,
         limit: int | None = None,
+        fetched_since: str | None = None,
     ) -> ResolutionProgress:
         """Step 2: Resolve arXiv references to DOIs via OpenAlex.
 
@@ -410,6 +415,7 @@ class ReferenceResolver(OpenAlexMixin):
         Args:
             dry_run: If True, count without updating.
             limit: Maximum papers to process.
+            fetched_since: ISO date. Scope to recently-fetched papers.
 
         Returns:
             ResolutionProgress with statistics.
@@ -430,6 +436,7 @@ class ReferenceResolver(OpenAlexMixin):
                 lambda: self.storage.get_papers_with_references(
                     limit=self.batch_size,
                     offset=offset,
+                    fetched_since=fetched_since,
                 ),
                 description="scroll(arxiv)",
             )
@@ -557,6 +564,7 @@ class ReferenceResolver(OpenAlexMixin):
         fuzzy_matching: bool = False,
         external_search: bool = False,
         create_stubs: bool = False,
+        fetched_since: str | None = None,
     ) -> ResolutionProgress:
         """Step 3: Resolve identifiers to internal Qdrant point IDs.
 
@@ -569,6 +577,7 @@ class ReferenceResolver(OpenAlexMixin):
             fuzzy_matching: Use fuzzy title matching (slower).
             external_search: Search S2/OpenAlex for unresolved titles.
             create_stubs: If True, create stub papers for unresolved refs.
+            fetched_since: ISO date. Scope to recently-fetched papers.
 
         Returns:
             ResolutionProgress with statistics.
@@ -585,6 +594,7 @@ class ReferenceResolver(OpenAlexMixin):
                 lambda: self.storage.get_papers_with_references(
                     limit=self.batch_size,
                     offset=offset,
+                    fetched_since=fetched_since,
                 ),
                 description="scroll(get_papers_with_references)",
             )
@@ -894,6 +904,7 @@ class ReferenceResolver(OpenAlexMixin):
         fuzzy_matching: bool = False,
         external_search: bool = False,
         create_stubs: bool = False,
+        fetched_since: str | None = None,
     ) -> dict[str, ResolutionProgress]:
         """Run the complete 3-step reference resolution pipeline.
 
@@ -903,6 +914,11 @@ class ReferenceResolver(OpenAlexMixin):
             fuzzy_matching: Use fuzzy title matching in step 3.
             external_search: Search external APIs for unresolved titles.
             create_stubs: Create stub papers for unresolved references.
+            fetched_since: ISO date. Scope all 3 sub-steps to recently-
+                fetched papers via the indexed ``fetched_at`` field.
+                Wave 1e-quinquies (2026-07-07): closes the true-
+                incremental gap in Step 7 that made 21fe spend 5-15h
+                sweeping the full 2.8 M-paper referenced_works backlog.
 
         Returns:
             Dictionary mapping step name to progress.
@@ -914,12 +930,14 @@ class ReferenceResolver(OpenAlexMixin):
         # Step 1: Normalize
         logger.info("\n--- Step 1: Normalize ---")
         results["normalize"] = await self.normalize_references(
-            dry_run=dry_run, limit=limit
+            dry_run=dry_run, limit=limit, fetched_since=fetched_since,
         )
 
         # Step 2: arXiv -> DOI
         logger.info("\n--- Step 2: arXiv -> DOI ---")
-        results["arxiv"] = await self.resolve_arxiv_to_doi(dry_run=dry_run, limit=limit)
+        results["arxiv"] = await self.resolve_arxiv_to_doi(
+            dry_run=dry_run, limit=limit, fetched_since=fetched_since,
+        )
 
         # Step 3: Resolve to IDs
         logger.info("\n--- Step 3: Resolve to IDs ---")
@@ -929,6 +947,7 @@ class ReferenceResolver(OpenAlexMixin):
             fuzzy_matching=fuzzy_matching,
             external_search=external_search,
             create_stubs=create_stubs,
+            fetched_since=fetched_since,
         )
 
         return results
