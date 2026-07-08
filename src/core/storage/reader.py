@@ -843,59 +843,6 @@ class PaperReader:
 
         return papers
 
-    def iter_enrichment_candidates(self, batch_size: int = 1000):
-        """Yield non-stub papers missing an abstract and/or referenced_works.
-
-        Scrolls Qdrant for real (non-stub) papers where the abstract is empty
-        OR referenced_works is empty, using ``should`` (OR) semantics.
-
-        Yields dicts: {point_id, doi, title, year, first_author,
-                       missing_abstract, missing_refs}.
-        """
-        flt = models.Filter(
-            must_not=[
-                models.FieldCondition(
-                    key="is_stub", match=models.MatchValue(value=True)
-                ),
-            ],
-            should=[
-                models.IsEmptyCondition(
-                    is_empty=models.PayloadField(key="abstract")
-                ),
-                models.IsEmptyCondition(
-                    is_empty=models.PayloadField(key="referenced_works")
-                ),
-            ],
-        )
-        offset = None
-        while True:
-            points, offset = self.client.scroll(
-                collection_name=self.collection_name,
-                scroll_filter=flt,
-                limit=batch_size,
-                offset=offset,
-                with_payload=True,
-                with_vectors=False,
-            )
-            if not points:
-                break
-            for pt in points:
-                p = pt.payload or {}
-                abstract = p.get("abstract") or ""
-                refs = p.get("referenced_works") or []
-                first_author = _first_author_surname(p)
-                yield {
-                    "point_id": str(pt.id),
-                    "doi": p.get("doi") or None,
-                    "title": p.get("title") or "",
-                    "year": p.get("year") or p.get("publication_year"),
-                    "first_author": first_author,
-                    "missing_abstract": not abstract,
-                    "missing_refs": not refs,
-                }
-            if offset is None:
-                break
-
     def iter_all_real_papers_minimal(self, batch_size: int = 1000):
         """Yield {point_id, doi, openalex_id, title_norm, title} for every non-stub paper.
 

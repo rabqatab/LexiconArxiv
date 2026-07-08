@@ -394,33 +394,6 @@ class BatchWriter:
             )
         return len(updates)
 
-    def batch_apply_snapshot_enrichment(self, updates: list[tuple[str, dict]]) -> int:
-        """Fill snapshot-sourced fields + provenance for each (point_id, fields) update.
-
-        Only the provided keys are set (fill-only-missing is decided upstream by the matcher).
-
-        Args:
-            updates: List of (point_id, fields) tuples where fields contains the
-                     enrichment data (e.g. abstract, referenced_works).
-
-        Returns:
-            Number of updates applied.
-        """
-        applied = 0
-        for point_id, fields in updates:
-            if not fields:
-                continue
-            # Dedicated provenance flag (does NOT clobber any existing
-            # `enrichment_source` from a prior enricher).
-            payload = {**fields, "openalex_snapshot_enriched": True}
-            self.client.set_payload(
-                collection_name=self.collection_name,
-                payload=payload,
-                points=[point_id],
-            )
-            applied += 1
-        return applied
-
     def clear_all_keywords(self) -> int:
         """Clear keywords from all papers.
 

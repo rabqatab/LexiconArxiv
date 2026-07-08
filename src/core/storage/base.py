@@ -388,9 +388,6 @@ class QdrantStorage:
             has_doi, limit, offset, fetched_since=fetched_since,
         )
 
-    def iter_enrichment_candidates(self, batch_size: int = 1000):
-        return self.readers.iter_enrichment_candidates(batch_size=batch_size)
-
     def iter_all_real_papers_minimal(self, batch_size: int = 1000):
         return self.readers.iter_all_real_papers_minimal(batch_size)
 
@@ -565,9 +562,6 @@ class QdrantStorage:
         updates: list[tuple[str, str]],
     ) -> int:
         return self.writers.batch_update_abstracts(updates)
-
-    def batch_apply_snapshot_enrichment(self, updates: list[tuple[str, dict]]) -> int:
-        return self.writers.batch_apply_snapshot_enrichment(updates)
 
     def batch_apply_field_fill(self, updates: list[tuple[str, dict]], *, provenance_key: str = "snapshot_filled_at") -> int:
         return self.writers.batch_apply_field_fill(updates, provenance_key=provenance_key)
