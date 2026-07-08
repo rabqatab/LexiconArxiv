@@ -1,6 +1,5 @@
 """Keyword extraction commands for LexiconArxiv CLI."""
 
-import asyncio
 import json
 import logging
 from pathlib import Path
@@ -25,19 +24,6 @@ def register_commands(cli: click.Group):
         default="all-MiniLM-L6-v2",
         help="Sentence-transformers model for KeyBERT (default: all-MiniLM-L6-v2)",
     )
-    @click.option("--llm", "use_llm", is_flag=True, help="Enable LLM keyword extraction (Ollama)")
-    @click.option("--judge", "use_judge", is_flag=True, help="Enable LLM judge validation (Ollama)")
-    @click.option(
-        "--ollama-model",
-        default="granite4.1:8b",
-        help="Ollama model name (default: granite4.1:8b; fallback: gemma4:e4b)",
-    )
-    @click.option(
-        "--ollama-timeout",
-        type=float,
-        default=180.0,
-        help="Ollama request timeout in seconds (default: 180)",
-    )
     @click.option(
         "--recent-days", type=int, default=None,
         help="Only process papers fetched in the last N days (true-incremental "
@@ -52,69 +38,37 @@ def register_commands(cli: click.Group):
         no_keybert: bool,
         force: bool,
         embedding_model: str,
-        use_llm: bool,
-        use_judge: bool,
-        ollama_model: str,
-        ollama_timeout: float,
         recent_days: int | None,
     ) -> None:
         """Extract keywords from paper titles and abstracts.
 
-        LLM-first extraction pipeline:
-        1. LLM extraction via Ollama (primary, always attempted)
-        2. Fallback: regex + KeyBERT (only when LLM is unavailable or fails)
-        3. LLM judge validation (optional, also via Ollama)
+        Extraction pipeline: regex acronyms + KeyBERT semantic keywords.
 
         Examples:
 
           # Extract keywords for all papers (default: regex + KeyBERT)
           uv run python -m src.cli.core_collect extract-keywords
 
-          # Full Ollama LLM pipeline with judge
-          uv run python -m src.cli.core_collect extract-keywords --llm --judge
-
-          # Use a different Ollama model
-          uv run python -m src.cli.core_collect extract-keywords --llm --ollama-model llama3.1:8b
-
           # Better embeddings
           uv run python -m src.cli.core_collect extract-keywords --embedding-model all-mpnet-base-v2
 
-          # Preview full pipeline
-          uv run python -m src.cli.core_collect extract-keywords --llm --judge --dry-run --limit 10
+          # Preview
+          uv run python -m src.cli.core_collect extract-keywords --dry-run --limit 10
         """
         from datetime import datetime, timedelta, timezone
         fetched_since = None
         if recent_days is not None:
             fetched_since = (datetime.now(timezone.utc) - timedelta(days=recent_days)).strftime("%Y-%m-%d")
 
-        needs_async = use_llm or use_judge
-
-        if needs_async:
-            asyncio.run(
-                _extract_keywords_async(
-                    dry_run=dry_run,
-                    limit=limit,
-                    batch_size=batch_size,
-                    no_keybert=no_keybert,
-                    force=force,
-                    embedding_model=embedding_model,
-                    use_llm=use_llm,
-                    use_judge=use_judge,
-                    ollama_model=ollama_model,
-                    ollama_timeout=ollama_timeout,
-                    fetched_since=fetched_since,
-                )
-            )
-        else:
-            _extract_keywords_sync(
-                dry_run=dry_run,
-                limit=limit,
-                batch_size=batch_size,
-                no_keybert=no_keybert,
-                force=force,
-                embedding_model=embedding_model,
-                fetched_since=fetched_since,
-            )
+        _extract_keywords_sync(
+            dry_run=dry_run,
+            limit=limit,
+            batch_size=batch_size,
+            no_keybert=no_keybert,
+            force=force,
+            embedding_model=embedding_model,
+            fetched_since=fetched_since,
+        )
 
     @cli.command("keyword-stats")
     @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
@@ -265,69 +219,6 @@ def _extract_keywords_sync(
     _display_results(processed, papers_with_keywords, total_keywords, samples, dry_run)
 
 
-async def _extract_keywords_async(
-    dry_run: bool,
-    limit: int | None,
-    batch_size: int,
-    no_keybert: bool,
-    force: bool,
-    embedding_model: str,
-    use_llm: bool,
-    use_judge: bool,
-    ollama_model: str,
-    ollama_timeout: float,
-    fetched_since: str | None = None,
-) -> None:
-    """Async keyword extraction (with LLM and/or judge via Ollama)."""
-    from src.core.keyword import KeywordExtractor
-
-    storage = QdrantStorage()
-    extractor = KeywordExtractor(
-        use_keybert=not no_keybert,
-        embedding_model=embedding_model,
-        use_llm=use_llm,
-        use_judge=use_judge,
-        ollama_model=ollama_model,
-        ollama_timeout=ollama_timeout,
-    )
-
-    if use_llm:
-        parts = ["LLM (ollama)"]
-        if not no_keybert:
-            parts.append("fallback: regex + KeyBERT")
-        else:
-            parts.append("fallback: regex")
-    else:
-        parts = ["regex"]
-        if not no_keybert:
-            parts.append("KeyBERT")
-    if use_judge:
-        parts.append("judge (ollama)")
-    click.echo(f"Keyword extraction mode: {' + '.join(parts)}")
-
-    if dry_run:
-        click.echo("DRY RUN - changes will not be saved\n")
-
-    try:
-        processed, papers_with_keywords, total_keywords, samples = (
-            await _run_extraction_loop_async(
-                storage=storage,
-                extractor=extractor,
-                batch_size=batch_size,
-                limit=limit,
-                force=force,
-                dry_run=dry_run,
-                fetched_since=fetched_since,
-            )
-        )
-
-        _display_results(
-            processed, papers_with_keywords, total_keywords, samples, dry_run
-        )
-    finally:
-        await extractor.close()
-
-
 def _run_extraction_loop(
     storage: QdrantStorage,
     extractor,
@@ -408,96 +299,6 @@ def _run_extraction_loop(
     return processed, papers_with_keywords, total_keywords, samples
 
 
-async def _run_extraction_loop_async(
-    storage: QdrantStorage,
-    extractor,
-    batch_size: int,
-    limit: int | None,
-    force: bool,
-    dry_run: bool,
-    fetched_since: str | None = None,
-) -> tuple[int, int, int, list[tuple[str, str, list[str], dict | None]]]:
-    """Async extraction loop (with LLM and/or judge)."""
-    try:
-        total_eligible = storage.count_papers_for_keyword_extraction(
-            skip_existing=not force, fetched_since=fetched_since,
-        )
-        if limit:
-            total_eligible = min(total_eligible, limit)
-        click.echo(f"Papers to process: {total_eligible:,}\n")
-    except Exception:
-        total_eligible = None
-        click.echo("Papers to process: (count unavailable)\n")
-
-    processed = 0
-    papers_with_keywords = 0
-    total_keywords = 0
-    offset = None
-    samples: list[tuple[str, str, list[str], dict | None]] = []
-
-    while True:
-        papers, next_offset = storage.get_papers_for_keyword_extraction(
-            limit=batch_size,
-            offset=offset,
-            skip_existing=not force,
-            fetched_since=fetched_since,
-        )
-
-        if not papers:
-            break
-
-        updates: list[tuple[str, list[str], str, dict | None]] = []
-
-        # Collect eligible papers and apply limit
-        eligible = []
-        for point_id, payload in papers:
-            title = payload.get("title", "")
-            abstract = payload.get("abstract")
-            if limit and processed + len(eligible) >= limit:
-                break
-            eligible.append((point_id, title, abstract))
-
-        # Process batch concurrently
-        async def _extract_one(point_id, title, abstract):
-            kw, src, structured = await extractor.extract_pipeline_with_source(title, abstract)
-            return point_id, title, kw, src, structured
-
-        results = await asyncio.gather(
-            *[_extract_one(pid, t, a) for pid, t, a in eligible]
-        )
-
-        for point_id, title, keywords, source, structured in results:
-            if keywords:
-                papers_with_keywords += 1
-                total_keywords += len(keywords)
-
-            updates.append((point_id, keywords, source, structured))
-
-            if dry_run and len(samples) < 10 and keywords:
-                samples.append((title[:80], source, keywords, structured))
-
-            processed += 1
-
-        if not dry_run and updates:
-            storage.batch_update_keywords_with_source(updates)
-
-        offset = next_offset
-
-        if total_eligible:
-            pct = processed / total_eligible * 100
-            click.echo(f"  Processed {processed:,}/{total_eligible:,} ({pct:.1f}%)")
-        else:
-            click.echo(f"  Processed {processed:,} papers...")
-
-        if limit and processed >= limit:
-            break
-
-        if offset is None:
-            break
-
-    return processed, papers_with_keywords, total_keywords, samples
-
-
 def _display_results(
     processed: int,
     papers_with_keywords: int,
@@ -521,22 +322,10 @@ def _display_results(
     # Show samples in dry run
     if dry_run and samples:
         click.echo(f"\n=== Sample Extractions ===\n")
-        for sample in samples:
-            # Support both 3-tuple (sync) and 4-tuple (async with structured)
-            if len(sample) == 4:
-                title, source, keywords, structured = sample
-            else:
-                title, source, keywords = sample
-                structured = None
-
+        for title, source, keywords in samples:
             click.echo(f"Title:    {title}...")
             click.echo(f"Source:   {source}")
             click.echo(f"Keywords: {keywords}")
-            if structured:
-                for category in ("task", "method", "model", "domain", "dataset",
-                                "contribution_type", "modality"):
-                    values = structured.get(category, [])
-                    click.echo(f"  {category:>8}: {values}")
             click.echo()
 
     if dry_run:
