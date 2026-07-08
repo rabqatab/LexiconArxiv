@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import re
+import unicodedata
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -132,12 +133,13 @@ class Deduplicator:
 
     @staticmethod
     def normalize_title(title: str) -> str:
-        """Normalize a title for comparison.
+        """Normalize a title for comparison (the canonical normalizer —
+        matcher, resolver, reader, and enrichers all use this one).
 
         - Lowercase
+        - Strip accents (NFKD)
         - Remove punctuation
         - Collapse whitespace
-        - Remove common prefixes/suffixes
 
         Args:
             title: The title to normalize.
@@ -150,6 +152,10 @@ class Deduplicator:
 
         # Lowercase
         normalized = title.lower()
+
+        # Strip accents: NFKD-decompose, drop combining marks
+        normalized = unicodedata.normalize("NFKD", normalized)
+        normalized = "".join(c for c in normalized if not unicodedata.combining(c))
 
         # Remove punctuation
         normalized = re.sub(r"[^\w\s]", "", normalized)

@@ -11,6 +11,8 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
+
+from src.core.deduplication import Deduplicator
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -31,14 +33,6 @@ logger = logging.getLogger(__name__)
 # --- Title matching helpers ---
 
 _TITLE_MATCH_THRESHOLD = 0.90
-
-
-def _normalize_title(title: str) -> str:
-    """Normalize a title for comparison: lowercase, strip punctuation, collapse whitespace."""
-    t = title.lower().strip()
-    t = re.sub(r"[^a-z0-9\s]", " ", t)
-    t = re.sub(r"\s+", " ", t).strip()
-    return t
 
 
 def _titles_match(norm_a: str, norm_b: str) -> bool:
@@ -243,13 +237,13 @@ class PaperEnricher(BaseEnricher, OpenAlexMixin):
                 return None
 
             # Find best match with sufficient references
-            title_norm = _normalize_title(title)
+            title_norm = Deduplicator.normalize_title(title)
             for result in results:
                 result_title = result.get("title") or ""
                 refs = result.get("referenced_works", [])
 
                 # Check title similarity via normalized SequenceMatcher
-                if _titles_match(title_norm, _normalize_title(result_title)):
+                if _titles_match(title_norm, Deduplicator.normalize_title(result_title)):
                     if len(refs) >= min_refs:
                         refs_clean = [
                             ref.replace("https://openalex.org/", "") for ref in refs
@@ -342,10 +336,10 @@ class PaperEnricher(BaseEnricher, OpenAlexMixin):
             if not results:
                 return None
 
-            title_norm = _normalize_title(title)
+            title_norm = Deduplicator.normalize_title(title)
             for result in results:
                 result_title = result.get("title") or ""
-                if _titles_match(title_norm, _normalize_title(result_title)):
+                if _titles_match(title_norm, Deduplicator.normalize_title(result_title)):
                     # Prefer DOI, fall back to OpenAlex work ID
                     doi = result.get("doi")
                     if doi:

@@ -19,7 +19,6 @@ import io
 import json
 import logging
 import re
-import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,6 +26,7 @@ from typing import Any
 
 import httpx
 
+from src.core.deduplication import Deduplicator
 from src.core.storage import QdrantStorage
 
 logger = logging.getLogger(__name__)
@@ -62,22 +62,6 @@ class CodeRepoEnrichmentProgress:
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
     last_updated: str | None = None
-
-
-def _normalize_title(title: str) -> str:
-    """Normalize a paper title for matching.
-
-    Lowercases, strips accents, removes non-alphanumeric, collapses whitespace.
-    """
-    title = title.lower().strip()
-    # Remove accents
-    title = unicodedata.normalize("NFKD", title)
-    title = "".join(c for c in title if not unicodedata.combining(c))
-    # Keep only alphanumeric and spaces
-    title = re.sub(r"[^a-z0-9 ]", "", title)
-    # Collapse whitespace
-    title = re.sub(r"\s+", " ", title).strip()
-    return title
 
 
 class CodeRepoEnricher:
@@ -179,7 +163,7 @@ class CodeRepoEnricher:
             # Index by normalized title
             title = titles[i] if i < len(titles) else None
             if title:
-                norm = _normalize_title(title)
+                norm = Deduplicator.normalize_title(title)
                 if len(norm) > 10:  # Skip very short/empty titles
                     by_title.setdefault(norm, []).append(repo_info)
 
@@ -372,7 +356,7 @@ class CodeRepoEnricher:
 
             # Phase 2: PWC archive by normalized title
             if title:
-                norm_title = _normalize_title(title)
+                norm_title = Deduplicator.normalize_title(title)
                 if len(norm_title) > 10 and self._pwc_by_title.get(norm_title):
                     repos = self._pwc_by_title[norm_title]
                     best_url = self._select_best_url(repos)

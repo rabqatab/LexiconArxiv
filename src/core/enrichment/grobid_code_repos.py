@@ -21,7 +21,7 @@ from xml.etree import ElementTree as ET
 
 import httpx
 
-from src.core.enrichment.code_repos import CodeRepoEnricher, _normalize_title
+from src.core.enrichment.code_repos import CodeRepoEnricher
 from src.core.storage import QdrantStorage
 
 logger = logging.getLogger(__name__)
