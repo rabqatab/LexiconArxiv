@@ -51,7 +51,6 @@ class ResolutionProgress:
     dois_resolved: int = 0
     openalex_resolved: int = 0  # OpenAlex Work IDs resolved
     titles_resolved: int = 0
-    external_added: int = 0  # Papers added from external search
     stubs_created: int = 0  # Stub papers created for unresolved refs
     stubs_updated: int = 0  # Existing stubs updated with new citations
 
@@ -143,7 +142,6 @@ class ReferenceResolver(OpenAlexMixin):
                 dois_resolved=data.get("dois_resolved", 0),
                 openalex_resolved=data.get("openalex_resolved", 0),
                 titles_resolved=data.get("titles_resolved", 0),
-                external_added=data.get("external_added", 0),
                 stubs_created=data.get("stubs_created", 0),
                 stubs_updated=data.get("stubs_updated", 0),
             )
@@ -169,7 +167,6 @@ class ReferenceResolver(OpenAlexMixin):
             "dois_resolved": progress.dois_resolved,
             "openalex_resolved": progress.openalex_resolved,
             "titles_resolved": progress.titles_resolved,
-            "external_added": progress.external_added,
             "stubs_created": progress.stubs_created,
             "stubs_updated": progress.stubs_updated,
         }
@@ -542,7 +539,6 @@ class ReferenceResolver(OpenAlexMixin):
         dry_run: bool = False,
         limit: int | None = None,
         fuzzy_matching: bool = False,
-        external_search: bool = False,
         create_stubs: bool = False,
         fetched_since: str | None = None,
     ) -> ResolutionProgress:
@@ -555,7 +551,6 @@ class ReferenceResolver(OpenAlexMixin):
             dry_run: If True, count without updating.
             limit: Maximum papers to process.
             fuzzy_matching: Use fuzzy title matching (slower).
-            external_search: Search S2/OpenAlex for unresolved titles.
             create_stubs: If True, create stub papers for unresolved refs.
             fetched_since: ISO date. Scope to recently-fetched papers.
 
@@ -622,12 +617,6 @@ class ReferenceResolver(OpenAlexMixin):
 
                         if resolved_id:
                             progress.titles_resolved += 1
-                        elif external_search and not dry_run:
-                            # Try to find and add from external source
-                            resolved_id = await self._search_and_add_paper(norm.value)
-                            if resolved_id:
-                                progress.external_added += 1
-                                progress.titles_resolved += 1
 
                     elif norm.type == IdentifierType.OPENALEX:
                         # OpenAlex Work IDs (e.g., W2741809807)
@@ -700,8 +689,7 @@ class ReferenceResolver(OpenAlexMixin):
             f"Resolution complete: {progress.processed} papers, "
             f"{progress.dois_resolved} DOIs, "
             f"{progress.openalex_resolved} OpenAlex IDs, "
-            f"{progress.titles_resolved} titles resolved, "
-            f"{progress.external_added} papers added from external search"
+            f"{progress.titles_resolved} titles resolved"
             f"{stub_msg}"
         )
         return progress
@@ -725,153 +713,6 @@ class ReferenceResolver(OpenAlexMixin):
                 return point_id
         return None
 
-    async def _search_and_add_paper(self, title: str) -> str | None:
-        """Search external APIs for a paper and add to corpus.
-
-        Args:
-            title: Paper title to search.
-
-        Returns:
-            New point ID if paper was added, None otherwise.
-        """
-        # Try OpenAlex first
-        paper_data = await self._search_openalex_by_title(title)
-
-        if not paper_data:
-            # Could add Semantic Scholar fallback here
-            return None
-
-        # Add paper to corpus
-        from src.models.paper import RawPaper, SourceType
-
-        paper = RawPaper(
-            source=SourceType.OPENALEX,
-            source_id=paper_data.get("openalex_id", f"search:{title[:50]}"),
-            title=paper_data.get("title", title),
-            abstract=paper_data.get("abstract"),
-            doi=paper_data.get("doi"),
-            year=paper_data.get("year"),
-            is_core=False,  # External paper
-            tier=None,  # No tier for external papers
-        )
-
-        point_id = self.storage.upsert_paper(paper)
-
-        # Update indexes
-        if paper.doi:
-            self._doi_to_point_id[paper.doi.lower()] = point_id
-        normalized = Deduplicator.normalize_title(paper.title)
-        if normalized:
-            self._title_to_point_id[normalized] = point_id
-
-        logger.debug(f"Added external paper: {paper.title[:50]}... -> {point_id}")
-        return point_id
-
-    async def _search_openalex_by_title(
-        self, title: str, _retry_count: int = 0
-    ) -> dict[str, Any] | None:
-        """Search OpenAlex by title.
-
-        Args:
-            title: Paper title.
-            _retry_count: Internal retry counter (do not set manually).
-
-        Returns:
-            Paper data dict or None.
-        """
-        max_retries = 3
-
-        if not self._client:
-            return None
-
-        async with self._semaphore:
-            await asyncio.sleep(self.delay)
-
-            url = f"{OPENALEX_BASE_URL}/works"
-            params = {"search": title, "per_page": 5}
-            openalex_params = self._get_openalex_params()
-            used_key = openalex_params.get("api_key")
-            params.update(openalex_params)
-
-            try:
-                response = await self._client.get(url, params=params)
-
-                if response.status_code == 429:
-                    if self._handle_api_key_exhaustion(response, used_key):
-                        if self._key_manager.has_available_keys:
-                            if hasattr(self, "_semaphore") and self._semaphore is not None:
-                                self._semaphore = asyncio.Semaphore(
-                                    self._original_max_concurrent
-                                )
-                        return await self._search_openalex_by_title(title)
-                    if _retry_count >= max_retries:
-                        logger.warning(
-                            f"OpenAlex rate limit: max retries ({max_retries}) "
-                            f"reached for title search, skipping."
-                        )
-                        return None
-                    logger.warning(
-                        f"Rate limited, waiting 60s... "
-                        f"(retry {_retry_count + 1}/{max_retries})"
-                    )
-                    await asyncio.sleep(60)
-                    return await self._search_openalex_by_title(
-                        title, _retry_count=_retry_count + 1
-                    )
-
-                response.raise_for_status()
-                data = response.json()
-
-                results = data.get("results", [])
-                if not results:
-                    return None
-
-                # Find best match
-                title_lower = Deduplicator.normalize_title(title)
-                for result in results:
-                    result_title = result.get("title", "")
-                    result_normalized = Deduplicator.normalize_title(result_title)
-
-                    if result_normalized == title_lower or (
-                        len(title_lower) > 20
-                        and (
-                            title_lower in result_normalized
-                            or result_normalized in title_lower
-                        )
-                    ):
-                        # Extract DOI
-                        doi = result.get("doi")
-                        if doi and doi.startswith("https://doi.org/"):
-                            doi = doi[16:]
-
-                        # Reconstruct abstract
-                        abstract = None
-                        inverted_index = result.get("abstract_inverted_index")
-                        if inverted_index:
-                            max_pos = 0
-                            for positions in inverted_index.values():
-                                if positions:
-                                    max_pos = max(max_pos, max(positions))
-                            words = [""] * (max_pos + 1)
-                            for word, positions in inverted_index.items():
-                                for pos in positions:
-                                    words[pos] = word
-                            abstract = " ".join(words)
-
-                        return {
-                            "title": result_title,
-                            "doi": doi,
-                            "abstract": abstract,
-                            "year": result.get("publication_year"),
-                            "openalex_id": result.get("id", "").replace(
-                                "https://openalex.org/", ""
-                            ),
-                        }
-
-            except Exception as e:
-                logger.debug(f"Error searching OpenAlex for '{title[:30]}': {e}")
-
-            return None
 
     # =========================================================================
     # Full Pipeline
@@ -882,7 +723,6 @@ class ReferenceResolver(OpenAlexMixin):
         dry_run: bool = False,
         limit: int | None = None,
         fuzzy_matching: bool = False,
-        external_search: bool = False,
         create_stubs: bool = False,
         fetched_since: str | None = None,
     ) -> dict[str, ResolutionProgress]:
@@ -892,7 +732,6 @@ class ReferenceResolver(OpenAlexMixin):
             dry_run: If True, count without updating.
             limit: Maximum papers to process per step.
             fuzzy_matching: Use fuzzy title matching in step 3.
-            external_search: Search external APIs for unresolved titles.
             create_stubs: Create stub papers for unresolved references.
             fetched_since: ISO date. Scope all 3 sub-steps to recently-
                 fetched papers via the indexed ``fetched_at`` field.
@@ -925,7 +764,6 @@ class ReferenceResolver(OpenAlexMixin):
             dry_run=dry_run,
             limit=limit,
             fuzzy_matching=fuzzy_matching,
-            external_search=external_search,
             create_stubs=create_stubs,
             fetched_since=fetched_since,
         )

@@ -297,7 +297,7 @@ async def label_abstracts_stage(
 
 async def resolve_refs_stage(
     limit: int | None = None, batch_size: int = 100, parallel: int = 10,
-    create_stubs: bool = True, fuzzy_matching: bool = True, external_search: bool = False,
+    create_stubs: bool = True, fuzzy_matching: bool = True,
 ) -> dict[str, int]:
     """Normalize/resolve references and (optionally) create stub papers."""
     storage = QdrantStorage()
@@ -306,7 +306,7 @@ async def resolve_refs_stage(
     ) as resolver:
         results = await resolver.run_full_pipeline(
             dry_run=False, limit=limit, fuzzy_matching=fuzzy_matching,
-            external_search=external_search, create_stubs=create_stubs,
+            create_stubs=create_stubs,
         )
     out = {"processed": 0, "updated": 0, "stubs_created": 0, "errors": 0}
     for step in results.values():

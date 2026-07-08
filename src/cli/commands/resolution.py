@@ -20,7 +20,6 @@ def register_commands(cli: click.Group):
     @click.option("--step", type=click.Choice(["all", "normalize", "arxiv", "internal"]),
                   default="all", help="Run specific step only")
     @click.option("--fuzzy-matching", is_flag=True, help="Use fuzzy title matching (slower)")
-    @click.option("--external-search", is_flag=True, help="Search external APIs for unresolved titles")
     @click.option("--create-stubs/--no-create-stubs", default=True, help="Create stub papers for unresolved references (default: enabled)")
     @click.option("--batch-size", type=int, default=100, help="Batch size")
     @click.option("--parallel", "-p", type=int, default=5, help="Concurrent requests")
@@ -35,7 +34,6 @@ def register_commands(cli: click.Group):
         limit: int | None,
         step: str,
         fuzzy_matching: bool,
-        external_search: bool,
         create_stubs: bool,
         batch_size: int,
         parallel: int,
@@ -67,9 +65,6 @@ def register_commands(cli: click.Group):
           # With fuzzy title matching (slower but better coverage)
           python -m src.cli.core_collect resolve-refs --step internal --fuzzy-matching
 
-          # Search external APIs for unresolved titles
-          python -m src.cli.core_collect resolve-refs --step internal --external-search
-
           # Skip stub paper creation (stubs are created by default)
           python -m src.cli.core_collect resolve-refs --no-create-stubs
 
@@ -95,7 +90,6 @@ def register_commands(cli: click.Group):
                         dry_run=dry_run,
                         limit=limit,
                         fuzzy_matching=fuzzy_matching,
-                        external_search=external_search,
                         create_stubs=create_stubs,
                         fetched_since=fetched_since,
                     )
@@ -116,8 +110,6 @@ def register_commands(cli: click.Group):
                             click.echo(f"  DOIs resolved:     {progress.dois_resolved}")
                             click.echo(f"  OpenAlex resolved: {progress.openalex_resolved}")
                             click.echo(f"  Titles resolved:   {progress.titles_resolved}")
-                            if progress.external_added > 0:
-                                click.echo(f"  External added:    {progress.external_added}")
                             if progress.stubs_created > 0:
                                 click.echo(f"  Stubs created:     {progress.stubs_created}")
                         click.echo()
@@ -145,7 +137,6 @@ def register_commands(cli: click.Group):
                         dry_run=dry_run,
                         limit=limit,
                         fuzzy_matching=fuzzy_matching,
-                        external_search=external_search,
                         create_stubs=create_stubs,
                         fetched_since=fetched_since,
                     )
@@ -155,8 +146,6 @@ def register_commands(cli: click.Group):
                     click.echo(f"  DOIs resolved:     {progress.dois_resolved}")
                     click.echo(f"  OpenAlex resolved: {progress.openalex_resolved}")
                     click.echo(f"  Titles resolved:   {progress.titles_resolved}")
-                    if progress.external_added > 0:
-                        click.echo(f"  External added:    {progress.external_added}")
                     if progress.stubs_created > 0:
                         click.echo(f"  Stubs created:     {progress.stubs_created}")
 
