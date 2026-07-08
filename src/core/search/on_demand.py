@@ -5,8 +5,6 @@ import hashlib
 import logging
 import time
 
-from cachetools import TTLCache
-
 from src.core.search.arxiv_client import ArxivClient
 from src.core.search.openalex_client import OpenAlexSearchClient
 from src.core.storage.base import QdrantStorage
@@ -24,7 +22,11 @@ class OnDemandSearch:
         cache_ttl: int = 86400,  # 24 hours
     ):
         self._storage = storage or QdrantStorage()
-        self._cache: TTLCache = TTLCache(maxsize=cache_maxsize, ttl=cache_ttl)
+        # ponytail: plain {key: (expiry, value)} dict replaces cachetools.TTLCache
+        # (its only use in the repo). Expired/oldest entries evicted on write.
+        self._cache: dict[str, tuple[float, dict]] = {}
+        self._cache_maxsize = cache_maxsize
+        self._cache_ttl = cache_ttl
         self._cache_lock = asyncio.Lock()
         self._arxiv: ArxivClient | None = None
         self._openalex: OpenAlexSearchClient | None = None
@@ -63,7 +65,8 @@ class OnDemandSearch:
         # Check cache
         cache_key = self._cache_key(query, sources, limit)
         async with self._cache_lock:
-            cached = self._cache.get(cache_key)
+            entry = self._cache.get(cache_key)
+            cached = entry[1] if entry and entry[0] > time.monotonic() else None
         if cached is not None:
             cached["cached"] = True
             cached["query_time_ms"] = 0
@@ -117,9 +120,15 @@ class OnDemandSearch:
             "cached": False,
         }
 
-        # Cache result
+        # Cache result (evict expired, then oldest, to stay under maxsize)
         async with self._cache_lock:
-            self._cache[cache_key] = result
+            now = time.monotonic()
+            expired = [k for k, (exp, _) in self._cache.items() if exp <= now]
+            for k in expired:
+                del self._cache[k]
+            while len(self._cache) >= self._cache_maxsize:
+                del self._cache[next(iter(self._cache))]
+            self._cache[cache_key] = (now + self._cache_ttl, result)
 
         return result
 
