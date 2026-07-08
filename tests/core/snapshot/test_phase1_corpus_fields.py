@@ -30,7 +30,7 @@ def test_p1_run_fills_metadata_on_matched_corpus_papers(mock_storage, tmp_path):
     assert summary.matched >= 2
     assert summary.applied >= 2
     # real-001 should now have cited_by_count = 42 from the snapshot
-    pl = mock_storage.get_payload("real-001")
+    pl = mock_storage.get_paper_by_id("real-001")
     assert pl["cited_by_count"] == 42
     assert "snapshot_filled_at" in pl
 
@@ -50,14 +50,14 @@ def test_p1_dry_run_does_not_mutate(mock_storage, tmp_path):
     mock_storage.seed_from_json(FIXTURE_DIR / "corpus" / "seed_papers.json")
     snap_dir = _setup_snapshot(tmp_path)
 
-    before = dict(mock_storage.get_payload("real-001"))
+    before = dict(mock_storage.get_paper_by_id("real-001"))
     summary = phase1_corpus_fields.run(
         mock_storage,
         snapshot_dir=str(snap_dir),
         dry_run=True,
         checkpoint_root=tmp_path / "checkpoints",
     )
-    after = mock_storage.get_payload("real-001")
+    after = mock_storage.get_paper_by_id("real-001")
     assert summary.matched >= 2
     assert summary.applied == 0     # dry-run reports matched but applies nothing
     assert before == after

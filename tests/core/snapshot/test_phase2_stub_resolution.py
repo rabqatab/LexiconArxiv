@@ -26,7 +26,7 @@ def test_p2_run_promotes_stubs_and_queues_embedding(mock_storage, tmp_path):
     # work 6 → ENRICH_KEEP_STUB on stub-doi-002.
     assert summary.extra["promoted"] >= 2
     assert summary.extra["enriched"] >= 1
-    p = mock_storage.get_payload("stub-doi-001")
+    p = mock_storage.get_paper_by_id("stub-doi-001")
     assert p["is_stub"] is False
     assert "cited_by" in p
 

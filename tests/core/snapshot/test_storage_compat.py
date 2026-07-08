@@ -11,7 +11,7 @@ from src.core.storage import QdrantStorage
 
 PHASE_METHODS = (
     # P1
-    "get_payload",
+    "get_paper_by_id",
     "iter_all_real_papers_minimal",
     "batch_apply_field_fill",
     # P2

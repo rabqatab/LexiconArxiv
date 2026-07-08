@@ -6,7 +6,7 @@ FIXTURE = Path(__file__).parent / "fixtures" / "corpus" / "seed_papers.json"
 
 def test_seed_and_get(mock_storage):
     mock_storage.seed_from_json(FIXTURE)
-    p = mock_storage.get_payload("real-001")
+    p = mock_storage.get_paper_by_id("real-001")
     assert p is not None
     assert p["doi"] == "10.1000/seed-doi-001"
 
@@ -14,7 +14,7 @@ def test_seed_and_get(mock_storage):
 def test_set_payload_merges(mock_storage):
     mock_storage.set_payload("x", {"a": 1, "b": 2})
     mock_storage.set_payload("x", {"b": 99, "c": 3})
-    assert mock_storage.get_payload("x") == {"a": 1, "b": 99, "c": 3}
+    assert mock_storage.get_paper_by_id("x") == {"a": 1, "b": 99, "c": 3}
 
 
 def test_has_vector_default_false(mock_storage):
@@ -48,7 +48,7 @@ def test_mock_batch_apply_field_fill_stamps_provenance(mock_storage):
     mock_storage.set_payload("p", {"a": 1})
     n = mock_storage.batch_apply_field_fill([("p", {"b": 2})])
     assert n == 1
-    pl = mock_storage.get_payload("p")
+    pl = mock_storage.get_paper_by_id("p")
     assert pl["b"] == 2
     assert "snapshot_filled_at" in pl
 

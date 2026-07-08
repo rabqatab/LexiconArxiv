@@ -101,7 +101,7 @@ def test_promote_one_promotes_and_queues(mock_storage, tmp_path):
     }
     result = promote_one(mock_storage, stub, fields, embedding_queue_root=tmp_path)
     assert result is Decision.PROMOTE
-    p = mock_storage.get_payload("stub-doi-001")
+    p = mock_storage.get_paper_by_id("stub-doi-001")
     assert p["is_stub"] is False
     assert p["cited_by"] == ["real-005", "real-006"]
     assert p["cited_by_count"] == 2
@@ -137,9 +137,9 @@ def test_promote_one_merges_when_real_dup_exists(mock_storage, tmp_path):
               "year": 2024, "authors": [{"display_name": "Alice"}], "abstract": "x"}
     result = promote_one(mock_storage, stub, fields, embedding_queue_root=tmp_path)
     assert result is Decision.MERGED_INTO_EXISTING
-    real = mock_storage.get_payload("real-existing")
+    real = mock_storage.get_paper_by_id("real-existing")
     assert set(real["cited_by"]) == {"real-005", "real-006", "real-007"}
-    assert mock_storage.get_payload("stub-doi-001") is None  # stub deleted
+    assert mock_storage.get_paper_by_id("stub-doi-001") is None  # stub deleted
 
 
 def test_promote_one_idempotent_on_already_promoted(mock_storage, tmp_path):
@@ -151,9 +151,9 @@ def test_promote_one_idempotent_on_already_promoted(mock_storage, tmp_path):
               "year": 2024, "authors": [{"display_name": "Alice"}], "abstract": "x"}
     promote_one(mock_storage, stub, fields, embedding_queue_root=tmp_path)
     # second run
-    p_before = dict(mock_storage.get_payload("stub-doi-001"))
+    p_before = dict(mock_storage.get_paper_by_id("stub-doi-001"))
     promote_one(mock_storage, stub, fields, embedding_queue_root=tmp_path)
-    p_after = mock_storage.get_payload("stub-doi-001")
+    p_after = mock_storage.get_paper_by_id("stub-doi-001")
     # cited_by must not duplicate
     assert p_after["cited_by"] == p_before["cited_by"]
 
@@ -179,10 +179,10 @@ def test_promote_one_skips_merge_when_allow_merge_false(mock_storage, tmp_path):
 
     assert result is Decision.MERGED_INTO_EXISTING
     # Real paper's cited_by must NOT have been mutated (merge did not happen)
-    real = mock_storage.get_payload("real-existing")
+    real = mock_storage.get_paper_by_id("real-existing")
     assert real["cited_by"] == ["real-007"], "cited_by on real paper was mutated despite allow_merge=False"
     # Stub must still exist (was not deleted)
-    assert mock_storage.get_payload("stub-doi-001") is not None, "stub was deleted despite allow_merge=False"
+    assert mock_storage.get_paper_by_id("stub-doi-001") is not None, "stub was deleted despite allow_merge=False"
 
 
 def test_cited_by_invariant_after_many_promotions(mock_storage, tmp_path):
@@ -199,7 +199,7 @@ def test_cited_by_invariant_after_many_promotions(mock_storage, tmp_path):
                 continue
     # Invariant: no promoted point ended up with cited_by==[] when it started non-empty
     for pid, original in promoted.items():
-        pl = mock_storage.get_payload(pid)
+        pl = mock_storage.get_paper_by_id(pid)
         if pl is None:
             continue  # merged
         if pl.get("promoted_from_stub") is True and original:

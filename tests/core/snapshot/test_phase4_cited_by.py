@@ -34,8 +34,8 @@ def test_p4_appends_external_cited_by(mock_storage, tmp_path):
 def test_p4_does_not_touch_existing_cited_by(mock_storage, tmp_path):
     mock_storage.seed_from_json(FIXTURE_DIR / "corpus" / "seed_papers.json")
     snap_dir = _setup_snapshot(tmp_path)
-    before = list(mock_storage.get_payload("real-001").get("cited_by") or [])
+    before = list(mock_storage.get_paper_by_id("real-001").get("cited_by") or [])
     phase4_cited_by.run(mock_storage, snapshot_dir=str(snap_dir),
                        checkpoint_root=tmp_path / "checkpoints")
-    after = list(mock_storage.get_payload("real-001").get("cited_by") or [])
+    after = list(mock_storage.get_paper_by_id("real-001").get("cited_by") or [])
     assert after == before

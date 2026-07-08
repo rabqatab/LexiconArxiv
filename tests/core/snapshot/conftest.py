@@ -22,7 +22,7 @@ class _MockStorage:
         existing.update(payload)
         self._payloads[point_id] = existing
 
-    def get_payload(self, point_id: str) -> dict | None:
+    def get_paper_by_id(self, point_id: str) -> dict | None:
         return self._payloads.get(point_id)
 
     def scroll_payloads(self) -> list[tuple[str, dict]]:

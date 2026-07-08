@@ -54,7 +54,7 @@ def process_one(work: dict, indexes, *, storage, dry_run: bool = False) -> dict:
     pid = _match(work, doi_map, oa_map, title_map)
     if pid is None:
         return {"matched": False, "applied": False}
-    existing = storage.get_payload(pid) or {}
+    existing = storage.get_paper_by_id(pid) or {}
     fields = extract_p1_fields(work, existing_payload=existing)
     if not fields:
         return {"matched": True, "applied": False}
@@ -113,7 +113,7 @@ def run(
             if pid is None:
                 continue
             summary.matched += 1
-            existing = storage.get_payload(pid) or {}
+            existing = storage.get_paper_by_id(pid) or {}
             fields = extract_p1_fields(work, existing_payload=existing)
             if not fields:
                 continue
