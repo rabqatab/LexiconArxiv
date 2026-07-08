@@ -156,17 +156,20 @@ Use the provided script for complete incremental updates:
 ./scripts/run_incremental_pipeline.sh --days 90 --weekly --dry-run
 ```
 
-**Pipeline Steps:**
+**Pipeline Steps** (as of 2026-07-08 — the true-incremental overhaul; every eligible step is scoped by `--recent-days $((DAYS+2))` so it touches only papers the crawler actually just added):
+
 1. `collect-incremental --days N` — Collect new papers from all sources
-2. `enrich-6-abstracts-by-doi-via-openalex` — Fill missing abstracts via OpenAlex
-3. `enrich-4-refs-by-doi-via-s2 --recent-days N` — Enrich citations via Semantic Scholar (recent papers only; with `--weekly` the full backlog also runs in the background)
-4. `enrich-2-refs-by-doi-via-crossref` — Enrich citations via CrossRef (papers S2 missed)
-5. `extract-keywords` — Extract keywords for BM25 search *(runs in parallel with step 6)*
-6. `label-abstracts` — Label abstract sentences with rhetorical roles *(parallel; skip with `--skip-labeling`)*
-7. `resolve-refs --create-stubs` — Resolve references and create stub papers
-8. `enrich-8-metadata-by-stub-via-openalex` — Enrich stub paper metadata
-9. `build-cited-by --incremental` — Update the cited_by citation graph *(skip with `--skip-graph`)*
-10. `embed-papers` — Embed new papers: dense + section-level + BM25 vectors *(skip with `--skip-embed`)*
+2. `enrich-6-abstracts-by-doi-via-openalex --recent-days` — Fill missing abstracts via OpenAlex
+3. `enrich-4-refs-by-doi-via-s2 --recent-days` — Enrich citations via Semantic Scholar (with `--weekly` the full backlog also runs in the background)
+4. `enrich-2-refs-by-doi-via-crossref --recent-days` — Enrich citations via CrossRef (papers S2 missed)
+4b. `enrich-5-refs-by-pdf-via-grobid --recent-days` — **GROBID PDF refs fallback** for the ~90 % of ACL/DBLP papers CrossRef+S2 can't cover. Auto-starts the `grobid-arm64:latest` Docker container if `localhost:8070` is down (aarch64 image — the upstream `lfoppiano/grobid` is amd64-only and won't boot on the DGX Spark), auto-stops it after 4c if the script started it. Skipped gracefully if Docker is unavailable. Env overrides: `GROBID_URL`, `GROBID_IMAGE`, `GROBID_CONTAINER`, `GROBID_AUTO_START=false`.
+4c. `enrich-7-abstracts-by-pdf-via-grobid --recent-days` — GROBID PDF abstract fallback (same container).
+5. `extract-keywords --recent-days` — Extract keywords for BM25 search *(SERIAL with step 6 per Path B)*
+6. `label-abstracts --backend vllm --recent-days` — Label abstract sentences with rhetorical roles *(skip with `--skip-labeling`)*
+7. `resolve-refs --create-stubs --recent-days` — Resolve references and create stub papers *(all 3 resolver sub-steps scoped)*
+8. `enrich-8-metadata-by-stub-via-openalex` — Enrich stub paper metadata (top-cited stubs, `--limit 100` default)
+9. `build-cited-by --incremental` — Update the cited_by citation graph *(index-only filter on `graph_indexed` + `is_stub`; skip with `--skip-graph`)*
+10. `embed-papers --recent-days` — Embed new papers: dense + section-level + BM25 vectors *(skip with `--skip-embed`)*
 
 **Weekly maintenance** (`--weekly`):
 
@@ -177,7 +180,7 @@ Use the provided script for complete incremental updates:
 
 13. `compute-topics` — Recompute UMAP + HDBSCAN topic clusters
 
-All steps are **incremental** — they only process new/unenriched papers. Flags: `--days N`, `--parallel N`, `--weekly`, `--cluster`, `--skip-graph`, `--skip-labeling`, `--skip-embed`, `--dry-run`.
+**Why `--recent-days` everywhere (2026-07-07 lesson):** before the overhaul, Steps 5/6/7/10 default-swept their full corpus-wide backlogs — a "fill the 33-day gap" run turned into a 3.97 M-paper keyword sweep, a 13 h / 104 K-paper labeling job, and a 7 h+ Step 7.1 Normalize over 2.8 M papers. Runs 830c → 7a34 each died on a different full-scan Qdrant timeout before 6283 (v8) finally completed end-to-end in ~1.5 h. Backlog catchup is a deliberately separate concern (see the Wave 4b/4c cleanup plans and [`../design/bulk-vs-incremental-audit.md`](../design/bulk-vs-incremental-audit.md)). Flags: `--days N`, `--parallel N`, `--weekly`, `--cluster`, `--skip-graph`, `--skip-labeling`, `--skip-embed`, `--dry-run`.
 
 ---
 
