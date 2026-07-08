@@ -9,6 +9,7 @@ from src.core.snapshot.extractor import extract_full_record
 from src.core.snapshot.matcher import build_stub_index, match_work_for_stubs
 from src.core.snapshot.promotion import Decision, PromotionError, evaluate, promote_one
 from src.core.snapshot.stats import PhaseSummary
+from src.core.snapshot.topic_gate import is_keep_topic
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,12 @@ def process_one(
     decision = evaluate(stub, fields,
                         min_cites_per_year=min_cites_per_year,
                         now_year=now_year)
+
+    # Wave 4c topic gate: non-AI-adjacent works may enrich their stub but are
+    # never promoted to real papers (2026-07-06 audit: unfiltered promotion +
+    # injection left the corpus only 32.6% AI-adjacent).
+    if decision is Decision.PROMOTE and not is_keep_topic(work.get("primary_topic")):
+        decision = Decision.ENRICH_KEEP_STUB
 
     if decision is Decision.SKIP:
         return {"matched": True, "action": "skip"}

@@ -16,6 +16,7 @@ from src.core.snapshot.gap_filter import (
     classify,
 )
 from src.core.snapshot.stats import PhaseSummary
+from src.core.snapshot.topic_gate import is_keep_topic
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,11 @@ def process_one(
                    thresholds=thresholds, now_year=now_year)
     if cls is Classification.REJECT:
         return {"action": "reject"}
+
+    # Wave 4c topic gate: anchor/concept adjacency alone let ~2.4M cross-domain
+    # works into the corpus (2026-07-06 audit: only 32.6% AI-adjacent).
+    if not is_keep_topic(work.get("primary_topic")):
+        return {"action": "reject_topic"}
 
     if dry_run:
         return {"action": "would_inject", "classification": cls.value}
@@ -129,6 +135,8 @@ def run(
                 counters["skip_existing"] += 1
             elif action == "reject":
                 counters["rejected"] += 1
+            elif action == "reject_topic":
+                counters["rejected_by_topic"] += 1
             elif action == "created" or action == "would_inject":
                 if cls == "ANCHOR_INJECT":
                     counters["anchor_inject"] += 1
@@ -166,6 +174,7 @@ def run(
         "anchor_inject": counters["anchor_inject"],
         "concept_inject": counters["concept_inject"],
         "rejected": counters["rejected"],
+        "rejected_by_topic": counters["rejected_by_topic"],
         "skip_existing": counters["skip_existing"],
         "skipped_dup": counters["skipped_dup"],
         "failed": counters["failed"],

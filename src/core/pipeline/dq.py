@@ -26,6 +26,11 @@ MAX_CLUSTER_NOISE_RATIO = 0.40
 # be caught before it silently degrades section-vector search on new papers.
 # See the 2026-07-04 labeling gap incident that motivated this check.
 MAX_UNLABELED_ABSTRACT_BACKLOG = 1000
+# Wave 4c topic-gate drift thresholds (docs/plans/2026-07-06-corpus-cs-cleanup.md
+# Task 2.3). Pre-cleanup these WARN by design (~67% nontarget); post-Phase-3
+# baselines are ~0% and any regrowth means the P2/P3 gate regressed.
+MAX_NONTARGET_TOPIC_SHARE = 0.05
+MAX_NO_TOPIC_SHARE = 0.01
 
 _STUB = models.FieldCondition(key="is_stub", match=models.MatchValue(value=True))
 _EMPTY_ABSTRACT = models.FieldCondition(key="abstract", match=models.MatchValue(value=""))
@@ -181,4 +186,65 @@ def source_not_silently_zero(storage: QdrantStorage | None = None) -> dict:
         "passed": len(zero) == 0,
         "metadata": {"sources": len(by_source), "zero_sources": len(zero),
                      "zero_source_names": ", ".join(zero) or "none"},
+    }
+
+
+def nontarget_topic_share(storage: QdrantStorage | None = None) -> dict:
+    """Share of non-stub real papers outside the Wave 4c topic whitelist.
+
+    WARN above MAX_NONTARGET_TOPIC_SHARE — post-cleanup baseline is ~0%;
+    drift means the P2/P3 topic gate (topic_gate.is_keep_topic) regressed.
+    Scoped to P2/P3-provenance papers only: crawler-fetched papers
+    (fetched_at set) are exempt — tier-venue papers are AI by construction
+    even when OpenAlex mis-fields them (2026-07-08 Phase 1 finding: 66K
+    ICLR/NeurIPS/ACL papers carry Engineering/Medicine/no-topic).
+    Requires the keyword indices on primary_topic.{field,subfield}.display_name
+    (created 2026-07-08).
+    """
+    from src.core.snapshot.topic_gate import KEEP_FIELDS, KEEP_SUBFIELDS
+    storage = storage or QdrantStorage()
+    total = _count(storage, must_not=[_STUB])
+    nontarget = _count(
+        storage,
+        must=[models.Filter(should=[
+            models.FieldCondition(key="injected_from_snapshot", match=models.MatchValue(value=True)),
+            models.FieldCondition(key="promoted_from_stub", match=models.MatchValue(value=True)),
+        ])],
+        must_not=[
+            _STUB,
+            models.FieldCondition(key="primary_topic.field.display_name",
+                                  match=models.MatchAny(any=sorted(KEEP_FIELDS))),
+            models.FieldCondition(key="primary_topic.subfield.display_name",
+                                  match=models.MatchAny(any=sorted(KEEP_SUBFIELDS))),
+        ],
+    )
+    share = nontarget / total if total else 0.0
+    return {
+        "passed": share <= MAX_NONTARGET_TOPIC_SHARE,
+        "metadata": {"nontarget": nontarget, "non_stub_total": total,
+                     "share": round(share, 4),
+                     "threshold": MAX_NONTARGET_TOPIC_SHARE,
+                     "fix": "docs/plans/2026-07-06-corpus-cs-cleanup.md"},
+    }
+
+
+def no_primary_topic_share(storage: QdrantStorage | None = None) -> dict:
+    """Share of non-stub real papers with no primary_topic at all.
+
+    WARN above MAX_NO_TOPIC_SHARE — unclassifiable works are almost always
+    cross-domain injection artifacts (Wave 4c deletes them with the pollution).
+    """
+    storage = storage or QdrantStorage()
+    total = _count(storage, must_not=[_STUB])
+    no_topic = _count(
+        storage,
+        must=[models.IsEmptyCondition(
+            is_empty=models.PayloadField(key="primary_topic.field.display_name"))],
+        must_not=[_STUB],
+    )
+    share = no_topic / total if total else 0.0
+    return {
+        "passed": share <= MAX_NO_TOPIC_SHARE,
+        "metadata": {"no_topic": no_topic, "non_stub_total": total,
+                     "share": round(share, 4), "threshold": MAX_NO_TOPIC_SHARE},
     }

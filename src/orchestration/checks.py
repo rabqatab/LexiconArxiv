@@ -70,8 +70,21 @@ def abstract_labeling_gap_check() -> AssetCheckResult:
     return _result(dq.abstract_labeling_gap())
 
 
+@asset_check(asset="discover_gaps", name="nontarget_topic_share",
+             description="Non-stub papers outside the Wave 4c topic whitelist (warn-only gate-drift signal)")
+def nontarget_topic_share_check() -> AssetCheckResult:
+    return _result(dq.nontarget_topic_share())
+
+
+@asset_check(asset="discover_gaps", name="no_primary_topic_share",
+             description="Non-stub papers with no primary_topic (warn-only, Wave 4c)")
+def no_primary_topic_share_check() -> AssetCheckResult:
+    return _result(dq.no_primary_topic_share())
+
+
 ALL_CHECKS = [
     doi_papers_have_refs_check, abstract_coverage_check, embedding_coverage_check,
     graph_metrics_stored_check, cluster_coverage_check, real_papers_have_titles_check,
     source_not_silently_zero_check, abstract_labeling_gap_check,
+    nontarget_topic_share_check, no_primary_topic_share_check,
 ]

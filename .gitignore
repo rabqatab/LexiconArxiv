@@ -92,3 +92,6 @@ run_complete_chain_*.sh
 quality-eval*.json
 embed-bench*.json
 labeling-bench*.json
+# Wave 4c cleanup local artifacts (recovery map, rehearsal logs — no-push rule)
+snapshots/
+/tmp/topic_counts.json
