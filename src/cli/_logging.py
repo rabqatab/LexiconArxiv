@@ -18,14 +18,9 @@ console_handler.setLevel(logging.INFO)
 console_handler.setFormatter(log_format)
 
 
-class FlushingFileHandler(logging.handlers.RotatingFileHandler):
-    """RotatingFileHandler that flushes after every emit for real-time logging."""
-    def emit(self, record):
-        super().emit(record)
-        self.flush()
-
-
-file_handler = FlushingFileHandler(
+# StreamHandler.emit (inherited by RotatingFileHandler) already flushes
+# after every record — no custom handler needed for real-time tailing.
+file_handler = logging.handlers.RotatingFileHandler(
     LOG_FILE,
     maxBytes=10 * 1024 * 1024,
     backupCount=5,

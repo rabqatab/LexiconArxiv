@@ -151,9 +151,3 @@ def get_services() -> GraphServices:
         _services = GraphServices()
     return _services
 
-
-def reset_services() -> None:
-    """Reset the global services (for testing)."""
-    global _services
-    _services = None
-    get_services.cache_clear()

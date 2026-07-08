@@ -1,5 +1,5 @@
 """Per-phase summary dataclass shared by all snapshot phases."""
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 
 
 @dataclass
@@ -25,13 +25,7 @@ class PhaseSummary:
         return f"{core} {extra}".strip()
 
     def to_dagster_metadata(self) -> dict:
-        return {
-            "scanned": self.scanned,
-            "matched": self.matched,
-            "applied": self.applied,
-            "worker_errors": self.worker_errors,
-            "failed_batches": self.failed_batches,
-            "quarantined": self.quarantined,
-            "duration_s": self.duration_s,
-            **self.extra,
-        }
+        d = asdict(self)
+        d.pop("phase")
+        extra = d.pop("extra")
+        return {**d, **extra}
