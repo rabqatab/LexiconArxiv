@@ -4,12 +4,12 @@ Provides methods for collecting various statistics about the paper collection.
 """
 
 import logging
-import time
 from typing import Any
 
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
-from qdrant_client.http.exceptions import ResponseHandlingException
+
+from src.core.storage._retry import retry_qdrant
 
 logger = logging.getLogger(__name__)
 
@@ -27,28 +27,18 @@ class StorageStatistics:
         with_payload: bool | list[str] = True,
         limit: int = 1000,
         scroll_filter: models.Filter | None = None,
-        max_retries: int = 5,
-        base_delay: float = 3.0,
     ):
-        """Scroll with retry on connection errors."""
-        for attempt in range(max_retries + 1):
-            try:
-                return self.client.scroll(
-                    collection_name=self.collection_name,
-                    limit=limit,
-                    offset=offset,
-                    with_payload=with_payload,
-                    scroll_filter=scroll_filter,
-                )
-            except (ResponseHandlingException, ConnectionError, OSError) as e:
-                if attempt == max_retries:
-                    raise
-                delay = base_delay * (2 ** attempt)
-                logger.warning(
-                    f"Scroll failed (attempt {attempt + 1}/{max_retries}), "
-                    f"retrying in {delay:.0f}s: {e}"
-                )
-                time.sleep(delay)
+        """Scroll with retry on transient errors."""
+        return retry_qdrant(
+            lambda: self.client.scroll(
+                collection_name=self.collection_name,
+                limit=limit,
+                offset=offset,
+                with_payload=with_payload,
+                scroll_filter=scroll_filter,
+            ),
+            label="scroll(statistics)",
+        )
 
     def count_papers(self, venue: str | None = None, tier: int | None = None) -> int:
         """Count papers in the collection.

@@ -8,24 +8,9 @@ import logging
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 
-from src.core.storage.writer import _retry_qdrant_call
+from src.core.storage._retry import retry_qdrant
 
 logger = logging.getLogger(__name__)
-
-
-def _first_author_surname(payload: dict) -> str | None:
-    """Extract first author's surname from a stored paper payload.
-
-    Stored payloads use ``authors: list[str]`` (display names), e.g.
-    ``["Jane Doe", "John Smith"]``.  Returns the last token of the first
-    name, lower-cased, for loose corroboration matching.
-    """
-    authors = payload.get("authors") or []
-    if not authors:
-        return None
-    name = authors[0] if isinstance(authors[0], str) else ""
-    parts = name.strip().split()
-    return parts[-1].lower() if parts else None
 
 
 class PaperReader:
@@ -94,7 +79,7 @@ class PaperReader:
         # Unindexed IsEmpty(referenced_works) → full scan → Qdrant 148s
         # server-side timeout. Retry wrapper survives transient contention;
         # fetched_since above is what makes the query actually cheap.
-        results, next_offset = _retry_qdrant_call(
+        results, next_offset = retry_qdrant(
             lambda: self.client.scroll(
                 collection_name=self.collection_name,
                 scroll_filter=scroll_filter,
@@ -102,7 +87,7 @@ class PaperReader:
                 offset=offset,
                 with_payload=True,
             ),
-            op_label=f"scroll(get_papers_missing_references, offset={offset})",
+            label=f"scroll(get_papers_missing_references, offset={offset})",
         )
 
         return [(str(p.id), p.payload) for p in results], next_offset
@@ -168,7 +153,7 @@ class PaperReader:
         # transient scroll page. Wrap in _retry_qdrant_call so bulk
         # reads survive the same class of contention that the writer
         # path already recovers from.
-        results, next_offset = _retry_qdrant_call(
+        results, next_offset = retry_qdrant(
             lambda: self.client.scroll(
                 collection_name=self.collection_name,
                 scroll_filter=scroll_filter,
@@ -176,7 +161,7 @@ class PaperReader:
                 offset=offset,
                 with_payload=True,
             ),
-            op_label=f"scroll(get_papers_missing_abstracts, offset={offset})",
+            label=f"scroll(get_papers_missing_abstracts, offset={offset})",
         )
 
         return [(str(p.id), p.payload) for p in results], next_offset
@@ -281,7 +266,7 @@ class PaperReader:
             ],
         )
 
-        results, next_offset = _retry_qdrant_call(
+        results, next_offset = retry_qdrant(
             lambda: self.client.scroll(
                 collection_name=self.collection_name,
                 scroll_filter=scroll_filter,
@@ -289,7 +274,7 @@ class PaperReader:
                 offset=offset,
                 with_payload=True,
             ),
-            op_label=f"scroll(get_papers_with_references, offset={offset})",
+            label=f"scroll(get_papers_with_references, offset={offset})",
         )
 
         return [(str(p.id), p.payload) for p in results], next_offset
@@ -395,7 +380,7 @@ class PaperReader:
             ],
         )
 
-        results, next_offset = _retry_qdrant_call(
+        results, next_offset = retry_qdrant(
             lambda: self.client.scroll(
                 collection_name=self.collection_name,
                 scroll_filter=scroll_filter,
@@ -403,7 +388,7 @@ class PaperReader:
                 offset=offset,
                 with_payload=["title", "doi", "referenced_works", "resolved_references"],
             ),
-            op_label=f"scroll(get_papers_needing_resolution, offset={offset})",
+            label=f"scroll(get_papers_needing_resolution, offset={offset})",
         )
 
         # Filter to papers without resolved_references
@@ -472,7 +457,7 @@ class PaperReader:
             must_not=must_not_conditions,
         )
 
-        results, next_offset = _retry_qdrant_call(
+        results, next_offset = retry_qdrant(
             lambda: self.client.scroll(
                 collection_name=self.collection_name,
                 scroll_filter=scroll_filter,
@@ -480,7 +465,7 @@ class PaperReader:
                 offset=offset,
                 with_payload=["title", "abstract", "keywords"],
             ),
-            op_label=f"scroll(get_papers_for_keyword_extraction, offset={offset})",
+            label=f"scroll(get_papers_for_keyword_extraction, offset={offset})",
         )
 
         return [(str(p.id), p.payload) for p in results], next_offset
@@ -505,7 +490,7 @@ class PaperReader:
                     range=models.DatetimeRange(gte=fetched_since),
                 )
             )
-        result = _retry_qdrant_call(
+        result = retry_qdrant(
             lambda: self.client.count(
                 collection_name=self.collection_name,
                 count_filter=models.Filter(
@@ -513,7 +498,7 @@ class PaperReader:
                     must_not=must_not_conditions,
                 ),
             ),
-            op_label="count_papers_for_keyword_extraction",
+            label="count_papers_for_keyword_extraction",
         )
         return result.count
 
@@ -543,7 +528,7 @@ class PaperReader:
                     range=models.DatetimeRange(gte=fetched_since),
                 )
             )
-        result = _retry_qdrant_call(
+        result = retry_qdrant(
             lambda: self.client.count(
                 collection_name=self.collection_name,
                 count_filter=models.Filter(
@@ -551,7 +536,7 @@ class PaperReader:
                     must_not=must_not_conditions,
                 ),
             ),
-            op_label="count_papers_for_abstract_labeling",
+            label="count_papers_for_abstract_labeling",
         )
         return result.count
 
@@ -619,7 +604,7 @@ class PaperReader:
             must_not=must_not_conditions,
         )
 
-        results, next_offset = _retry_qdrant_call(
+        results, next_offset = retry_qdrant(
             lambda: self.client.scroll(
                 collection_name=self.collection_name,
                 scroll_filter=scroll_filter,
@@ -627,7 +612,7 @@ class PaperReader:
                 offset=offset,
                 with_payload=["title", "abstract", "abstract_structure"],
             ),
-            op_label=f"scroll(get_papers_for_abstract_labeling, offset={offset})",
+            label=f"scroll(get_papers_for_abstract_labeling, offset={offset})",
         )
 
         return [(str(p.id), p.payload) for p in results], next_offset
@@ -807,7 +792,7 @@ class PaperReader:
                 )
             )
 
-        results, next_offset = _retry_qdrant_call(
+        results, next_offset = retry_qdrant(
             lambda: self.client.scroll(
                 collection_name=self.collection_name,
                 scroll_filter=models.Filter(
@@ -818,7 +803,7 @@ class PaperReader:
                 offset=offset,
                 with_payload=["title", "abstract", "abstract_structure"],
             ),
-            op_label=f"scroll(get_papers_for_embedding, offset={offset})",
+            label=f"scroll(get_papers_for_embedding, offset={offset})",
         )
         return [
             (str(point.id), point.payload)

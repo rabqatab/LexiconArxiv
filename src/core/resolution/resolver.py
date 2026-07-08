@@ -19,35 +19,15 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from qdrant_client.http.exceptions import ResponseHandlingException
 
 from src.core.constants import OPENALEX_BASE_URL
 from src.core.deduplication import Deduplicator
 from src.core.enrichment.base import OpenAlexMixin
 from src.core.resolution.normalizer import IdentifierNormalizer, IdentifierType
 from src.core.storage import QdrantStorage
+from src.core.storage._retry import retry_qdrant
 
 logger = logging.getLogger(__name__)
-
-MAX_RETRIES = 5
-BASE_DELAY = 3.0
-
-
-def _retry_qdrant(fn, description: str = "Qdrant operation"):
-    """Retry a Qdrant operation with exponential backoff on connection errors."""
-    for attempt in range(MAX_RETRIES + 1):
-        try:
-            return fn()
-        except (ResponseHandlingException, ConnectionError, OSError) as e:
-            if attempt == MAX_RETRIES:
-                raise
-            delay = BASE_DELAY * (2 ** attempt)
-            logger.warning(
-                f"{description} failed (attempt {attempt + 1}/{MAX_RETRIES}), "
-                f"retrying in {delay:.0f}s: {e}"
-            )
-            time.sleep(delay)
-
 
 @dataclass
 class ResolutionProgress:
@@ -319,13 +299,13 @@ class ReferenceResolver(OpenAlexMixin):
         logger.info("Step 1: Normalizing reference identifiers...")
 
         while True:
-            papers, next_offset = _retry_qdrant(
+            papers, next_offset = retry_qdrant(
                 lambda: self.storage.get_papers_with_references(
                     limit=self.batch_size,
                     offset=offset,
                     fetched_since=fetched_since,
                 ),
-                description="scroll(normalize)",
+                label="scroll(normalize)",
             )
 
             if not papers:
@@ -363,9 +343,9 @@ class ReferenceResolver(OpenAlexMixin):
 
             # Batch update
             if updates:
-                _retry_qdrant(
+                retry_qdrant(
                     lambda: self.storage.batch_update_referenced_works_normalized(updates),
-                    description="batch_update(normalize)",
+                    label="batch_update(normalize)",
                 )
                 logger.debug(f"Updated {len(updates)} papers with normalized refs")
 
@@ -432,13 +412,13 @@ class ReferenceResolver(OpenAlexMixin):
         arxiv_to_doi_cache: dict[str, str | None] = {}
 
         while True:
-            papers, next_offset = _retry_qdrant(
+            papers, next_offset = retry_qdrant(
                 lambda: self.storage.get_papers_with_references(
                     limit=self.batch_size,
                     offset=offset,
                     fetched_since=fetched_since,
                 ),
-                description="scroll(arxiv)",
+                label="scroll(arxiv)",
             )
 
             if not papers:
@@ -498,9 +478,9 @@ class ReferenceResolver(OpenAlexMixin):
 
             # Batch update
             if updates:
-                _retry_qdrant(
+                retry_qdrant(
                     lambda: self.storage.batch_update_referenced_works_normalized(updates),
-                    description="batch_update(arxiv)",
+                    label="batch_update(arxiv)",
                 )
                 logger.debug(f"Updated {len(updates)} papers with DOI refs")
 
@@ -590,13 +570,13 @@ class ReferenceResolver(OpenAlexMixin):
         logger.info("Step 3: Resolving references to internal IDs...")
 
         while True:
-            papers, next_offset = _retry_qdrant(
+            papers, next_offset = retry_qdrant(
                 lambda: self.storage.get_papers_with_references(
                     limit=self.batch_size,
                     offset=offset,
                     fetched_since=fetched_since,
                 ),
-                description="scroll(get_papers_with_references)",
+                label="scroll(get_papers_with_references)",
             )
 
             if not papers:
@@ -670,17 +650,17 @@ class ReferenceResolver(OpenAlexMixin):
 
             # Batch update resolved_references
             if updates:
-                _retry_qdrant(
+                retry_qdrant(
                     lambda: self.storage.batch_update_resolved_references(updates),
-                    description="batch_update_resolved_references",
+                    label="batch_update_resolved_references",
                 )
                 logger.debug(f"Updated {len(updates)} papers with resolved refs")
 
             # Batch create stub papers
             if stubs_to_create and create_stubs:
-                created_stubs = _retry_qdrant(
+                created_stubs = retry_qdrant(
                     lambda: self.storage.batch_create_stub_papers(stubs_to_create),
-                    description="batch_create_stub_papers",
+                    label="batch_create_stub_papers",
                 )
                 # Count new vs updated stubs
                 for identifier, stub_id in created_stubs.items():
