@@ -380,7 +380,7 @@ uv run python -m src.cli.core_collect extract-keywords --limit 1000
 ### Ollama Connection Refused
 
 **Symptoms:**
-- `httpx.ConnectError: Connection refused` when running `embed-papers` (bulk + incremental + search), search-time HyDE, or the dev-fallback `label-abstracts --backend ollama` / `extract-keywords --llm` paths.
+- `httpx.ConnectError: Connection refused` when running `embed-papers` (bulk + incremental + search), search-time HyDE, or the dev-fallback `label-abstracts --backend ollama` path.
 
 **Solution:**
 
@@ -404,23 +404,17 @@ OLLAMA_BASE_URL=http://localhost:11434 uv run python -m src.cli.core_collect emb
 
 **Policy note (Path B, 2026-07-04):** Ollama chat is retired from every pipeline stage. Production labeling runs on **vLLM + `ibm-granite/granite-4.1-8b`** — see [`docs/design/vllm-labeling-migration.md`](../design/vllm-labeling-migration.md) and [`docs/runbooks/vllm-labeling.md`](../runbooks/vllm-labeling.md). The Gemini backend was removed in v0.12; see `.env.example` for the current env-var set. Only `embed-papers` and search-time HyDE still hit Ollama.
 
-### LLM Extraction Timeout
+### LLM Labeling Timeout
 
 **Cause:** Local Ollama model is slower than the default 180s timeout (rare with the production models above; happens when running larger backups on constrained hardware).
 
-**Solutions:**
-
-1. Use a smaller / faster model:
+**Solution:** raise the timeout on the dev-fallback labeling path:
 
 ```bash
-uv run python -m src.cli.core_collect extract-keywords --llm --ollama-model qwen2.5:7b
+uv run python -m src.cli.core_collect label-abstracts --backend ollama --ollama-timeout 300
 ```
 
-2. Raise the timeout:
-
-```bash
-uv run python -m src.cli.core_collect extract-keywords --llm --ollama-timeout 300
-```
+(The former `extract-keywords --llm` path was removed in v0.13.5 — keyword extraction is regex + KeyBERT only.)
 
 ---
 

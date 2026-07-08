@@ -265,7 +265,7 @@ uv run python -m src.cli.core_collect collect-openreview --all --since-year 2018
 
 ### Keyword Extraction Options
 
-Per Path B (2026-07-04), the production pipeline uses regex + KeyBERT with no LLM. The Gemini backend was removed in v0.12 (see `.env.example`); Ollama chat is retired from every pipeline stage, so the `--llm/--judge` flags remain in the CLI for dev-laptop use only and are forbidden in the incremental runbook.
+Keyword extraction is regex + KeyBERT. (The former `--llm/--judge` Ollama flags were removed in v0.13.5 — the LLM keyword path was never enabled in production; Gemini went in v0.12, Ollama chat retired per Path B 2026-07-04.)
 
 ```bash
 # Production: regex + KeyBERT (no LLM)
@@ -282,9 +282,6 @@ uv run python -m src.cli.core_collect extract-keywords --force
 
 # Custom batch size
 uv run python -m src.cli.core_collect extract-keywords --batch-size 200
-
-# Deprecated: LLM-first Ollama pipeline (dev-laptop only)
-uv run python -m src.cli.core_collect extract-keywords --llm --judge
 ```
 
 By default, papers with existing keywords are skipped. Use `--force` to re-extract.

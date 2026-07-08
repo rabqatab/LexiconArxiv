@@ -121,4 +121,4 @@ Tracked enhancement backlog. Items are grouped by priority and area.
 
 ## Refactoring / cleanup (deferred)
 
-- [ ] **Apply ponytail-audit cuts** — ~1800 lines, 4 deps removable. **Trigger:** apply only after snapshot bootstrap completes + corpus is verified stable for ≥1 week. See `docs/refactoring/2026-06-24-ponytail-audit.md` for the ranked list and apply-procedure.
+- [x] **Apply ponytail-audit cuts** (2026-07-08) — Both the 2026-06-24 list and the fresh 2026-07-07 re-audit applied in one wave: 17 commits, net ≈ −3,600 lines, −4 deps (`feedparser`, `cachetools`, `python-dateutil`, `auto-mix-prep`). Deleted: `src/collectors/`, keyword LLM path, `external_search`, deprecated snapshot runner chain, `get_payload` alias, stale scripts; unified retry (Wave 1e-bis) + title normalizer. Skips (facade dismantle → Wave 5; stub-ID uuid5 → would break 2.6 M persisted IDs; others) recorded with reasons in `docs/refactoring/2026-06-24-ponytail-audit.md` §Application record.

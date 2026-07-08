@@ -821,7 +821,6 @@ core_coverage = Gauge('core_coverage', 'Core coverage by venue', ['venue'])
 | **API Constants** | `src/core/constants.py` | ✅ Complete |
 | Qdrant Storage | `src/core/storage/` | ✅ Complete (base.py, reader.py, writer.py, query.py, stubs.py, statistics.py) |
 | Checkpoint Manager | `src/core/checkpoint.py` | ✅ Complete |
-| Checkpoint Mixin | `src/core/checkpoint_mixin.py` | ✅ Complete |
 | Deduplication | `src/core/deduplication.py` | ✅ Complete |
 | CLI | `src/cli/core_collect.py` | ✅ Complete |
 | Paper Model | `src/models/paper.py` | ✅ Complete |
@@ -848,24 +847,6 @@ core_coverage = Gauge('core_coverage', 'Core coverage by venue', ['venue'])
 - Checkpoint manager integration
 - Deduplicator integration
 - Common `client` property with error handling
-
-### 11.2.1 On-demand Collectors
-
-Separate from the batch crawlers, the `src/collectors/` module provides on-demand search and retrieval for the application layer:
-
-| Module | File | Status |
-|--------|------|--------|
-| **BaseCollector** | `src/collectors/base.py` | ✅ Complete |
-| ArXiv Collector | `src/collectors/arxiv.py` | ✅ Complete (search, fetch_by_id, category filtering) |
-| ACL Anthology Collector | `src/collectors/acl.py` | ✅ Complete (search via Semantic Scholar API) |
-| OpenAlex Collector | `src/collectors/openalex.py` | ✅ Complete (search, fetch_by_doi) |
-
-**Collector Architecture**: All collectors inherit from `BaseCollector`, which provides:
-- Async HTTP client with rate limiting
-- `search()` and `fetch_by_id()` interfaces
-- Error handling (`CollectorError`, `RateLimitError`, `APIError`)
-
-> **Note**: These collectors are for on-demand/query-time retrieval. For batch Core Corpus collection, use the crawlers in `src/core/crawler/`.
 
 ### 11.3 Enrichment Modules
 
@@ -960,7 +941,6 @@ uv run python -m src.cli.core_collect build-cited-by  # Build reverse citations 
 | Graph Services | `src/api/dependencies.py` | ✅ Complete (`GraphServices` with storage, index, builder) |
 | API Response Models | `src/api/models/responses.py` | ✅ Complete |
 | D3.js Visualization UI | `src/api/static/index.html` | ✅ Complete |
-| On-demand Collectors | `src/collectors/` | ✅ Complete (arXiv, ACL via S2, OpenAlex search) |
 | Embedding Pipeline | `src/core/embedding.py` | ❌ Not started (using placeholder vectors) |
 | Search Service | `src/api/search.py` | ❌ Not started |
 | On-demand Integration | `src/core/ondemand/` | ❌ Not started |
@@ -969,7 +949,7 @@ uv run python -m src.cli.core_collect build-cited-by  # Build reverse citations 
 **Remaining Priority Order:**
 1. **Embedding Pipeline** - Generate real embeddings (SPECTER2) to enable semantic search
 2. **Search Service** - Hybrid BM25 + semantic search endpoint
-3. **On-demand Integration** - Connect `src/collectors/` to search pipeline for arXiv real-time search
+3. **On-demand Integration** - On-demand arXiv/OpenAlex search now lives in `src/core/search/on_demand.py` (`src/collectors/` was deleted in v0.13.5)
 4. **Web Frontend** - Per `docs/design/ux.md`
 
 ### 11.5 Environment Configuration

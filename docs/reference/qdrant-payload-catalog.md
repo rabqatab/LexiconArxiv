@@ -84,7 +84,7 @@ Fields are grouped by role. Each entry: type · source(s) that write it · descr
 | Field | Type | Written by | Purpose |
 |---|---|---|---|
 | `keywords` | `list[str]` | `extract-keywords` (Step 5) | Flat keyword list. Production uses regex + KeyBERT (no LLM at bulk scale per Path B). |
-| `keywords_source` | `keyword` | `extract-keywords` | Pipe-delimited backend id: `"regex\|keybert"`. Historical: `"gemini\|judge"` (removed in v0.12), `"ollama"` (Ollama chat retired from pipeline; dev-laptop only). |
+| `keywords_source` | `keyword` | `extract-keywords` | Pipe-delimited backend id: `"regex\|keybert"`. Historical: `"gemini\|judge"` (removed in v0.12), `"ollama"` (keyword-LLM path deleted in v0.13.5). |
 | `keywords_structured` | `dict` | `extract-keywords` | Categorized: `{task, method, model, domain, dataset, contribution_type, modality}`. |
 
 ### 1.7 Labeled abstract structure

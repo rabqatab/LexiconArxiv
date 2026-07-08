@@ -491,9 +491,6 @@ uv run python -m src.cli.core_collect resolve-refs --step internal
 # With fuzzy matching
 uv run python -m src.cli.core_collect resolve-refs --step internal --fuzzy-matching
 
-# External search for unresolved titles
-uv run python -m src.cli.core_collect resolve-refs --step internal --external-search
-
 # Skip stub paper creation (stubs are created by default)
 uv run python -m src.cli.core_collect resolve-refs --no-create-stubs
 ```
@@ -503,7 +500,6 @@ uv run python -m src.cli.core_collect resolve-refs --no-create-stubs
 |--------|-------------|
 | `--step [all\|normalize\|arxiv\|internal]` | Run specific step only |
 | `--fuzzy-matching` | Use fuzzy title matching (slower) |
-| `--external-search` | Search external APIs for unresolved titles |
 | `--create-stubs/--no-create-stubs` | Create stub papers for unresolved references (default: enabled) |
 | `-n, --limit N` | Max papers to process |
 | `-p, --parallel N` | Concurrent requests |
@@ -600,7 +596,7 @@ uv run python -m src.cli.core_collect export-graph-subgraph <paper_id> --hops 2 
 
 ### extract-keywords
 
-Extract keywords using regex + KeyBERT (default, no LLM). The `--llm/--judge` flags remain in the CLI for backward compatibility but are **deprecated at bulk scale** per Path B (2026-07-04): Ollama chat is retired from every pipeline stage, and the incremental runbook forbids them. See [`docs/design/bulk-vs-incremental-audit.md`](../design/bulk-vs-incremental-audit.md) §Ollama→vLLM policy.
+Extract keywords using regex + KeyBERT. The former `--llm/--judge` Ollama flags were removed in v0.13.5 (ponytail wave) — the LLM keyword path was never enabled in production and Ollama chat is retired per Path B (2026-07-04). See [`docs/design/bulk-vs-incremental-audit.md`](../design/bulk-vs-incremental-audit.md) §Ollama→vLLM policy.
 
 ```bash
 # Default: regex + KeyBERT (production)
@@ -620,9 +616,6 @@ uv run python -m src.cli.core_collect extract-keywords --force
 
 # With limit
 uv run python -m src.cli.core_collect extract-keywords --limit 1000
-
-# Deprecated: LLM-first pipeline via Ollama (dev-laptop only; do NOT use in production/incremental)
-uv run python -m src.cli.core_collect extract-keywords --llm --judge
 ```
 
 **Options:**
@@ -631,19 +624,13 @@ uv run python -m src.cli.core_collect extract-keywords --llm --judge
 | `--dry-run` | Preview without saving |
 | `--limit N` | Process max N papers |
 | `--batch-size N` | Papers per batch (default: 100) |
-| `--no-keybert` | Skip KeyBERT in fallback, use regex only |
+| `--no-keybert` | Skip KeyBERT, use regex only |
 | `--force` | Re-extract for papers with existing keywords |
-| `--embedding-model` | Sentence-transformers model for KeyBERT fallback (default: `all-MiniLM-L6-v2`) |
-| `--llm` | Enable LLM keyword extraction (Ollama) |
-| `--judge` | Enable LLM judge validation (Ollama) |
-| `--ollama-model` | Ollama model name (default: `granite4.1:8b`; fallback: `gemma4:e4b`) |
-| `--ollama-timeout` | Ollama request timeout in seconds (default: 180) |
+| `--embedding-model` | Sentence-transformers model for KeyBERT (default: `all-MiniLM-L6-v2`) |
 
 **Behavior:**
 - Default: Skips papers that already have keywords
 - With `--force`: Re-processes all papers, replacing existing keywords
-- With `--llm` (deprecated at bulk scale): LLM is primary; regex + KeyBERT only run as fallback when LLM fails
-- With `--llm` or `--judge`: Uses async execution
 
 ### keyword-stats
 

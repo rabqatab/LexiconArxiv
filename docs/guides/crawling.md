@@ -1006,9 +1006,6 @@ uv run python -m src.cli.core_collect resolve-refs --step internal
 # With fuzzy title matching (slower but better coverage)
 uv run python -m src.cli.core_collect resolve-refs --step internal --fuzzy-matching
 
-# Search external APIs for unresolved titles (adds papers to corpus)
-uv run python -m src.cli.core_collect resolve-refs --step internal --external-search
-
 # Limit papers processed
 uv run python -m src.cli.core_collect resolve-refs --limit 1000
 ```
@@ -1140,10 +1137,8 @@ Without keywords, these queries rely solely on title/abstract text matching.
 # Check statistics first
 uv run python -m src.cli.core_collect keyword-stats
 
-# Production default (Path B, 2026-07-04): regex + KeyBERT, no LLM.
-# --llm / --judge are Ollama-only and hit the 750 papers/hr serial-chat
-# ceiling; do not use at bulk scale. See
-# docs/design/bulk-vs-incremental-audit.md §Ollama→vLLM policy.
+# Keyword extraction is regex + KeyBERT (the LLM keyword flags were
+# removed in v0.13.5; Ollama chat is retired per Path B 2026-07-04).
 uv run python -m src.cli.core_collect extract-keywords
 
 # Preview

@@ -96,3 +96,45 @@ These landed during the wave rather than being marked "when the trigger is met" 
 | ✅ | **Test net F** — L3 crash-safety regression suite for `drain_snapshot_queue()` | `25a262a` |
 
 Test count: 382 → 417 passing across suites; MCP subtree grew from 9 → 29 tests.
+
+## Application record — 2026-07-08 (trigger met: bootstrap complete + first clean end-to-end incremental `6283`)
+
+A second repo-wide `/ponytail:ponytail-audit` ran 2026-07-07 (fresh list, 16 items,
+~1,300 lines) and the user green-lit application. Both lists were worked in one
+wave — **17 commits `2569563`..`1566a48`, net ≈ −3,600 lines, −4 deps**.
+
+### Applied (fresh-audit numbering)
+
+| # | Item | Commit |
+|---|---|---|
+| 2 | Retry unify → `src/core/storage/_retry.retry_qdrant` (Wave 1e-bis) | `c708ae4` |
+| 3+12 | Dead keyword LLM path (ollama/llm_base/judge + ABCs + CLI flags + 636-line test module) | `e865217` |
+| 4 | `external_search` + `_search_and_add_paper` + `_search_openalex_by_title` | `8956134` |
+| 5–9 | Stale one-off scripts (tracked + untracked) | `2569563` |
+| 10 | Deprecated `run_snapshot_enrichment` chain (runner, CLI cmd, matcher candidate path, reader/writer/facade methods) | `819eb61` |
+| 11 | Single canonical title normalizer (`Deduplicator.normalize_title` + NFKD; 2 local copies deleted) | `22d1b60` |
+| 14 | `get_payload` alias dropped, all callsites → `get_paper_by_id` (also closes old-audit #20) | `b69da64` |
+
+### Applied (old-audit 2026-06-24 numbering)
+
+| # | Item | Commit |
+|---|---|---|
+| 1/2/16/17/19 | `src/collectors/` package + `checkpoint_mixin.py` deleted | `af7eb07` |
+| 11 | `feedparser` dep dropped (only user was dead collectors/arxiv.py) | `af7eb07` |
+| 3/8 | `src/core/__init__.py` → docstring-only; `exceptions.py` → only `APIRateLimitError` | `06b7b83` |
+| 10/12/13 | `cachetools` (TTLCache → 10-line dict), `python-dateutil`, `auto-mix-prep` deps dropped | `aa11faf` |
+| 14/15/18 | `FlushingFileHandler`, `reset_services`, `PhaseSummary.to_dagster_metadata` asdict | `1566a48` |
+| 4/6/20 | Subsumed by fresh-audit #3+#12/#14 above | — |
+
+### Skipped, with reasons (do not re-attempt without re-verifying)
+
+- **Fresh #1 (facade ~70 delegation methods)** — max cut but widest blast radius; bundle with Wave 5 test re-org as the audit itself recommended.
+- **Fresh #13 (stub ID → uuid5)** — WRONG in practice: `_generate_stub_id`'s sha256-derived IDs are persisted on ~2.6 M live stubs; switching algorithms breaks idempotent upserts and duplicates stubs.
+- **Fresh #15 (keyword loop dedup)** — the CLI loop carries an interactive contract (dry-run, sample preview, live progress) the Dagster stage doesn't; unifying needs flags/callbacks that outweigh ~30 lines.
+- **Fresh #16 (`fuzzy_matching` flag removal)** — audit claim was wrong: the live incremental script runs Step 7 with fuzzy **off**; hardcoding True adds an O(corpus) SequenceMatcher scan per unresolved title.
+- **Old #5 (BaseAbstractLabeler ABC)** — obsolete: since the vLLM migration there are two implementations (Ollama + vLLM); the ABC now earns its keep.
+- **Old #7 (`*_ENV` constants)** — claim stale: `GITHUB_TOKEN_ENV` is imported by `github_search.py`.
+- **Old #9 (package `__init__` re-exports)** — claim stale: e.g. `from src.core.keyword import KeywordExtractor` is a live import path.
+- **Old #22 (author-shape adapter → storage boundary)** — real but needs a 9-test migration; keep deferred.
+- **Old #23 (startup index linter)** — superseded in urgency by per-handler timeouts; fold into Wave 1e-ter if built.
+- **Old #24 (drop `abstract-qwen3-8b` vector)** — DB schema migration + clustering eval; run as its own planned change, not a code-cleanup side effect.

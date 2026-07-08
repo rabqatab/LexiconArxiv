@@ -18,7 +18,7 @@ AI Research Insights Engine - Hybrid semantic search, on-demand retrieval, trend
 - **Cross-source Deduplication**: Automatic duplicate detection
 - **Checkpoint Resume**: Resumable collection with progress tracking
 - **Qdrant Integration**: Payload-only storage with optional named vectors
-- **Keyword Extraction**: LLM-first (Ollama) with regex + KeyBERT fallback + LLM judge for BM25 search
+- **Keyword Extraction**: Regex acronyms + KeyBERT semantic keywords for BM25 search
 - **Abstract Labeling**: LLM-based sentence classification into 7 rhetorical roles (task, domain, background, approach, method, result, contribution)
 - **Citation Graph**: Reference resolution and GraphRAG support
 - **Semantic Similarity Graph**: Precomputed typed similarity edges (same_method, same_task, same_result, method_transfer, overall) using section-level vectors
@@ -281,8 +281,7 @@ uv run python -m src.cli.core_collect stub-stats                        # Most-c
 uv run python -m src.cli.core_collect enrich-8-metadata-by-stub-via-openalex --limit 1000         # Fetch metadata for stubs
 
 # Keyword Extraction (for BM25 search)
-uv run python -m src.cli.core_collect extract-keywords --llm --judge  # LLM-first pipeline (recommended)
-uv run python -m src.cli.core_collect extract-keywords              # Fallback only (regex + KeyBERT)
+uv run python -m src.cli.core_collect extract-keywords              # Regex + KeyBERT (production)
 uv run python -m src.cli.core_collect extract-keywords --no-keybert # Regex only (faster)
 uv run python -m src.cli.core_collect extract-keywords --dry-run    # Preview mode
 uv run python -m src.cli.core_collect keyword-stats                 # Show statistics
@@ -369,7 +368,6 @@ lexiconarxiv/
 │   │   │   ├── notable.py       # Notable paper scoring
 │   │   │   └── keyword_trends.py  # Keyword trends + rising detection
 │   │   ├── checkpoint.py        # Resume support
-│   │   ├── checkpoint_mixin.py  # Reusable checkpoint mixin
 │   │   ├── config.py            # Venue configurations
 │   │   ├── constants.py         # Centralized API URLs and env helpers
 │   │   ├── deduplication.py     # Cross-source dedup
@@ -421,6 +419,10 @@ lexiconarxiv/
 ```
 
 ## Recent Updates
+
+### v0.13.5 (Jul 2026) — Ponytail cleanup wave: −3,600 lines, −4 deps
+
+Both ponytail audits (2026-06-24 deferred list + 2026-07-07 re-audit) applied in one wave, now that the bootstrap is done and the incremental is stable. Deleted dead code: `src/collectors/` (superseded by `src/core/crawler/`), the never-enabled keyword-LLM extraction/judge path, `external_search` in the resolver, the deprecated `run_snapshot_enrichment` chain (use `enrich-corpus-fields`), `checkpoint_mixin`, the `get_payload` alias, and stale one-off scripts. Consolidated: one shared Qdrant retry helper (`src/core/storage/_retry.py`, Wave 1e-bis), one canonical title normalizer (`Deduplicator.normalize_title`, now accent-insensitive). Dropped deps: `feedparser`, `cachetools`, `python-dateutil`, `auto-mix-prep`. Deliberate skips (facade dismantle, stub-ID scheme, fuzzy flag) recorded with reasons in [`docs/refactoring/2026-06-24-ponytail-audit.md`](docs/refactoring/2026-06-24-ponytail-audit.md) §Application record. Full suite green (419 → 369 tests after dead-path test removal); Dagster definitions validate.
 
 ### v0.13.4 (Jul 2026) — True-incremental overhaul + Qdrant payload indices + GROBID fallback
 
