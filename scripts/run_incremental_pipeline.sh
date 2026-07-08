@@ -111,6 +111,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Setup
+# DAYS_MARGIN must be defined BEFORE first use (Step 4b/4c GROBID) — the
+# 2026-07-08 5fe7 run passed --recent-days '' because this lived below the
+# GROBID block, silently skipping both GROBID steps.
+DAYS_MARGIN=$((DAYS + 2))
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_DIR"
@@ -303,7 +307,6 @@ fi
 # run into a 40-day bulk labeling job). Backlog cleanup remains a
 # separate concern (Wave 4b/4c type + topic filters + explicit
 # bulk-labeling script).
-DAYS_MARGIN=$((DAYS + 2))
 
 echo ""
 echo "[Step 5] Extracting keywords (regex + KeyBERT; no LLM) — recent papers only..."
