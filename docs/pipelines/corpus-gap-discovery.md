@@ -15,6 +15,27 @@ corpus but should be, and inject them as new real papers.
 
 When both paths qualify, ANCHOR wins (recorded `injection_path = "anchor"`).
 
+## Topic gate (Wave 4c, 2026-07-09)
+
+After a work passes `classify` (ANCHOR or CONCEPT), it must ALSO pass
+`src/core/snapshot/topic_gate.is_keep_topic` before injection — otherwise
+`process_one` returns `{"action": "reject_topic"}` (counted as
+`rejected_by_topic` in the run summary). Gate:
+
+```
+KEEP_FIELDS = {Computer Science, Mathematics, Decision Sciences,
+               Neuroscience, Psychology}
+KEEP_SUBFIELDS = {Language and Linguistics}   # from Arts & Humanities
+```
+
+Why: anchor/concept adjacency alone let ~2.4 M cross-domain works into the
+corpus (2026-07-06 audit: only 32.6 % AI-adjacent — an AI paper cites ~50
+Nature/biology/physics works, all of which qualified as ANCHOR). The gate is
+the durable half of Wave 4c; the same predicate is applied in P2 promotion
+(`phase2_stub_resolution.process_one`: a PROMOTE decision downgrades to
+ENRICH_KEEP_STUB when the topic fails). Full context:
+[`../plans/2026-07-06-corpus-cs-cleanup.md`](../plans/2026-07-06-corpus-cs-cleanup.md).
+
 ## AI concept taxonomy
 
 `AI_CONCEPT_IDS` is a 17-element set of OpenAlex C-namespace IDs (Artificial

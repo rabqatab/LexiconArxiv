@@ -16,7 +16,9 @@ public API instead of the local snapshot files.
    OpenAlex `/works?filter=from_updated_date:YYYY-MM-DD` with cursor pagination.
 3. **For each work, chain `process_one` across all four phases:**
    P1 (metadata fill) → P2 (stub→real promotion) → P3 (gap discovery + inject)
-   → P4 (external_cited_by extension).
+   → P4 (external_cited_by extension). P2/P3 apply the Wave 4c topic gate
+   automatically (shared `process_one`), so live mode won't re-introduce the
+   non-CS papers Wave 4c demoted — see [`corpus-gap-discovery.md`](corpus-gap-discovery.md) §Topic gate.
 4. **Update the per-phase high-water marks** so re-running the same delta date
    is a no-op (each phase is independently fill-only-missing / dedup-guarded).
 

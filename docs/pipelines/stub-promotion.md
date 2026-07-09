@@ -13,6 +13,13 @@ against the OpenAlex snapshot; promote, enrich, or merge.
 | Base PROMOTE criteria met (`title` AND (`abstract` OR (`year` AND ≥1 author))) **AND** age-normalized citation rate ≥ `min_cites_per_year` | `PROMOTE` |
 | Otherwise (base criteria fail OR rate below threshold) | `ENRICH_KEEP_STUB` |
 
+**Wave 4c topic gate (2026-07-09):** after `evaluate`, `process_one` downgrades
+`PROMOTE → ENRICH_KEEP_STUB` when `topic_gate.is_keep_topic(work.primary_topic)`
+fails (non-AI-adjacent field). Non-AI works still enrich their stub but never
+become searchable real papers — the durable half of Wave 4c. Same predicate
+as P3 gap-discovery. See [`corpus-gap-discovery.md`](corpus-gap-discovery.md)
+§Topic gate + [`../plans/2026-07-06-corpus-cs-cleanup.md`](../plans/2026-07-06-corpus-cs-cleanup.md).
+
 ### Quality gate: `--min-cites-per-year`
 
 A flat `cited_by_count` threshold is unfair to recent papers — citation counts

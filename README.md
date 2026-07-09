@@ -420,6 +420,15 @@ lexiconarxiv/
 
 ## Recent Updates
 
+### v0.13.6 (Jul 2026) — Wave 4c corpus CS-cleanup: ML/NLP-focused, search 2× faster
+
+The corpus audit found only **32.6 %** of the 3.74 M non-stub real papers were AI/NLP-adjacent — the rest were cross-domain works (Medicine, Engineering, Biochemistry, Physics…) pulled in by P2/P3 anchor+concept injection with no topic gate. Fixed in two halves:
+
+- **Durable gate** (`src/core/snapshot/topic_gate.py`): `KEEP_FIELDS = {Computer Science, Mathematics, Decision Sciences, Neuroscience, Psychology}` ∪ subfield `Language and Linguistics`, wired into P3 (`reject_topic`) and P2 (PROMOTE→ENRICH_KEEP_STUB) so the next quarterly bootstrap can't re-pollute. Two warn-only DQ checks (`nontarget_topic_share`, `no_primary_topic_share`), both provenance-scoped so crawler/tier-venue papers are exempt.
+- **One-time cleanup**: 2,483,834 non-CS P2/P3 papers **demoted to stubs** (not deleted — chosen after measuring that hard delete reclaims only ~35 GB / 15 %). Demotion strips heavy payload + vectors, keeps identity + `cited_by` edges, and is reversible (re-promote). Non-stub real papers **3.74 M → 1.26 M**.
+
+**Result: MCP search ~2× faster** (p50 433 ms → ~200 ms) — the demoted vectors left the HNSW graph entirely (715 K → 426 K searchable). Crawler-provenance protection keeps ~66 K ICLR/NeurIPS/ACL papers that OpenAlex mis-fields. Full record: [`docs/plans/2026-07-06-corpus-cs-cleanup.md`](docs/plans/2026-07-06-corpus-cs-cleanup.md) §8. Remaining: Phase 4 chronological labeling of the shrunk ~1 M keep-set backlog.
+
 ### v0.13.5 (Jul 2026) — Ponytail cleanup wave: −3,600 lines, −4 deps
 
 Both ponytail audits (2026-06-24 deferred list + 2026-07-07 re-audit) applied in one wave, now that the bootstrap is done and the incremental is stable. Deleted dead code: `src/collectors/` (superseded by `src/core/crawler/`), the never-enabled keyword-LLM extraction/judge path, `external_search` in the resolver, the deprecated `run_snapshot_enrichment` chain (use `enrich-corpus-fields`), `checkpoint_mixin`, the `get_payload` alias, and stale one-off scripts. Consolidated: one shared Qdrant retry helper (`src/core/storage/_retry.py`, Wave 1e-bis), one canonical title normalizer (`Deduplicator.normalize_title`, now accent-insensitive). Dropped deps: `feedparser`, `cachetools`, `python-dateutil`, `auto-mix-prep`. Deliberate skips (facade dismantle, stub-ID scheme, fuzzy flag) recorded with reasons in [`docs/refactoring/2026-06-24-ponytail-audit.md`](docs/refactoring/2026-06-24-ponytail-audit.md) §Application record. Full suite green (419 → 369 tests after dead-path test removal); Dagster definitions validate.
