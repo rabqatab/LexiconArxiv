@@ -214,6 +214,8 @@ Only fields with a currently-active DQ rule are listed. Rules in `src/core/pipel
 
 **Corpus-level checks** (not per-field):
 
+- `nontarget_topic_share` (Wave 4c, live) — WARN if non-stub P2/P3-provenance papers outside the topic whitelist (`KEEP_FIELDS = {Computer Science, Mathematics, Decision Sciences, Neuroscience, Psychology}` ∪ subfield `Language and Linguistics`, see `src/core/snapshot/topic_gate.py`) exceed 5 %. Post-demotion baseline 0.0. Crawler-fetched papers exempt (provenance-scoped).
+- `no_primary_topic_share` (Wave 4c, live) — WARN if non-stub P2/P3-provenance papers with no `primary_topic` exceed 1 %. Post-demotion baseline 0.0.
 - `nonarticle_type_share` (planned, Wave 4b-6) — WARN if `type IN {book, peer-review, editorial, ...}` exceeds 1 % of the corpus.
 - `ollama_labeled_share` (planned, Wave 4b-6) — WARN if `abstract_structure_source = "ollama"` exceeds 5 % of the corpus after catchup completes.
 - Existing checks in `dq.py`: `missing_abstract_share`, `missing_structure_share`, `missing_keywords_share`, `missing_similarity_share`, `search_health`, etc. — see [`../pipelines/*.md`](../pipelines/) for per-stage detail.
@@ -241,6 +243,10 @@ Full source of truth is `curl http://localhost:6333/collections/lexicon_arxiv_v3
 | `promoted_from_stub` | bool | 974 457 | 2026-07-06 (batch 2 — Wave 4c gate) |
 | `tier` | integer | 3 056 | 2026-07-06 (batch 2 — only 178 K OpenAlex venue-crawled papers carry it) |
 | `graph_indexed` | bool | 1 809 430 | 2026-07-07 (Wave 1e-sexies — Step 9 `build-cited-by --incremental` filter) |
+| `primary_topic.field.display_name` | keyword | ~3.7 M | 2026-07-08 (Wave 4c topic gate + `count_by_topic.py`) |
+| `primary_topic.subfield.display_name` | keyword | ~3.7 M | 2026-07-08 (Wave 4c linguistics-subfield keep) |
+| `injection_path` | keyword | 2.59 M | 2026-07-08 (Wave 4c delete-set split: anchor vs concept) |
+| `demoted_from_real` | bool | 2 483 834 | 2026-07-09 (Wave 4c — marks P2/P3 non-CS papers demoted to stubs) |
 
 **Rule** (see [`../design/bulk-vs-incremental-audit.md`](../design/bulk-vs-incremental-audit.md) §Third rule): any new bulk-scroll filter must use only fields from this list. Adding a filter on an unindexed payload field at 6.2 M-scale is a deterministic 60 s server-side timeout.
 

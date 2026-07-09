@@ -232,13 +232,20 @@ def no_primary_topic_share(storage: QdrantStorage | None = None) -> dict:
     """Share of non-stub real papers with no primary_topic at all.
 
     WARN above MAX_NO_TOPIC_SHARE — unclassifiable works are almost always
-    cross-domain injection artifacts (Wave 4c deletes them with the pollution).
+    cross-domain injection artifacts (Wave 4c demotes them). Scoped to P2/P3
+    provenance: crawler/tier-venue papers (ICLR/NeurIPS that OpenAlex never
+    classified) legitimately lack primary_topic and are exempt, same as the
+    Wave 4c demotion filter protects them.
     """
     storage = storage or QdrantStorage()
     total = _count(storage, must_not=[_STUB])
+    _prov = models.Filter(should=[
+        models.FieldCondition(key="injected_from_snapshot", match=models.MatchValue(value=True)),
+        models.FieldCondition(key="promoted_from_stub", match=models.MatchValue(value=True)),
+    ])
     no_topic = _count(
         storage,
-        must=[models.IsEmptyCondition(
+        must=[_prov, models.IsEmptyCondition(
             is_empty=models.PayloadField(key="primary_topic.field.display_name"))],
         must_not=[_STUB],
     )

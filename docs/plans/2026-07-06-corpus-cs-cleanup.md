@@ -144,3 +144,39 @@ Sustainable filter (Phase 2) means recovery will re-encounter the same P2/P3 gat
 - Sustainable filter design: [`../refactoring/2026-07-04-code-overhaul-plan.md`](../refactoring/2026-07-04-code-overhaul-plan.md) Wave 4b (Type filter — related but different criterion, both apply) and Wave 4c (this plan when merged).
 - Payload catalog updated as a side-effect: [`../reference/qdrant-payload-catalog.md`](../reference/qdrant-payload-catalog.md).
 - Live backlog entry: [`TODO.md`](TODO.md) will get a "Corpus quality audit — cross-provenance review" item update pointing here.
+
+---
+
+## 8. Execution record — 2026-07-08/09 (Option B: demote, not delete)
+
+**Decision change from the original plan:** the user chose **demote-to-stub over hard delete** after Phase 1 measurement showed hard delete reclaims only ~35 GB (15% of 241 GB) — storage was not the real driver, and demotion preserves citation-graph edges + full reversibility (re-promote) while achieving identical search cleanup (stubs are excluded from search).
+
+**Two deviations from the plan, both toward safety:**
+1. **Crawler-provenance protection.** The delete/demote filter is scoped to `injected_from_snapshot OR promoted_from_stub`. Phase 1 sampling found ~66 K crawler/tier-venue papers (ICLR/NeurIPS/ACL) that OpenAlex mis-fields as Engineering/Medicine or never classifies; the provenance clause keeps them. Both DQ checks are provenance-scoped for the same reason.
+2. **AI-concept bucket NOT protected.** Measured: of the 2.48 M delete set only 38 K are `injection_path=concept`, and a 20-sample review showed those are ML-applied domain papers (ESG, green-consumption, acoustofluidics) — not AI research. Protecting them would keep the wrong papers, so they were demoted with the rest.
+
+**Actual numbers:**
+
+| Metric | Before | After |
+|---|---:|---:|
+| non-stub real papers | 3,743,415 | **1,259,581** |
+| stubs | 2,475,577 | 4,959,411 |
+| searchable embedded vectors | 715,252* | 426,461 |
+| total points | 6,218,992 | 6,218,992 (unchanged — demotion) |
+
+\* baseline captured ~5 % into demotion; true pre-value ≈ 761 K.
+
+**Search latency (bench_search.py, 15 queries, warm, median of 5):**
+
+| | p50 | p90 | mean |
+|---|---:|---:|---:|
+| before | 433 ms | 474 ms | 438 ms |
+| after | 200–207 ms | 221–239 ms | 203–216 ms |
+
+**~2× faster** — larger than the 10-30 % predicted, because the demoted vectors left the HNSW graph entirely (they were valid non-stub search candidates before, so the graph nearly halved: 715 K → 426 K).
+
+**Verification:** both Wave 4c DQ checks green (nontarget 0.0, no-topic 0.0); MCP `search` on 3 canonical queries returns clean EMNLP/ACL/arXiv NLP results with no cross-domain hits; 28 gate+DQ tests pass.
+
+**Recovery map:** `snapshots/2026-07-06-cs-cleanup/delete-ids.jsonl` (2,483,834 rows, gitignored) + the points themselves survive as stubs (re-promote to reverse). Demoted points carry `demoted_from_real=true`, `demoted_reason="wave4c-noncs"` (bool-indexed).
+
+**Remaining:** Phase 4 (chronological labeling of the now-~1 M keep-set backlog) — separate work.
