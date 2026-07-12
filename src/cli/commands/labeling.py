@@ -58,6 +58,15 @@ def register_commands(cli: click.Group):
              "this the pipeline sweeps the multi-million-point unlabeled "
              "backlog on every incremental cycle (2026-07-07: c0c7 discovery).",
     )
+    @click.option(
+        "--year-min", type=int, default=None,
+        help="Only label papers with year >= this (inclusive). Indexed — used "
+             "for Wave 4c Phase 4 chronological bulk labeling by year bucket.",
+    )
+    @click.option(
+        "--year-max", type=int, default=None,
+        help="Only label papers with year <= this (inclusive).",
+    )
     def label_abstracts(
         dry_run: bool,
         limit: int | None,
@@ -70,6 +79,8 @@ def register_commands(cli: click.Group):
         vllm_base_url: str,
         vllm_max_concurrent: int,
         recent_days: int | None,
+        year_min: int | None,
+        year_max: int | None,
     ) -> None:
         """Classify abstract sentences into rhetorical roles.
 
@@ -105,6 +116,8 @@ def register_commands(cli: click.Group):
                 vllm_base_url=vllm_base_url,
                 vllm_max_concurrent=vllm_max_concurrent,
                 fetched_since=fetched_since,
+                year_min=year_min,
+                year_max=year_max,
             )
         )
 
@@ -121,6 +134,8 @@ async def _label_abstracts_async(
     vllm_base_url: str,
     vllm_max_concurrent: int,
     fetched_since: str | None = None,
+    year_min: int | None = None,
+    year_max: int | None = None,
 ) -> None:
     """Async abstract labeling pipeline."""
     from src.core.labeling import AbstractLabeler
@@ -150,6 +165,8 @@ async def _label_abstracts_async(
             force=force,
             dry_run=dry_run,
             fetched_since=fetched_since,
+            year_min=year_min,
+            year_max=year_max,
         )
 
         _display_results(processed, labeled, samples, dry_run)
@@ -165,11 +182,14 @@ async def _run_labeling_loop(
     force: bool,
     dry_run: bool,
     fetched_since: str | None = None,
+    year_min: int | None = None,
+    year_max: int | None = None,
 ) -> tuple[int, int, list[tuple[str, str, dict]]]:
     """Async labeling loop."""
     try:
         total_eligible = storage.count_papers_for_abstract_labeling(
             skip_existing=not force, fetched_since=fetched_since,
+            year_min=year_min, year_max=year_max,
         )
         if limit:
             total_eligible = min(total_eligible, limit)
@@ -189,6 +209,8 @@ async def _run_labeling_loop(
             offset=offset,
             skip_existing=not force,
             fetched_since=fetched_since,
+            year_min=year_min,
+            year_max=year_max,
         )
 
         if not papers:

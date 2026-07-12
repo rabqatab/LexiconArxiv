@@ -436,9 +436,12 @@ class QdrantStorage:
         offset: str | None = None,
         skip_existing: bool = True,
         fetched_since: str | None = None,
+        year_min: int | None = None,
+        year_max: int | None = None,
     ) -> tuple[list[tuple[str, dict]], str | None]:
         return self.readers.get_papers_for_abstract_labeling(
             limit, offset, skip_existing, fetched_since=fetched_since,
+            year_min=year_min, year_max=year_max,
         )
 
     def count_papers_for_keyword_extraction(
@@ -450,9 +453,11 @@ class QdrantStorage:
 
     def count_papers_for_abstract_labeling(
         self, skip_existing: bool = True, fetched_since: str | None = None,
+        year_min: int | None = None, year_max: int | None = None,
     ) -> int:
         return self.readers.count_papers_for_abstract_labeling(
             skip_existing, fetched_since=fetched_since,
+            year_min=year_min, year_max=year_max,
         )
 
     def get_papers_missing_code_repos(

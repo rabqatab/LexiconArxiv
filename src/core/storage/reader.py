@@ -504,12 +504,13 @@ class PaperReader:
 
     def count_papers_for_abstract_labeling(
         self, skip_existing: bool = True, fetched_since: str | None = None,
+        year_min: int | None = None, year_max: int | None = None,
     ) -> int:
         """Count papers eligible for abstract labeling.
 
         Same filter shape as ``get_papers_for_abstract_labeling`` — see
         that method's docstring for the 2026-07-05 IsEmpty/IsNull filter
-        gotcha.
+        gotcha and the year-scoping rationale.
         """
         must_not_conditions = [
             models.IsEmptyCondition(is_empty=models.PayloadField(key="abstract")),
@@ -526,6 +527,13 @@ class PaperReader:
                 models.FieldCondition(
                     key="fetched_at",
                     range=models.DatetimeRange(gte=fetched_since),
+                )
+            )
+        if year_min is not None or year_max is not None:
+            must_conditions.append(
+                models.FieldCondition(
+                    key="year",
+                    range=models.Range(gte=year_min, lte=year_max),
                 )
             )
         result = retry_qdrant(
@@ -546,6 +554,8 @@ class PaperReader:
         offset: str | None = None,
         skip_existing: bool = True,
         fetched_since: str | None = None,
+        year_min: int | None = None,
+        year_max: int | None = None,
     ) -> tuple[list[tuple[str, dict]], str | None]:
         """Get papers for abstract sentence labeling.
 
@@ -560,6 +570,11 @@ class PaperReader:
                 incremental Step 6 behaviour (2026-07-07: c0c7 discovery
                 the pipeline was labeling the full 2 M+ backlog on every
                 cycle instead of just today's papers).
+            year_min, year_max: inclusive ``year`` range (indexed). Wave 4c
+                Phase 4 chronological bulk labeling scopes by year bucket —
+                without an indexed bound the unindexed abstract/
+                abstract_structure IsEmpty scan over 6.2 M points (4.96 M
+                stubs) times out at 60 s.
 
         Returns:
             Tuple of (list of (point_id, payload), next_offset).
@@ -596,6 +611,13 @@ class PaperReader:
                 models.FieldCondition(
                     key="fetched_at",
                     range=models.DatetimeRange(gte=fetched_since),
+                )
+            )
+        if year_min is not None or year_max is not None:
+            must_conditions.append(
+                models.FieldCondition(
+                    key="year",
+                    range=models.Range(gte=year_min, lte=year_max),
                 )
             )
 
