@@ -38,7 +38,7 @@ class SearchService:
         model: str = DEFAULT_EMBEDDING_MODEL,
         target_dim: int = EMBEDDING_VECTOR_SIZE,
         dense_vector_name: str = EMBEDDING_VECTOR_NAME,
-        query_timeout: float = 5.0,
+        query_timeout: float = 30.0,
         max_retries: int = 2,
     ):
         self._storage = storage or QdrantStorage()
@@ -46,6 +46,11 @@ class SearchService:
         self._model = model
         self._target_dim = target_dim
         self._dense_vector_name = dense_vector_name
+        # 30s (was 5s): a cold Ollama embed model (qwen3-embedding:8b, ~14.6GB)
+        # takes ~10s to load. At 5s the query-embed timed out and search
+        # silently fell back to bm25_only (2026-07-13). Warm embeds are ~50ms,
+        # so the higher ceiling only bites on the first query after an idle
+        # eviction — and returns hybrid instead of degrading.
         self._query_timeout = query_timeout
         self._max_retries = max_retries
         self._client: httpx.AsyncClient | None = None

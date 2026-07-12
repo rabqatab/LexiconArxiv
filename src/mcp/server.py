@@ -306,7 +306,12 @@ async def list_tools() -> list[Tool]:
 # this" list. Values in seconds.
 _DEFAULT_HANDLER_TIMEOUT_SEC: float = 5.0
 _HANDLER_TIMEOUTS: dict[str, float] = {
-    "research_topic": 15.0,    # semantic rerank + trend analysis
+    # search_papers/research_topic embed the query via Ollama; a cold embed
+    # model takes ~10s to load, which the old 5s budget cut off → bm25_only
+    # (2026-07-13). Startup preload keeps it warm; these ceilings tolerate a
+    # post-idle cold reload so search returns hybrid instead of degrading.
+    "search_papers": 30.0,
+    "research_topic": 30.0,    # query embed + semantic rerank + trend analysis
     "expand_search": 20.0,     # external arxiv + openalex roundtrips
     "get_corpus_stats": 60.0,  # ponytail: get_venue_stats() full-scrolls 3.6M points; drop when histogram is cached
 }
@@ -677,6 +682,16 @@ async def main():
     _search_service = SearchService(storage=_storage)
 
     async with _search_service:
+        # Preload the Ollama embed model so the first real search is hybrid,
+        # not a cold-load that times out into bm25_only (2026-07-13). Best
+        # effort: if Ollama is down we log and serve BM25 until it recovers.
+        try:
+            warm = await _search_service._embed_query("warmup")
+            logger.info("embed model preload: %s",
+                        "ok" if warm else "failed (search starts BM25-only until warm)")
+        except Exception as e:
+            logger.warning("embed model preload errored (non-fatal): %s", e)
+
         async with stdio_server() as (read_stream, write_stream):
             await app.run(
                 read_stream,
