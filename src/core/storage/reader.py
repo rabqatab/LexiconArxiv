@@ -513,6 +513,10 @@ class PaperReader:
         gotcha and the year-scoping rationale.
         """
         must_not_conditions = [
+            # Stubs are excluded from search — never worth labeling. The
+            # indexed is_stub filter also keeps this count fast (Wave 4c left
+            # 4.96M stubs, ~8K of which carry an enriched abstract).
+            models.FieldCondition(key="is_stub", match=models.MatchValue(value=True)),
             models.IsEmptyCondition(is_empty=models.PayloadField(key="abstract")),
             models.IsNullCondition(is_null=models.PayloadField(key="abstract")),
             models.FieldCondition(key="abstract", match=models.MatchValue(value="")),
@@ -586,6 +590,8 @@ class PaperReader:
         # covers missing / null / empty-collection — plus the explicit
         # empty-string match to catch the "" case that IsEmpty does not.
         must_not_conditions = [
+            # Stubs are excluded from search — never worth labeling (Wave 4c).
+            models.FieldCondition(key="is_stub", match=models.MatchValue(value=True)),
             models.IsEmptyCondition(
                 is_empty=models.PayloadField(key="abstract"),
             ),
