@@ -13,9 +13,15 @@ class RetrievalConfig:
     query_intent: bool = True  # Auto-detect section target
     hyde: bool = False  # Hypothetical document embedding (+500ms)
     rag_fusion: bool = False  # Multi-query variants (+500ms)
+    query_decomposition: bool = False  # Split a multi-part query into sub-queries (+500ms)
 
     # Stage 2: Multi-vector retrieval
     multi_vector: bool = True
+    adaptive_rrf: bool = False  # Tilt dense vs BM25 candidate share by query shape
+
+    # Stage 3.5: Neural pseudo-relevance feedback (2-pass)
+    neural_prf: bool = False  # Refine query with mean of top-K result vectors (+1 round-trip)
+    prf_top_k: int = 5
     multi_vector_names: list[str] = field(
         default_factory=lambda: [
             "structured-abstract",
@@ -48,5 +54,13 @@ class RetrievalConfig:
 
     @classmethod
     def comprehensive(cls) -> RetrievalConfig:
-        """Comprehensive search: RAG-Fusion + reranker + MMR diversity."""
-        return cls(rag_fusion=True, reranker=True, mmr_diversity=True)
+        """Comprehensive search: RAG-Fusion + decomposition + PRF + adaptive RRF
+        + reranker + MMR diversity — every recall-boosting stage on."""
+        return cls(
+            rag_fusion=True,
+            query_decomposition=True,
+            neural_prf=True,
+            adaptive_rrf=True,
+            reranker=True,
+            mmr_diversity=True,
+        )

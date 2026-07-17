@@ -12,14 +12,17 @@ from src.core.constants import (
     DEFAULT_EMBEDDING_MODEL,
     EMBEDDING_VECTOR_NAME,
     EMBEDDING_VECTOR_SIZE,
+    STRUCTURED_VECTOR_NAME,
     get_ollama_base_url,
 )
 from src.core.search.config import RetrievalConfig
 from src.core.search.on_demand import OnDemandSearch
 from src.core.search.postprocess import apply_citation_boost, apply_mmr
 from src.core.search.query_analyzer import (
+    adaptive_rrf_weights,
     detect_intent,
     generate_hyde,
+    generate_query_decomposition,
     generate_query_variants,
 )
 from src.core.search.venue_map import expand_venue_names
@@ -105,6 +108,35 @@ class SearchService:
                 else:
                     logger.warning(f"Query embed failed, falling back to BM25-only: {e}")
                     return None
+
+    async def _prf_refine(self, query: str, points: list, top_k: int) -> list[float] | None:
+        """Neural PRF centroid: mean of the query vector + top-K result vectors.
+
+        Fetches the top-K papers' structured-abstract vectors and averages them
+        with the freshly-embedded query vector. Returns None (skip pass 2) if the
+        query can't be embedded or no feedback vectors are available.
+        """
+        q_vec = await self._embed_query(query)
+        if q_vec is None:
+            return None
+        top_ids = [str(p.id) for p in points[:top_k]]
+        if not top_ids:
+            return None
+        fb = self._storage.client.retrieve(
+            collection_name=self._storage.collection_name,
+            ids=top_ids,
+            with_payload=False,
+            with_vectors=[STRUCTURED_VECTOR_NAME],
+        )
+        vecs = [q_vec]
+        for pt in fb:
+            v = (pt.vector or {}).get(STRUCTURED_VECTOR_NAME) if isinstance(pt.vector, dict) else None
+            if v:
+                vecs.append(v)
+        if len(vecs) == 1:  # only the query, no usable feedback vectors
+            return None
+        dim = len(q_vec)
+        return [sum(v[i] for v in vecs) / len(vecs) for i in range(dim)]
 
     def _build_filters(
         self,
@@ -223,6 +255,14 @@ class SearchService:
             queries.extend(variants)
             pipeline_info["stages_applied"].append("rag_fusion")
 
+        if cfg.query_decomposition and self._client:
+            subs = await generate_query_decomposition(
+                query, self._client, self._base_url
+            )
+            queries.extend(subs)
+            if subs:
+                pipeline_info["stages_applied"].append("query_decomposition")
+
         # ------------------------------------------------------------------
         # Stage 2: Multi-vector retrieval
         # ------------------------------------------------------------------
@@ -238,6 +278,17 @@ class SearchService:
         else:
             dense_names = ["structured-abstract"]
 
+        # Adaptive RRF: tilt each modality's candidate share by query shape.
+        # RRF has no per-prefetch weight, so we scale candidate `limit` instead —
+        # more candidates from the favoured modality means it wins more RRF ranks.
+        dense_limit = bm25_limit = retrieve_limit
+        if cfg.adaptive_rrf:
+            dw, bw = adaptive_rrf_weights(query)
+            dense_limit = max(1, int(retrieve_limit * dw))
+            bm25_limit = max(1, int(retrieve_limit * bw))
+            pipeline_info["stages_applied"].append("adaptive_rrf")
+            pipeline_info["adaptive_rrf_weights"] = {"dense": dw, "bm25": bw}
+
         # Embed all queries and build prefetch list
         prefetch: list[models.Prefetch] = []
         has_dense = False
@@ -252,7 +303,7 @@ class SearchService:
                             query=query_vector,
                             using=vn,
                             filter=qdrant_filter,
-                            limit=retrieve_limit,
+                            limit=dense_limit,
                         )
                     )
                     if vn not in pipeline_info["vectors_searched"]:
@@ -265,7 +316,7 @@ class SearchService:
                     query=models.Document(text=q, model="qdrant/bm25"),
                     using="bm25",
                     filter=qdrant_filter,
-                    limit=retrieve_limit,
+                    limit=bm25_limit,
                 )
             )
         if "bm25" not in pipeline_info["vectors_searched"]:
@@ -294,6 +345,25 @@ class SearchService:
                 limit=retrieve_limit,
                 with_payload=True,
             )
+
+        # ------------------------------------------------------------------
+        # Stage 3.5: Neural pseudo-relevance feedback (2-pass)
+        # ------------------------------------------------------------------
+        # Average the original query vector with the top-K result vectors and
+        # re-search on the structured-abstract vector. Standard neural PRF: the
+        # feedback centroid pulls the query toward the retrieved cluster.
+        if cfg.neural_prf and has_dense and results.points:
+            refined = await self._prf_refine(query, results.points, cfg.prf_top_k)
+            if refined is not None:
+                results = self._storage.client.query_points(
+                    collection_name=self._storage.collection_name,
+                    query=refined,
+                    using=STRUCTURED_VECTOR_NAME,
+                    query_filter=qdrant_filter,
+                    limit=retrieve_limit,
+                    with_payload=True,
+                )
+                pipeline_info["stages_applied"].append("neural_prf")
 
         # Convert Qdrant points to dicts
         items: list[dict] = []

@@ -110,6 +110,7 @@ async def generate_hyde(
                     {"role": "user", "content": query},
                 ],
                 "stream": False,
+                "think": False,  # qwen3 thinking eats the 10s budget -> empty output
                 "options": {"temperature": 0.7, "num_predict": 200},
             },
             timeout=10.0,
@@ -150,6 +151,7 @@ async def generate_query_variants(
                     {"role": "user", "content": query},
                 ],
                 "stream": False,
+                "think": False,  # qwen3 thinking eats the 10s budget -> empty output
                 "options": {"temperature": 0.8, "num_predict": 200},
             },
             timeout=10.0,
@@ -161,3 +163,76 @@ async def generate_query_variants(
     except Exception as e:
         logger.warning("Query variant generation failed: %s", e)
         return []
+
+
+async def generate_query_decomposition(
+    query: str,
+    client: httpx.AsyncClient,
+    base_url: str,
+    n: int = 3,
+) -> list[str]:
+    """Decompose a multi-part query into independent sub-queries.
+
+    Unlike RAG-Fusion (which *reformulates* the same intent), this splits a
+    comparative or compound question — "BERT vs GPT for code" ->
+    ["BERT for code", "GPT for code", ...] — so each sub-query can hit different
+    section vectors and the union is fused. Returns [] on failure (pipeline
+    falls back to the original query only). A single-intent query legitimately
+    decomposes to itself; callers dedupe against the original.
+    """
+    try:
+        response = await client.post(
+            f"{base_url}/api/chat",
+            json={
+                "model": "qwen3:8b",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            f"Break the research query into at most {n} independent "
+                            "sub-questions, each self-contained. If the query is "
+                            "already a single question, return it unchanged. Return "
+                            "ONLY the sub-questions, one per line, no numbering."
+                        ),
+                    },
+                    {"role": "user", "content": query},
+                ],
+                "stream": False,
+                "think": False,  # qwen3 thinking eats the 10s budget -> empty output
+                "options": {"temperature": 0.3, "num_predict": 200},
+            },
+            timeout=10.0,
+        )
+        response.raise_for_status()
+        text = response.json()["message"]["content"]
+        subs = [line.strip() for line in text.strip().split("\n") if line.strip()]
+        # drop an echo of the original (single-intent case) — no value re-searching it
+        subs = [s for s in subs if s.lower() != query.strip().lower()]
+        return subs[:n]
+    except Exception as e:
+        logger.warning("Query decomposition failed: %s", e)
+        return []
+
+
+def adaptive_rrf_weights(query: str) -> tuple[float, float]:
+    """Heuristic (dense_weight, bm25_weight) from query shape, summing to ~2.0.
+
+    Short / keyword-ish / quoted / acronym-heavy queries favour BM25 lexical
+    match; long / natural-language queries favour dense semantic match. Weights
+    scale each modality's candidate share into RRF (see service._adaptive_limits).
+
+    ponytail: length + acronym + quote heuristic, no classifier. Upgrade to a
+    learned query-type model only if A/B shows this mis-weights real traffic.
+    """
+    q = query.strip()
+    tokens = q.split()
+    n = len(tokens)
+    quoted = '"' in q
+    # acronym-heavy: uppercase tokens like BM25, RRF, GPT, BERT
+    acronyms = sum(1 for t in tokens if t.isupper() and len(t) >= 2)
+    lexical = quoted or (n <= 3) or (acronyms >= max(1, n // 2))
+    if lexical:
+        return (0.7, 1.3)   # tilt to BM25
+    if n >= 12:
+        return (1.4, 0.6)   # long NL -> tilt to dense
+    return (1.0, 1.0)       # balanced
