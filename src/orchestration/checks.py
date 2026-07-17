@@ -82,9 +82,16 @@ def no_primary_topic_share_check() -> AssetCheckResult:
     return _result(dq.no_primary_topic_share())
 
 
+@asset_check(asset="discover_gaps", name="nonpaper_type_share",
+             description="Non-stub papers with a clear non-paper OpenAlex type (warn-only, A1(a) gate-drift signal)")
+def nonpaper_type_share_check() -> AssetCheckResult:
+    return _result(dq.nonpaper_type_share())
+
+
 ALL_CHECKS = [
     doi_papers_have_refs_check, abstract_coverage_check, embedding_coverage_check,
     graph_metrics_stored_check, cluster_coverage_check, real_papers_have_titles_check,
     source_not_silently_zero_check, abstract_labeling_gap_check,
     nontarget_topic_share_check, no_primary_topic_share_check,
+    nonpaper_type_share_check,
 ]

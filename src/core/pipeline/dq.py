@@ -31,6 +31,7 @@ MAX_UNLABELED_ABSTRACT_BACKLOG = 1000
 # baselines are ~0% and any regrowth means the P2/P3 gate regressed.
 MAX_NONTARGET_TOPIC_SHARE = 0.05
 MAX_NO_TOPIC_SHARE = 0.01
+MAX_NONPAPER_TYPE_SHARE = 0.005  # A1(a): post-demotion baseline ~0%
 
 _STUB = models.FieldCondition(key="is_stub", match=models.MatchValue(value=True))
 _EMPTY_ABSTRACT = models.FieldCondition(key="abstract", match=models.MatchValue(value=""))
@@ -254,4 +255,36 @@ def no_primary_topic_share(storage: QdrantStorage | None = None) -> dict:
         "passed": share <= MAX_NO_TOPIC_SHARE,
         "metadata": {"no_topic": no_topic, "non_stub_total": total,
                      "share": round(share, 4), "threshold": MAX_NO_TOPIC_SHARE},
+    }
+
+
+def nonpaper_type_share(storage: QdrantStorage | None = None) -> dict:
+    """Share of non-stub real papers whose OpenAlex `type` is a clear non-paper.
+
+    WARN above MAX_NONPAPER_TYPE_SHARE — post-A1(a) baseline is ~0%; regrowth
+    means the P2/P3 type gate (topic_gate.is_keep_type) regressed and a bootstrap
+    re-injected books/editorials/etc. Scoped to P2/P3 provenance, same as the
+    topic checks — crawler venues don't produce these types anyway.
+    Requires the keyword index on `type` (created 2026-07-06).
+    """
+    from src.core.snapshot.topic_gate import DROP_TYPES
+    storage = storage or QdrantStorage()
+    total = _count(storage, must_not=[_STUB])
+    nonpaper = _count(
+        storage,
+        must=[
+            models.Filter(should=[
+                models.FieldCondition(key="injected_from_snapshot", match=models.MatchValue(value=True)),
+                models.FieldCondition(key="promoted_from_stub", match=models.MatchValue(value=True)),
+            ]),
+            models.FieldCondition(key="type", match=models.MatchAny(any=sorted(DROP_TYPES))),
+        ],
+        must_not=[_STUB],
+    )
+    share = nonpaper / total if total else 0.0
+    return {
+        "passed": share <= MAX_NONPAPER_TYPE_SHARE,
+        "metadata": {"nonpaper": nonpaper, "non_stub_total": total,
+                     "share": round(share, 4), "threshold": MAX_NONPAPER_TYPE_SHARE,
+                     "fix": "scripts/analytics/demote_types_in_keepset.py"},
     }

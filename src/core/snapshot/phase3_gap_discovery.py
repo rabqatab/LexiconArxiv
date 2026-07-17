@@ -16,7 +16,7 @@ from src.core.snapshot.gap_filter import (
     classify,
 )
 from src.core.snapshot.stats import PhaseSummary
-from src.core.snapshot.topic_gate import is_keep_topic
+from src.core.snapshot.topic_gate import is_keep_topic, is_keep_type
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +61,11 @@ def process_one(
     # works into the corpus (2026-07-06 audit: only 32.6% AI-adjacent).
     if not is_keep_topic(work.get("primary_topic")):
         return {"action": "reject_topic"}
+
+    # A1(a) type gate: on-topic non-paper types (book/editorial/paratext/...)
+    # never enter the real corpus. See topic_gate.DROP_TYPES.
+    if not is_keep_type(work):
+        return {"action": "reject_type"}
 
     if dry_run:
         return {"action": "would_inject", "classification": cls.value}
@@ -137,6 +142,8 @@ def run(
                 counters["rejected"] += 1
             elif action == "reject_topic":
                 counters["rejected_by_topic"] += 1
+            elif action == "reject_type":
+                counters["rejected_by_type"] += 1
             elif action == "created" or action == "would_inject":
                 if cls == "ANCHOR_INJECT":
                     counters["anchor_inject"] += 1
@@ -175,6 +182,7 @@ def run(
         "concept_inject": counters["concept_inject"],
         "rejected": counters["rejected"],
         "rejected_by_topic": counters["rejected_by_topic"],
+        "rejected_by_type": counters["rejected_by_type"],
         "skip_existing": counters["skip_existing"],
         "skipped_dup": counters["skipped_dup"],
         "failed": counters["failed"],
