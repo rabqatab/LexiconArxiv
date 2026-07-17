@@ -7,7 +7,9 @@ Complete reference for all CLI commands in LexiconArxiv.
 ## Quick Reference
 
 ```bash
-# Full pipeline (recommended)
+# Full pipeline (crawler bulk — 7 stages). NOTE: no embedding stage; papers are
+# queued to embedding_queue.jsonl and are NOT searchable until you run
+# `embed-papers` to drain the queue. See docs/runbooks/embed-drain-strategy.md.
 ./scripts/run_full_pipeline.sh --since-year 2018 --include-workshops
 
 # Or step by step

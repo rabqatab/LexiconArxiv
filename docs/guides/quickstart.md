@@ -99,15 +99,20 @@ uv run python -m src.cli.core_collect init-storage
 ./scripts/run_full_pipeline.sh --since-year 2018 --include-workshops
 ```
 
-This runs all 8 stages:
+This runs all 7 stages (matching the script's `[N/7]` banners):
 1. **Collection** - Crawl papers from all sources
 2. **Deduplication** - Remove cross-source duplicates
-3. **Enrichment** - Add citations and abstracts via OpenAlex
+3. **Enrichment** - Add citations and abstracts via OpenAlex (also includes code-repo discovery via PWC/HuggingFace/GROBID/GitHub as sub-steps 3.8–3.10)
 4. **Resolution** - Resolve references to internal IDs
 5. **Graph** - Build citation graph (cited_by)
-6. **Code Repos** - Find GitHub repositories via PWC/HuggingFace/GROBID/GitHub API
-7. **Keyword Extraction** - Extract acronyms and semantic keywords for BM25 search
-8. **Abstract Labeling** - Classify abstract sentences into rhetorical roles
+6. **Keyword Extraction** - Extract acronyms and semantic keywords for BM25 search
+7. **Abstract Labeling** - Classify abstract sentences into rhetorical roles
+
+> **Not searchable yet.** This crawler bulk path has **no embedding stage** — new
+> papers are queued to `embedding_queue.jsonl` and stay invisible to hybrid search
+> until you drain the queue: `uv run python -m src.cli.core_collect embed-papers`
+> (see [embed-drain-strategy](../runbooks/embed-drain-strategy.md)). The incremental
+> pipeline embeds inline; this one does not.
 
 ### Option B: Step by Step
 
