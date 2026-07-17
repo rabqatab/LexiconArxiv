@@ -26,8 +26,8 @@ Tracked enhancement backlog. Items are grouped by priority and area.
     - **Trigger: after the post-bootstrap catchup completes stably.** Cross-refs: [`docs/design/bulk-vs-incremental-audit.md`](../design/bulk-vs-incremental-audit.md) §P3 data-quality gap + §Second rule; [`docs/refactoring/2026-07-04-code-overhaul-plan.md`](../refactoring/2026-07-04-code-overhaul-plan.md) §Wave 4b.
 
 ### Stub Enrichment & Corpus Gaps
-- [ ] **Enrich high-value stubs** — 23,960 stubs cited by 20+ core papers have zero metadata (no title, abstract, authors). Enrich via OpenAlex by identifier (DOI/arXiv/OpenAlex ID). Target: top 25K stubs.
-- [ ] **Resolve TITLE: stubs** — Many stubs have `identifier_type=title` with raw title strings from GROBID. Search OpenAlex by title to find DOI/metadata and merge.
+- [~] **Enrich high-value stubs** (A3, 2026-07-17 — structural fix DONE, run low-yield) — The real blocker was **scale**: `get_most_cited_stubs` full-scrolled all 5.0M stubs + sorted in Python on every call, so enrichment never actually reached them. Fixed with an integer index on `cited_by_count_internal` + keyword on `identifier_type` and a server-side `order_by` rewrite (5M-scroll → 39ms; commit `751a401`). **Enrichment yield is inherently low**, though: the highest-cited stubs are ~17% fabricated 6-billion OpenAlex IDs (HTTP 404) and a large share are `S2:`/`title` types enrich-8 can't resolve; only ~470 new ≥20-cite titles landed. **Follow-up bug:** the StubEnricher hangs at scale — `enrich_stubs` gathers up to 20K tasks and the Qdrant merge/update path blocks the event loop; a run stalled (0% CPU, STAT Sl) after ~8 min. Needs bounded batching + a non-blocking write path before a full run is worthwhile.
+- [ ] **Resolve TITLE: stubs** — Many stubs have `identifier_type=title` with raw title strings from GROBID (often junk like "bibliographical references"). Search OpenAlex by title to find DOI/metadata and merge. (Deferred with the enricher-hang fix above — same code path.)
 - [ ] **Corpus gap dashboard** — Dashboard section showing: top 100 most-cited stubs (= most-cited papers NOT in corpus), venues most referenced but not collected, stubs that could be promoted.
 - [ ] **Stub → core promotion** — When incremental collection adds a paper matching an existing stub, preserve the stub's `cited_by` data on the promoted paper. Verify dedup handles this correctly.
 
@@ -39,7 +39,7 @@ Tracked enhancement backlog. Items are grouped by priority and area.
 - [x] **S2 enricher scroll optimization** — Added `must_not: [is_stub=true]` to `get_papers_missing_references()` and `get_papers_without_doi_missing_references()`. Reduced scroll from 666K to 7K papers.
 - [x] **QdrantStorage `fetched_since` passthrough** — Fixed the storage facade to forward `fetched_since` parameter to underlying query methods.
 - [x] **OpenReview missing `httpx` import** — Fixed runtime import error in OpenReview collector.
-- [ ] **Similarity graph performance** — At 7.4s/paper (3.5M point collection), computing similarity for 120K papers takes ~10 days. Needs: (a) reduce collection size by deleting old v1/v2 collections, (b) pre-filter to only search among papers with vectors, (c) consider approximate methods or incremental-only computation for new papers.
+- [x] **Similarity graph performance** (A4, 2026-07-17, commit `7f19d48`) — Was 7.4s/paper; the bottleneck was the per-paper `set_payload` write loop, not the query (already a mega-batch). Now writes the whole batch in one `batch_update_points(wait=False)` call + a `--only-missing` incremental mode (453,728 embedded papers → 137,378 without edges) + default batch 20→50. **Verified 0.11s/paper** (200 papers / 21.9s). Full recompute ~14h; incremental `--only-missing` ~4h; daily runs touch only new papers.
 
 ### Advanced Retrieval Pipeline
 - [x] **Advanced Retrieval Pipeline (HyDE, multi-vector, reranker, citation boost, MMR)** — HyDE generates hypothetical abstracts for vague queries. Multi-vector prefetch searches section-level vectors fused with RRF. Cross-encoder reranking via Qwen3-Reranker-0.6B. Citation-aware score boosting. MMR diversity post-processing.
@@ -48,26 +48,23 @@ Tracked enhancement backlog. Items are grouped by priority and area.
 - [ ] **Venue name normalization** — "ICLR 2025 Poster" should match filter "ICLR". Add `venue_canonical` field or use substring matching.
 
 ### Advanced Query Processing
-- [ ] **RAG-Fusion** — Generate 3-5 query variants via LLM, search each, fuse with RRF. +8-10% accuracy. Qdrant prefetch supports natively.
-- [ ] **Query decomposition** — "BERT vs GPT for code" → 3 sub-queries targeting different section vectors.
+- [x] **RAG-Fusion** — Shipped (`rag_fusion` flag + `generate_query_variants`). 2026-07-17: added `think:false` so qwen3:8b stops spending the 10s budget on `<think>` tokens (was silently timing out to empty).
+- [x] **Query decomposition** (B, 2026-07-17, commit `ff83721`) — `generate_query_decomposition` splits a compound/comparative query into independent sub-questions (qwen3:8b), fused via RRF. Distinct from RAG-Fusion (reformulation). Verified: "BERT vs GPT for code generation" → 3 sub-queries, 2.6s hybrid.
 
 ---
 
 ## Medium Priority
 
 ### Stub Vectors & Search
-- [ ] **Embed enriched stubs** — Once high-value stubs have abstracts, embed them (dense + BM25). Enables cross-boundary similarity and makes stubs discoverable in search.
-- [ ] **BM25 on enriched stubs** — Stubs with titles/abstracts get BM25 vectors so users can find cited papers even if not in core corpus.
+- [x] **Embed enriched stubs / BM25 on enriched stubs** (B, 2026-07-17, commit `0393472`) — `embed_high_value_stubs.py` embeds cited≥5 abstract-bearing stubs (~10.8K, ~2% index growth) into structured-abstract + full + BM25, flags `searchable_stub=True`. `_build_filters`' stub-exclusion became "is_stub AND NOT searchable_stub", so exactly these high-value cited-but-absent papers surface while the other ~5M stubs stay out of the HNSW (verified 96 flagged → 96 pass, 0 leak). Wave 4c's search-speed win is preserved.
 
 ### Retrieval Enhancements
-- [ ] **SPLADE sparse vectors** — Replace BM25 with learned sparse retrieval (SPLADE++). +10-20% over BM25 but requires re-indexing.
-- [ ] **Neural PRF (2-pass)** — Average top-5 result vectors with query for refined second pass. +26% MAP.
-- [ ] **Adaptive weighted RRF** — Dynamically weight dense vs BM25 based on query characteristics.
+- [ ] **SPLADE sparse vectors** — Replace BM25 with learned sparse retrieval (SPLADE++). +10-20% over BM25 but requires re-indexing. (Deferred — overkill at current scale per note.)
+- [x] **Neural PRF (2-pass)** (B, 2026-07-17, commit `ff83721`) — `neural_prf` flag: average the query vector with the top-K result vectors, re-search on structured-abstract. Verified reshaping the ranking (DiffCSE → SimCSE top), +~200ms.
+- [x] **Adaptive weighted RRF** (B, 2026-07-17, commit `ff83721`) — `adaptive_rrf` flag: tilt dense-vs-BM25 candidate share by query shape (short/acronym/quoted → BM25; long NL → dense) via per-modality prefetch limits. Unit-tested heuristic.
 
 ### Configurable Pipeline
-- [ ] **RetrievalConfig dataclass** — Toggle each technique on/off via API parameters and server defaults.
-- [ ] **Pipeline presets** — "Fast" (default), "Quality" (+ HyDE + reranker), "Comprehensive" (+ RAG-Fusion + MMR).
-- [ ] **Pipeline info in response** — Return which stages were applied, detected intent, vectors searched, etc.
+- [x] **RetrievalConfig dataclass / Pipeline presets / Pipeline info** — All shipped (`src/core/search/config.py`: `fast()`/`quality()`/`comprehensive()`; `pipeline.stages_applied`/`vectors_searched` in the response). `comprehensive()` now also enables decomposition + PRF + adaptive RRF (2026-07-17).
 
 ---
 
