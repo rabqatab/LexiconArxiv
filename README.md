@@ -420,6 +420,16 @@ lexiconarxiv/
 
 ## Recent Updates
 
+### v0.13.7 (Jul 2026) — Wave 4c Phase 4/4b: label + re-embed the keep-set; MCP search hardened
+
+Turned the cleaned corpus's labels into actual search quality, and fixed a silent search degradation.
+
+- **Phase 4 — chronological labeling (2020+):** vLLM-labeled the keep-set backlog newest→oldest — 2025-26 (2,109) + 2020-24 (103,297) at ~6 K/hr. Pre-2020 deliberately skipped (recent papers are the search-relevant ones). Enablers: `label-abstracts --year-min/--year-max` (year is indexed → avoids the unindexed `abstract_structure` full-scan timeout) + **stub exclusion** in the labeling filter (was counting ~8 K enriched stubs = wasted GPU).
+- **Phase 4b — re-embed for section vectors:** labeling writes `abstract_structure`, but those papers already had a stale `structured-abstract` vector so the normal embed path skipped them → no `section-*` vectors → multi-vector search collapsed. Re-embedded 113,033 papers (`scripts/analytics/reembed_labeled_sections.py`) → `indexed_vectors` 2.3 M → **3.19 M**. Verified: a "method for contrastive learning…" query now section-matches EASE/miCSE/PCL exactly.
+- **MCP search fix:** search had silently fallen back to `bm25_only` — the Ollama embed model (`qwen3-embedding:8b`, ~14.6 GB) was idle-evicted (`OLLAMA_KEEP_ALIVE=1h`) and its ~10 s cold-load exceeded the 5 s query-embed + handler timeouts. Now the MCP server **preloads the embed model at startup** and the timeouts were raised to 30 s (`SearchService.query_timeout`, `search_papers`/`research_topic` budgets), so a post-idle reload returns `hybrid` instead of degrading.
+
+Ops note: big in-place write passes (label/re-embed) on the shared root disk keep flirting with the "optimizer can't compact → RED" state; both recurrences this cycle were cleared without data loss (ssd2-scratch compaction once, `docker restart qdrant` to clear a stale optimizer error the second time). Durable fix = a dedicated disk with headroom. Qdrant is GREEN, 6.22 M points.
+
 ### v0.13.6 (Jul 2026) — Wave 4c corpus CS-cleanup: ML/NLP-focused, search 2× faster
 
 The corpus audit found only **32.6 %** of the 3.74 M non-stub real papers were AI/NLP-adjacent — the rest were cross-domain works (Medicine, Engineering, Biochemistry, Physics…) pulled in by P2/P3 anchor+concept injection with no topic gate. Fixed in two halves:
@@ -427,7 +437,7 @@ The corpus audit found only **32.6 %** of the 3.74 M non-stub real papers were A
 - **Durable gate** (`src/core/snapshot/topic_gate.py`): `KEEP_FIELDS = {Computer Science, Mathematics, Decision Sciences, Neuroscience, Psychology}` ∪ subfield `Language and Linguistics`, wired into P3 (`reject_topic`) and P2 (PROMOTE→ENRICH_KEEP_STUB) so the next quarterly bootstrap can't re-pollute. Two warn-only DQ checks (`nontarget_topic_share`, `no_primary_topic_share`), both provenance-scoped so crawler/tier-venue papers are exempt.
 - **One-time cleanup**: 2,483,834 non-CS P2/P3 papers **demoted to stubs** (not deleted — chosen after measuring that hard delete reclaims only ~35 GB / 15 %). Demotion strips heavy payload + vectors, keeps identity + `cited_by` edges, and is reversible (re-promote). Non-stub real papers **3.74 M → 1.26 M**.
 
-**Result: MCP search ~2× faster** (p50 433 ms → ~200 ms) — the demoted vectors left the HNSW graph entirely (715 K → 426 K searchable). Crawler-provenance protection keeps ~66 K ICLR/NeurIPS/ACL papers that OpenAlex mis-fields. Full record: [`docs/plans/2026-07-06-corpus-cs-cleanup.md`](docs/plans/2026-07-06-corpus-cs-cleanup.md) §8. Remaining: Phase 4 chronological labeling of the shrunk ~1 M keep-set backlog.
+**Result: MCP search ~2× faster** (p50 433 ms → ~200 ms) — the demoted vectors left the HNSW graph entirely (715 K → 426 K searchable). Crawler-provenance protection keeps ~66 K ICLR/NeurIPS/ACL papers that OpenAlex mis-fields. Full record: [`docs/plans/2026-07-06-corpus-cs-cleanup.md`](docs/plans/2026-07-06-corpus-cs-cleanup.md) §8. (Phase 4/4b labeling + re-embed followed — see v0.13.7 above.)
 
 ### v0.13.5 (Jul 2026) — Ponytail cleanup wave: −3,600 lines, −4 deps
 
