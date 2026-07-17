@@ -705,16 +705,21 @@ The search service supports a configurable multi-stage pipeline. Each stage can 
 ### 11.1 Stage 1: Query Analysis
 - **Intent detection** (default ON): Keyword heuristics detect target section (method/task/result/background) and query type (title search, recency bias)
 - **HyDE** (default OFF): Generates a hypothetical abstract via Ollama (qwen3:8b), embeds it alongside the original query. +5-25% recall on vague queries, adds ~500ms.
-- **RAG-Fusion** (default OFF): Generates 3 query variants via LLM, searches each independently. +8-10% accuracy, adds ~500ms.
+- **RAG-Fusion** (default OFF): Generates 3 query *reformulations* via LLM, searches each independently. +8-10% accuracy, adds ~500ms.
+- **Query decomposition** (`query_decomposition`, default OFF): splits a compound/comparative query ("BERT vs GPT for code") into independent sub-questions, each fused via RRF. Distinct from RAG-Fusion (which reformulates the same intent). Adds ~500ms. All three LLM stages send `think:false` — qwen3:8b's thinking mode otherwise eats the 10s budget and returns empty.
 
 ### 11.2 Stage 2: Multi-Vector Retrieval
 - Searches 3 section vectors by default: structured-abstract, section-method, section-task
 - Plus BM25 sparse on abstract text
 - All queries x all vectors -> multiple prefetch legs, fused by RRF
+- **Adaptive RRF** (`adaptive_rrf`, default OFF): tilts each modality's candidate share by query shape — short/acronym/quoted queries favour BM25 (lexical), long natural-language queries favour dense (semantic) — by scaling per-modality prefetch `limit` (RRF has no per-leg weight).
 
 ### 11.3 Stage 3: RRF Fusion (always on)
 - Reciprocal Rank Fusion: score = sum of 1/(60 + rank_i)
 - Fuses all prefetch legs (dense + sparse x queries)
+
+### 11.3a Stage 3.5: Neural PRF (`neural_prf`, default OFF)
+- 2-pass pseudo-relevance feedback: average the query vector with the top-K (default 5) result vectors, re-search on structured-abstract. The feedback centroid pulls the query toward the retrieved cluster. Adds ~200ms (+1 round-trip). Verified reshaping the ranking (DiffCSE→SimCSE top result).
 
 ### 11.4 Stage 4: Cross-Encoder Reranking (default OFF)
 - Model: Qwen3-Reranker-0.6B via sentence-transformers
@@ -728,7 +733,10 @@ The search service supports a configurable multi-stage pipeline. Each stage can 
 ### 11.6 Presets
 - **Fast** (default): intent + multi-vector + citation boost (~200ms)
 - **Quality**: + HyDE + reranker + MMR (~2-3s)
-- **Comprehensive**: + RAG-Fusion + reranker + MMR (~3-5s)
+- **Comprehensive**: + RAG-Fusion + query-decomposition + neural-PRF + adaptive-RRF + reranker + MMR (~3-5s)
+
+### 11.6a Searchable stubs
+By default the pipeline excludes stubs (`must_not is_stub`). The **most-cited abstract-bearing stubs** (cited≥5, ~10.8K) are embedded and flagged `searchable_stub=True`; the exclusion is `is_stub AND NOT searchable_stub`, so exactly these cited-but-not-in-corpus papers surface (badged `is_stub` in the response) while the other ~5M stubs stay out of the HNSW — preserving Wave 4c's search-speed win. Re-embed/re-flag: `scripts/analytics/embed_high_value_stubs.py`.
 
 ### 11.7 API Usage
 

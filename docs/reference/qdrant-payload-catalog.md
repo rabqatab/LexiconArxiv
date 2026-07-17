@@ -59,7 +59,7 @@ Fields are grouped by role. Each entry: type · source(s) that write it · descr
 |---|---|---|---|
 | `cited_by_count` | `int` | Crawler / P1 enrich from OpenAlex `cited_by_count` | Global (OpenAlex-wide) citation count. |
 | `citation_count` | `int` | Crawler (S2, legacy) | Alternative citation count from Semantic Scholar. Prefer `cited_by_count` when both exist. |
-| `cited_by_count_internal` | `int` | `build-cited-by` graph asset | Count of papers **inside the corpus** that cite this paper. |
+| `cited_by_count_internal` | `int` | `build-cited-by` graph asset | Count of papers **inside the corpus** that cite this paper. Indexed 2026-07-17 (A3) — enables server-side `order_by` for top-cited stub selection. |
 | `cited_by` | `list[str]` | `build-cited-by` graph asset | Internal `point_id`s of papers that cite this one. Preserved on stub promotion. |
 | `referenced_works` | `list[str]` (OpenAlex `W...`) | OpenAlex crawler; `enrich-4-refs-by-doi-via-s2`; `enrich-2-refs-by-doi-via-crossref` | Outgoing citation targets. Feeds the citation graph and the ref-based stub creation path. |
 | `fwci` | `float` | P1 enrich | Field-Weighted Citation Impact (OpenAlex; 1.0 = field average). Useful for priority-based labeling (fwci ≥ 5 keeps 47 % of P2/P3 subset). |
@@ -118,6 +118,7 @@ Fields added by later pipeline stages (embedding, similarity graph, clustering, 
 | Field | Type | Written by | Purpose |
 |---|---|---|---|
 | `similar_papers` | `dict` | `compute-similarity` | Pre-computed similar paper IDs with cosine scores. |
+| `searchable_stub` | `bool` | `embed_high_value_stubs.py` (B) | True on the ~10.8K most-cited abstract-bearing stubs that were embedded. Indexed 2026-07-17 — the search stub-exclusion is `is_stub AND NOT searchable_stub`, so exactly these surface. |
 | `cluster_id` | `int` | `topic-clusters` | Cluster assignment from HDBSCAN (or replacement). |
 | `umap_x`, `umap_y` | `float` | `topic-clusters` | 2D UMAP coordinates for the notable-papers map UI. |
 | `pagerank` | `float` | `citation-graph` | PageRank score over the internal citation graph. |
@@ -224,7 +225,7 @@ Only fields with a currently-active DQ rule are listed. Rules in `src/core/pipel
 
 ## 4. Index status
 
-Full source of truth is `curl http://localhost:6333/collections/lexicon_arxiv_v3 | jq .result.payload_schema`. Snapshot as of 2026-07-06:
+Full source of truth is `curl http://localhost:6333/collections/lexicon_arxiv_v3 | jq .result.payload_schema`. Snapshot as of 2026-07-17:
 
 | Field | Type | Points populated | Added |
 |---|---|---:|---|
@@ -247,6 +248,9 @@ Full source of truth is `curl http://localhost:6333/collections/lexicon_arxiv_v3
 | `primary_topic.subfield.display_name` | keyword | ~3.7 M | 2026-07-08 (Wave 4c linguistics-subfield keep) |
 | `injection_path` | keyword | 2.59 M | 2026-07-08 (Wave 4c delete-set split: anchor vs concept) |
 | `demoted_from_real` | bool | 2 483 834 | 2026-07-09 (Wave 4c — marks P2/P3 non-CS papers demoted to stubs) |
+| `cited_by_count_internal` | integer | ~3.06 M | 2026-07-17 (A3 — server-side `order_by` for high-value stub selection; was full-scroll+Python-sort over 5 M stubs) |
+| `identifier_type` | keyword | ~2.9 M stubs | 2026-07-17 (A3 — stub enrichment path split doi/arxiv/openalex/title server-side) |
+| `searchable_stub` | bool | 10 842 | 2026-07-17 (B stub-vectors — gates the search stub-exclusion so high-value cited stubs surface) |
 
 **Rule** (see [`../design/bulk-vs-incremental-audit.md`](../design/bulk-vs-incremental-audit.md) §Third rule): any new bulk-scroll filter must use only fields from this list. Adding a filter on an unindexed payload field at 6.2 M-scale is a deterministic 60 s server-side timeout.
 

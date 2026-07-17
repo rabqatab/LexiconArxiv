@@ -420,6 +420,15 @@ lexiconarxiv/
 
 ## Recent Updates
 
+### v0.13.8 (Jul 2026) — Corpus quality (type gate) + stub scale-up + retrieval pipeline completion
+
+Closed the remaining corpus-quality and retrieval backlog. Measure-first paid off: most of the "advanced retrieval" backlog turned out already shipped, and the stub-enrichment "scheduling gap" was really a 5 M-scroll scale bug.
+
+- **A1(a) — non-paper `type` gate inside the CS keep-set:** Wave 4c removed cross-domain junk by *topic*; this removes the non-paper *types* that stayed on-topic (a `book` whose abstract is a table-of-contents, an `editorial` in a CS journal). Measured 165 K non-article works in the 1.19 M keep-set, demoted **44,287** clear non-paper types (book/paratext/editorial/peer-review/…) to stubs — KEEPING `review` (60.7 K surveys), `book-chapter`, `dissertation`, `report`, `dataset`, `letter`, and all no-type crawler papers. Durable `topic_gate.is_keep_type` at P2/P3 + `nonpaper_type_share` DQ warn-check (baseline 0 %).
+- **A3 — high-value stub selection made scalable:** `get_most_cited_stubs` full-scrolled all **5.0 M** stubs and sorted in Python on every enrich call — the real reason cited-but-absent papers never got enriched. Added an integer index on `cited_by_count_internal` + keyword on `identifier_type` and a server-side `order_by` rewrite: **5 M-scroll → 39 ms**. (Enrichment yield is inherently low — the highest-cited stubs are ~17 % fabricated 6-billion OpenAlex IDs that 404; a StubEnricher async-gather hang at scale is filed as a follow-up.)
+- **A4 — similarity graph 67× faster:** the bottleneck was the per-paper `set_payload` write loop, not the (already batched) query. Now one `batch_update_points(wait=False)` per batch + a `--only-missing` incremental mode (453 K embedded → 137 K without edges). **Verified 0.11 s/paper** (was 7.4 s); daily runs touch only new papers.
+- **B — retrieval pipeline completed:** the core (RetrievalConfig, fast/quality/comprehensive presets, RAG-Fusion, reranker, MMR, citation-boost, HyDE, pipeline-info) was already shipped. Added the last four: **query decomposition** (split "BERT vs GPT for code" into sub-questions), **neural PRF** (2-pass query-vector refinement — reshapes ranking DiffCSE→SimCSE), **adaptive-weighted RRF** (tilt dense-vs-BM25 candidate share by query shape), and **stub-vectors** — embedded the **10,842** most-cited abstract-bearing stubs and gated them via `searchable_stub` so exactly those cited-but-absent papers surface (WMT22/COMET-22 now findable) while the other ~5 M stubs stay out of the HNSW, preserving Wave 4c's search-speed win. Also fixed a latent HyDE/RAG-Fusion bug: qwen3:8b's thinking mode ate the 10 s budget → empty output; `think:false` makes all LLM query stages reliable.
+
 ### v0.13.7 (Jul 2026) — Wave 4c Phase 4/4b: label + re-embed the keep-set; MCP search hardened
 
 Turned the cleaned corpus's labels into actual search quality, and fixed a silent search degradation.
