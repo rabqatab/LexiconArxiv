@@ -29,7 +29,12 @@ PAGE = 96  # papers per scroll page / embed batch
 def target_filter(year_min: int) -> q.Filter:
     return q.Filter(
         must=[
-            q.FieldCondition(key="abstract_structure_source", match=q.MatchValue(value="vllm")),
+            # Any LLM-labeled source needs section vectors — vllm AND ollama.
+            # granite-4.1-8b is the same model on both backends, so ollama labels
+            # are equal quality; they just also need re-embedding to reach search
+            # (964 such papers as of 2026-07-17). No re-LABEL needed.
+            q.FieldCondition(key="abstract_structure_source",
+                             match=q.MatchAny(any=["vllm", "ollama"])),
             q.FieldCondition(key="year", range=q.Range(gte=year_min)),
         ],
         must_not=[

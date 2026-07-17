@@ -102,12 +102,17 @@ class StubEnricher(BaseEnricher, OpenAlexMixin, CrossRefMixin):
 
         logger.info(f"Enriching {len(stubs_to_enrich)} stub papers...")
 
-        # Process stubs in parallel
-        tasks = []
-        for stub_id, payload in stubs_to_enrich:
-            tasks.append(self._enrich_single_stub(stub_id, payload, progress))
-
-        await asyncio.gather(*tasks)
+        # Process in bounded chunks. _enrich_single_stub makes SYNCHRONOUS Qdrant
+        # calls (merge/update/dup-check) on the sync client; gathering all N tasks
+        # at once (N up to 20K) piles up coroutines + exhausts the connection pool
+        # and the run stalls at 0% CPU (observed 2026-07-17). A chunk barrier caps
+        # in-flight tasks and gives the pool a chance to drain between chunks.
+        CHUNK = max(self.max_concurrent * 4, 32)
+        for i in range(0, len(stubs_to_enrich), CHUNK):
+            chunk = stubs_to_enrich[i : i + CHUNK]
+            await asyncio.gather(
+                *(self._enrich_single_stub(sid, pl, progress) for sid, pl in chunk)
+            )
 
         progress.last_updated = datetime.now(timezone.utc).isoformat()
         logger.info(

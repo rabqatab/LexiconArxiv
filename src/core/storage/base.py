@@ -266,6 +266,20 @@ class QdrantStorage:
             logger.info("Created bool payload index on 'searchable_stub'")
         except Exception:
             pass
+        # alternate_identifiers.* — the stub-dedup lookup in
+        # find_stub_by_alternate_identifier scrolls these; unindexed at 5M stubs
+        # it's a 60-150s server-side timeout PER enriched stub, which stalls the
+        # whole enrich_stubs async loop (2026-07-17 hang root cause).
+        for sub in ("doi", "arxiv", "openalex"):
+            try:
+                self.client.create_payload_index(
+                    collection_name=self.collection_name,
+                    field_name=f"alternate_identifiers.{sub}",
+                    field_schema=models.PayloadSchemaType.KEYWORD,
+                )
+                logger.info(f"Created keyword payload index on 'alternate_identifiers.{sub}'")
+            except Exception:
+                pass
 
     def delete_collection(self) -> bool:
         """Delete the collection.
