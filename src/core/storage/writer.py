@@ -367,6 +367,40 @@ class BatchWriter:
         )
         return len(updates)
 
+    def batch_update_similar_papers(
+        self,
+        updates: list[tuple[str, list]],  # [(point_id, similar_papers), ...]
+    ) -> int:
+        """Batch-write ``similar_papers`` for a batch of papers in one HTTP call.
+
+        Replaces the per-paper ``set_payload`` loop in compute_similarity_batch
+        (A4, 2026-07-17) — batch_size=20 previously meant 20 sequential writes
+        per batch, dominating the wall-clock over the single mega-batch query.
+        Same batched-write contract as batch_update_abstract_structure:
+        ``wait=False`` (async ack); similarity is idempotent so a ~5 s crash
+        window just recomputes on the next run.
+        """
+        if not updates:
+            return 0
+        operations = [
+            models.SetPayloadOperation(
+                set_payload=models.SetPayload(
+                    payload={"similar_papers": similar},
+                    points=[point_id],
+                )
+            )
+            for point_id, similar in updates
+        ]
+        retry_qdrant(
+            lambda: self.client.batch_update_points(
+                collection_name=self.collection_name,
+                update_operations=operations,
+                wait=False,
+            ),
+            label=f"batch_update_similar_papers({len(updates)} points)",
+        )
+        return len(updates)
+
     def batch_update_code_repos(
         self,
         updates: list[tuple[str, list[dict], str | None]],

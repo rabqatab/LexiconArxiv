@@ -171,13 +171,21 @@ def _compute_batch_similarities(
 def compute_similarity_batch(
     storage: QdrantStorage,
     k: int = 10,
-    batch_size: int = 20,
+    batch_size: int = 50,
     limit: int | None = None,
     edge_types: dict | None = None,
+    only_missing: bool = False,
 ) -> dict:
     """Compute similarity for all papers using batched Qdrant queries.
 
-    Sends batch_size × 5 queries per HTTP call via query_batch_points.
+    Sends batch_size × 5 queries per HTTP call via query_batch_points, and
+    writes the whole batch's results in ONE batch_update_points call (A4) —
+    the per-paper set_payload loop was the wall-clock bottleneck, not the query.
+
+    only_missing: skip papers that already have a ``similar_papers`` payload, so
+    a re-run is incremental (compute only new/re-embedded papers) instead of a
+    full 10-day recompute. The scroll's HasVector + is_stub filter already
+    restricts to embedded real papers.
     """
     start = time.time()
     types = edge_types or EDGE_TYPES
@@ -188,6 +196,10 @@ def compute_similarity_batch(
     updated = 0
     offset = None
 
+    must_not = [models.FieldCondition(key="is_stub", match=models.MatchValue(value=True))]
+    if only_missing:
+        must_not.append(models.IsEmptyCondition(is_empty=models.PayloadField(key="similar_papers")))
+
     while True:
         results, next_offset = storage.client.scroll(
             collection_name=storage.collection_name,
@@ -195,11 +207,7 @@ def compute_similarity_batch(
                 must=[
                     models.HasVectorCondition(has_vector=STRUCTURED_VECTOR_NAME),
                 ],
-                must_not=[
-                    models.FieldCondition(
-                        key="is_stub", match=models.MatchValue(value=True)
-                    ),
-                ],
+                must_not=must_not,
             ),
             limit=batch_size,
             offset=offset,
@@ -213,16 +221,16 @@ def compute_similarity_batch(
         # Compute all similarities for the batch in one call
         batch_similarities = _compute_batch_similarities(storage, results, k, types)
 
-        # Store results
-        for point, similar in zip(results, batch_similarities):
-            if similar:
-                storage.client.set_payload(
-                    collection_name=storage.collection_name,
-                    payload={"similar_papers": similar},
-                    points=[str(point.id)],
-                )
-                updated += 1
-            processed += 1
+        # Store the whole batch in one HTTP round-trip
+        batch_updates = [
+            (str(point.id), similar)
+            for point, similar in zip(results, batch_similarities)
+            if similar
+        ]
+        if batch_updates:
+            storage.batch_update_similar_papers(batch_updates)
+            updated += len(batch_updates)
+        processed += len(results)
 
         if processed % 1000 == 0:
             elapsed = time.time() - start

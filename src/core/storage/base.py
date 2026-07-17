@@ -645,6 +645,12 @@ class QdrantStorage:
     ) -> int:
         return self.writers.batch_update_abstract_structure(updates)
 
+    def batch_update_similar_papers(
+        self,
+        updates: list[tuple[str, list]],
+    ) -> int:
+        return self.writers.batch_update_similar_papers(updates)
+
     def batch_update_code_repos(
         self,
         updates: list[tuple[str, list[dict], str | None]],
