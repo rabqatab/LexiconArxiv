@@ -221,47 +221,49 @@ class StubManager:
         self,
         limit: int = 50,
         min_citations: int = 1,
+        identifier_type: str | None = None,
     ) -> list[tuple[str, dict]]:
         """Get the most cited stub papers.
 
         Args:
             limit: Maximum number of stubs to return.
             min_citations: Minimum internal citation count.
+            identifier_type: If set, only stubs with this indexed identifier_type
+                (doi/arxiv/openalex). Pushes the type filter server-side so the
+                top-N are drawn from the *resolvable* pool — without it the
+                highest-cited stubs are dominated by S2/title types enrich-8
+                cannot resolve, wasting the limit (2/100 hit rate observed).
 
         Returns:
             List of (stub_id, payload) sorted by citation count descending.
+
+        Server-side ``order_by`` on the indexed ``cited_by_count_internal`` (A3,
+        2026-07-17) walks the integer index from the highest count down and
+        stops after ``limit`` matches — no full stub scroll. Only unenriched
+        stubs (no title) are returned, since enrichment is the only caller and a
+        stub that already has a title needs no lookup. Requires the integer +
+        identifier_type indices (ensure_stub_enrichment_indices).
         """
-        stubs: list[tuple[int, str, dict]] = []  # (count, id, payload)
-
-        offset = None
-        while True:
-            results, offset = self.client.scroll(
-                collection_name=self.collection_name,
-                scroll_filter=models.Filter(
-                    must=[
-                        models.FieldCondition(
-                            key="is_stub",
-                            match=models.MatchValue(value=True),
-                        )
-                    ]
-                ),
-                limit=1000,
-                offset=offset,
-                with_payload=True,
-            )
-
-            for point in results:
-                cite_count = point.payload.get("cited_by_count_internal", 0)
-                if cite_count >= min_citations:
-                    stubs.append((cite_count, str(point.id), point.payload))
-
-            if offset is None:
-                break
-
-        # Sort by citation count descending
-        stubs.sort(reverse=True, key=lambda x: x[0])
-
-        return [(stub_id, payload) for _, stub_id, payload in stubs[:limit]]
+        must = [
+            models.FieldCondition(key="is_stub", match=models.MatchValue(value=True)),
+            models.FieldCondition(
+                key="cited_by_count_internal",
+                range=models.Range(gte=min_citations),
+            ),
+            # unenriched only — a stub with a title needs no lookup
+            models.IsEmptyCondition(is_empty=models.PayloadField(key="title")),
+        ]
+        if identifier_type:
+            must.append(models.FieldCondition(
+                key="identifier_type", match=models.MatchValue(value=identifier_type)))
+        results, _ = self.client.scroll(
+            collection_name=self.collection_name,
+            scroll_filter=models.Filter(must=must),
+            order_by=models.OrderBy(key="cited_by_count_internal", direction=models.Direction.DESC),
+            limit=limit,
+            with_payload=True,
+        )
+        return [(str(point.id), point.payload) for point in results]
 
     def get_stubs_for_enrichment(
         self,

@@ -86,26 +86,13 @@ class StubEnricher(BaseEnricher, OpenAlexMixin, CrossRefMixin):
         """
         progress = StubEnrichmentProgress()
 
-        # Get most-cited stubs that need enrichment
-        stubs = self.storage.get_most_cited_stubs(
+        # Get most-cited stubs that need enrichment. Type filter + title-empty
+        # filter are both server-side now (A3) — no client-side re-filtering.
+        stubs_to_enrich = self.storage.get_most_cited_stubs(
             limit=limit,
             min_citations=min_citations,
+            identifier_type=identifier_type,
         )
-
-        # Filter by type if specified
-        if identifier_type:
-            stubs = [
-                (stub_id, payload)
-                for stub_id, payload in stubs
-                if payload.get("identifier_type") == identifier_type
-            ]
-
-        # Filter out already-enriched stubs (have title)
-        stubs_to_enrich = [
-            (stub_id, payload)
-            for stub_id, payload in stubs
-            if not payload.get("title")
-        ]
 
         progress.total_to_process = len(stubs_to_enrich)
 

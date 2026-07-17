@@ -155,6 +155,7 @@ class QdrantStorage:
             self.ensure_venue_text_index()
             self.ensure_stub_payload_index()
             self.ensure_identifier_indices()
+            self.ensure_stub_enrichment_indices()
             return True
 
     def ensure_venue_text_index(self) -> None:
@@ -224,6 +225,37 @@ class QdrantStorage:
                 logger.info(f"Created keyword payload index on '{field}'")
             except Exception:
                 pass  # Already exists
+
+    def ensure_stub_enrichment_indices(self) -> None:
+        """Indices that make stub enrichment scalable at 5M+ stubs (A3, 2026-07-17).
+
+        Without these, get_most_cited_stubs full-scrolls every stub (5M points,
+        full payload) and sorts in Python on every enrich-8 call — the same
+        unindexed-at-scale failure class as the Wave 4c enricher timeouts. The
+        integer index on cited_by_count_internal lets Qdrant `order_by` return
+        the top-N cited stubs server-side; the keyword index on identifier_type
+        lets the doi/arxiv/openalex/title split filter server-side.
+
+        Idempotent (create_payload_index is a no-op if the index exists).
+        """
+        try:
+            self.client.create_payload_index(
+                collection_name=self.collection_name,
+                field_name="cited_by_count_internal",
+                field_schema=models.PayloadSchemaType.INTEGER,
+            )
+            logger.info("Created integer payload index on 'cited_by_count_internal'")
+        except Exception:
+            pass
+        try:
+            self.client.create_payload_index(
+                collection_name=self.collection_name,
+                field_name="identifier_type",
+                field_schema=models.PayloadSchemaType.KEYWORD,
+            )
+            logger.info("Created keyword payload index on 'identifier_type'")
+        except Exception:
+            pass
 
     def delete_collection(self) -> bool:
         """Delete the collection.
@@ -659,8 +691,9 @@ class QdrantStorage:
         self,
         limit: int = 50,
         min_citations: int = 1,
+        identifier_type: str | None = None,
     ) -> list[tuple[str, dict]]:
-        return self.stubs.get_most_cited_stubs(limit, min_citations)
+        return self.stubs.get_most_cited_stubs(limit, min_citations, identifier_type)
 
     def get_stubs_for_enrichment(
         self,
