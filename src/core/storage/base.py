@@ -256,6 +256,16 @@ class QdrantStorage:
             logger.info("Created keyword payload index on 'identifier_type'")
         except Exception:
             pass
+        # searchable_stub gates the main search's stub-exclusion (B stub-vectors)
+        try:
+            self.client.create_payload_index(
+                collection_name=self.collection_name,
+                field_name="searchable_stub",
+                field_schema=models.PayloadSchemaType.BOOL,
+            )
+            logger.info("Created bool payload index on 'searchable_stub'")
+        except Exception:
+            pass
 
     def delete_collection(self) -> bool:
         """Delete the collection.

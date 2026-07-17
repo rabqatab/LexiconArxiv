@@ -148,9 +148,14 @@ class SearchService:
         """Build Qdrant filter from search parameters."""
         must = []
         must_not = [
-            # Exclude stubs (is_stub is null on real papers, true on stubs)
-            models.FieldCondition(
-                key="is_stub", match=models.MatchValue(value=True)
+            # Exclude stubs (is_stub is null on real papers, true on stubs),
+            # EXCEPT high-value stubs flagged searchable_stub=True — the
+            # cited-but-not-in-corpus papers we embedded (B stub-vectors,
+            # 2026-07-17). Nested filter = "is_stub AND NOT searchable_stub".
+            models.Filter(
+                must=[models.FieldCondition(key="is_stub", match=models.MatchValue(value=True))],
+                must_not=[models.FieldCondition(
+                    key="searchable_stub", match=models.MatchValue(value=True))],
             ),
         ]
         if venues:
