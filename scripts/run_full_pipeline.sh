@@ -1,5 +1,16 @@
 #!/bin/bash
-# Full pipeline script (Orchestrator)
+# Crawler-based BULK pipeline (Orchestrator)
+#
+# TERMINOLOGY (three distinct ingest paths — do not conflate):
+#   - THIS script = crawler bulk: pull fresh papers from arXiv/ACL/DBLP/AAAI/
+#     OpenReview/ACM sources, then post-process. Legacy full-corpus rebuild path.
+#   - snapshot bootstrap (P1->P4, no shell orchestrator): enrich-corpus-fields /
+#     resolve-stubs-from-snapshot / discover-corpus-gaps / extend-cited-by-from-
+#     snapshot — the OpenAlex-snapshot path that actually built the 6.2M corpus.
+#   - incremental (run_incremental_pipeline.sh): daily/weekly trickle updates.
+# The bulk-vs-incremental gap audit (docs/design/bulk-vs-incremental-audit.md)
+# uses "bulk" to mean the SNAPSHOT bootstrap, not this crawler script.
+#
 # Runs all 7 stages in sequence:
 #   Stage 1: Collection    - Collect papers from all sources
 #   Stage 2: Deduplication - Remove duplicate papers
@@ -15,6 +26,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 cd "$PROJECT_ROOT"
+
+# Load .env so QDRANT_URL / QDRANT_COLLECTION come from the single source of
+# truth (currently lexicon_arxiv_v3). Without this the snapshot pre-check below
+# fell back to the stale "lexicon_arxiv" default and always read 0 points ->
+# silently skipped the safety snapshot. .env is simple KEY=value (source-safe).
+set -a
+[ -f .env ] && . ./.env
+set +a
 
 # Default values
 SINCE_YEAR=${SINCE_YEAR:-2020}
@@ -235,6 +254,11 @@ else
 fi
 
 # Stage 6+7: Keywords & Labeling (parallel — independent fields)
+# ORDERING NOTE: this crawler bulk runs Resolution(4) BEFORE Keywords/Labeling,
+# whereas run_incremental_pipeline.sh runs Keywords/Labeling BEFORE resolve-refs.
+# Both orders are correct: keyword extraction and abstract labeling read only a
+# paper's own title/abstract — they have no dependency on reference resolution,
+# so either side may run first. The order differs only for historical reasons.
 KEYWORDS_PID=""
 LABELING_PID=""
 
@@ -277,6 +301,14 @@ echo ""
 echo "=========================================="
 echo "Pipeline complete!"
 echo "=========================================="
+echo ""
+# This crawler bulk has NO embedding stage — new papers are queued to
+# embedding_queue.jsonl and stay INVISIBLE to hybrid search until drained.
+# (Contrast: run_incremental_pipeline.sh Step 10 embeds inline.)
+echo "[REMINDER] No embedding ran. New papers are queued to embedding_queue.jsonl"
+echo "           and are NOT searchable until you drain the queue:"
+echo "             uv run python -m src.cli.core_collect embed-papers"
+echo "           See docs/runbooks/embed-drain-strategy.md."
 echo ""
 
 # Final status

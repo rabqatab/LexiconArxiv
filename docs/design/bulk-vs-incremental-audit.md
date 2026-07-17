@@ -7,6 +7,20 @@
 
 ---
 
+## Terminology (three ingest paths — do not conflate)
+
+The word "bulk" in this document means the **snapshot bootstrap**, not the crawler script. There are three distinct ingest paths:
+
+| Term used here | What it is | Orchestrator |
+|---|---|---|
+| **snapshot bootstrap** ("bulk") | OpenAlex-snapshot phases P1→P4 (`enrich-corpus-fields` / `resolve-stubs-from-snapshot` / `discover-corpus-gaps` / `extend-cited-by-from-snapshot`). Built the 6.2M corpus. | none (CLI / `snapshot-live-delta`) |
+| **crawler bulk** ("full") | Pull fresh papers from arXiv/ACL/DBLP/AAAI/OpenReview/ACM, then post-process. Legacy full rebuild. | `scripts/run_full_pipeline.sh` |
+| **incremental** | Daily/weekly/quarterly trickle updates. | `scripts/run_incremental_pipeline.sh` |
+
+The step-by-step mapping below is **snapshot bootstrap vs incremental**. `run_full_pipeline.sh` (crawler bulk) is a separate path and is not the "bulk" column here.
+
+---
+
 ## Motivation
 
 The bulk snapshot bootstrap (P1→P4) and the incremental pipeline (`run_incremental_pipeline.sh`) were designed by different tracks at different times. Bootstrap treats "papers arrive in millions from a JSONL snapshot"; incremental treats "papers trickle in daily from API sources." Each was carefully engineered on its own — but the mapping between them was never written down. The labeling gap is proof: if you're not looking at both sides at once, you can lose an entire pipeline stage on 3 million papers without a single test failure or user error.

@@ -325,6 +325,10 @@ if [ "$SKIP_LABELING" = false ]; then
 fi
 
 # Step 7: Resolve references and create stubs — recent papers only
+# ORDERING NOTE: resolve-refs runs AFTER keywords(5)/labeling(6) here, the
+# reverse of run_full_pipeline.sh (crawler bulk runs Resolution before them).
+# Both are correct — keyword/label read only the paper's own title/abstract and
+# do not depend on resolution. Order differs for historical reasons only.
 # (Wave 1e-quinquies, 2026-07-07: 21fe spent 7+ h in Step 7.1 Normalize
 # alone because the resolver's 3 sub-steps swept the full 2.8 M-paper
 # referenced_works backlog on every incremental cycle. --recent-days
