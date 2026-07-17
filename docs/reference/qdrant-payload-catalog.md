@@ -251,6 +251,9 @@ Full source of truth is `curl http://localhost:6333/collections/lexicon_arxiv_v3
 | `cited_by_count_internal` | integer | ~3.06 M | 2026-07-17 (A3 — server-side `order_by` for high-value stub selection; was full-scroll+Python-sort over 5 M stubs) |
 | `identifier_type` | keyword | ~2.9 M stubs | 2026-07-17 (A3 — stub enrichment path split doi/arxiv/openalex/title server-side) |
 | `searchable_stub` | bool | 10 842 | 2026-07-17 (B stub-vectors — gates the search stub-exclusion so high-value cited stubs surface) |
+| `alternate_identifiers.doi` | keyword | — | 2026-07-17 (enricher-hang fix — `find_stub_by_alternate_identifier` dedup scroll was unindexed → 60-150s timeout per enriched stub) |
+| `alternate_identifiers.arxiv` | keyword | — | 2026-07-17 (same — stub dedup) |
+| `alternate_identifiers.openalex` | keyword | — | 2026-07-17 (same — stub dedup) |
 
 **Rule** (see [`../design/bulk-vs-incremental-audit.md`](../design/bulk-vs-incremental-audit.md) §Third rule): any new bulk-scroll filter must use only fields from this list. Adding a filter on an unindexed payload field at 6.2 M-scale is a deterministic 60 s server-side timeout.
 

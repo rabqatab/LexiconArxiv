@@ -420,6 +420,12 @@ lexiconarxiv/
 
 ## Recent Updates
 
+### v0.13.9 (Jul 2026) — Enricher-hang root cause + Ollama re-label verdict + labels-reach-search re-embed
+
+- **StubEnricher hang fixed (root cause, not symptom):** every run that actually enriched stubs stalled at 0 % CPU. First hypothesis (20 K-task `asyncio.gather` pileup) was **wrong** — bounded chunking alone didn't fix it. Real cause: `find_stub_by_alternate_identifier` scrolled `alternate_identifiers.{doi,arxiv,openalex}` — all **unindexed** — over 5 M stubs = 60-150 s Qdrant timeout per enriched stub, serialized on the async loop. Indexed the three nested fields → arxiv `--limit 30` went from a >100 s hang (zero output) to **7.2 s** (30 processed, 7 enriched, 16 merged). Same unindexed-filter-at-scale class as Wave 4c, recurring in a different code path.
+- **Ollama re-label: verified unnecessary, closed.** The "Issue B" backlog assumed Ollama labels were inferior/partial. Both premises are false: Ollama and vLLM run the **same model** (granite-4.1-8b — the migration was throughput, 750/hr → 30 K/hr), and the "Ollama truncates long abstracts" claim is disproven (long-abstract Ollama-labeled papers carry `result`/`contribution` tail roles 100 % of the time). Scope was 9,670 papers, not the feared ~250 K.
+- **Labels-reach-search re-embed:** the actual gap was **section vectors, not labels** — ~51 K labeled papers (mostly vllm 2010+, a recurring post-Phase-4b gap where labeling ran but section-vector re-embedding didn't) had `abstract_structure` but no `section-*` vectors, so their labels never reached multi-vector search. `reembed_labeled_sections.py` now matches vllm OR ollama; a 2010+ (~31 K) re-embed is in flight.
+
 ### v0.13.8 (Jul 2026) — Corpus quality (type gate) + stub scale-up + retrieval pipeline completion
 
 Closed the remaining corpus-quality and retrieval backlog. Measure-first paid off: most of the "advanced retrieval" backlog turned out already shipped, and the stub-enrichment "scheduling gap" was really a 5 M-scroll scale bug.
