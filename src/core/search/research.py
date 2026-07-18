@@ -64,10 +64,16 @@ async def research_topic(
     # ------------------------------------------------------------------
     # Use quality config for research queries unless caller overrides
     cfg = config or RetrievalConfig.quality()
+    # Over-fetch for re-ranking. Type exclusion (below) is a post-retrieval
+    # title-keyword filter — benchmark/dataset/survey are content categories,
+    # not payload types, so they can't be a Qdrant filter. Scale the fetch with
+    # `limit` (and wider when excluding) so exclusions don't shrink the returned
+    # set below what the caller asked for.
+    over_fetch = max(50, limit * (4 if exclude_types else 2))
     search_results = await search_service.search(
         query=query,
         year_min=year_min,
-        limit=50,
+        limit=over_fetch,
         config=cfg,
     )
 
