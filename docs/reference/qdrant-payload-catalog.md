@@ -92,7 +92,7 @@ Fields are grouped by role. Each entry: type · source(s) that write it · descr
 | Field | Type | Written by | Purpose |
 |---|---|---|---|
 | `abstract_structure` | `dict` | `label-abstracts` (Step 6) | Sentence role classification: `{task, domain, background, approach, method, result, contribution}`. Truncated to first 25 sentences at write time (`labeler.py::MAX_SENTENCES_TO_LABEL`, 2026-07-06). |
-| `abstract_structure_source` | `keyword` (`vllm`, `ollama`, `none`) | `label-abstracts` | Which backend produced the current label. Indexed 2026-07-06 to enable Ollama-partial re-label pass (Wave 4b Issue B). |
+| `abstract_structure_source` | `keyword` (`vllm`, `ollama`, `none`) | `label-abstracts` | Which backend produced the current label. Indexed 2026-07-06. (Originally for a Wave 4b Ollama re-label pass — since closed as unnecessary, 2026-07-17: same granite-4.1-8b model, no truncation. Now used to scope re-EMBED of labeled-but-vectorless papers.) |
 
 ### 1.8 Provenance / bookkeeping
 
@@ -272,7 +272,7 @@ must=[models.IsEmptyCondition(is_empty=models.PayloadField(key="abstract_structu
 must_not=[models.FieldCondition(key="is_stub", match=models.MatchValue(value=True))]
 ```
 
-**Ollama-labeled subset (candidates for vLLM re-label)**
+**Ollama-labeled subset** (NOTE: re-label is NOT needed — verified 2026-07-17: Ollama & vLLM are the same granite-4.1-8b and Ollama didn't truncate; only ~9.7 K papers, and the real gap was missing `section-*` vectors → re-embed, not re-label)
 
 ```python
 must=[models.FieldCondition(key="abstract_structure_source", match=models.MatchValue(value="ollama"))]

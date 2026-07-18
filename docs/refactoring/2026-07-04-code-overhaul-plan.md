@@ -100,6 +100,8 @@ Discovered 2026-07-06 during catchup labeling. Two intertwined issues — see [`
 
 Scope is **cross-provenance** — not just P3 — because Issue B touches original-crawler and incremental papers too, and Issue A may exist in trace amounts elsewhere.
 
+> **RESOLVED / CLOSED 2026-07-17.** Issue A: done — Wave 4c demoted cross-domain non-article junk by topic, and A1(a) demoted the 44,287 clear non-paper *types* inside the CS keep-set to stubs, with a durable `topic_gate.is_keep_type` gate at P2/P3 + a `nonpaper_type_share` DQ warn-check. So 4b-1/2/3/6 landed in a leaner form (demote-to-stub, not hard-delete). **Issue B: no re-label needed** — both premises were false. Ollama and vLLM run the **same model** (granite-4.1-8b; the migration was throughput, not quality), and the "Ollama truncates long abstracts" claim is disproven (long-abstract Ollama-labeled papers carry `result`/`contribution` tail roles 100 % of the time). Real scope was 9,670 papers (not 250-400 K); the only gap was missing `section-*` vectors (re-EMBED, done via `reembed_labeled_sections.py`), not labels. **Do not run 4b-5.** Full record: [`docs/plans/TODO.md`](../plans/TODO.md) §Critical Data Quality.
+
 | Item | Files / actions |
 |---|---|
 | **4b-1. Enumerate `type` distribution across the ENTIRE corpus** | new: `scripts/analytics/count_by_type.py` (or a `type-stats` CLI). Report count per (`type`, `provenance`) cell. Provenance derived from: `injected_from_snapshot=true` (P3), `snapshot_filled_at` set but not injected (P2 promotion), rest = original crawler + incremental. |

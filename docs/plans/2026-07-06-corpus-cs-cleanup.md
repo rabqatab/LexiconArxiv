@@ -197,4 +197,6 @@ Node-2 high-util acceleration was attempted (idle 2nd GB10, 93 G free) but aband
 
 **Disk/RED:** the re-embed's in-place write churn drove Qdrant RED again while disk was actually healthy (290 G free) — a **stale frozen optimizer error** (`needed 232 GiB / available 225 GiB`, identical for minutes, unmoved by config PATCH). `docker restart qdrant` re-evaluated against live free space → grey → green in ~30 s, size stable 229 G. See [`../refactoring`]… actually the incident + fix live in memory `qdrant-disk-red-incident`; the durable fix remains a dedicated disk with headroom (§ discussed with the user 2026-07-14).
 
-**Still deferred:** pre-2020 labeling (skipped by choice); Ollama-partial re-label (Wave 4b Issue B); non-article `type` filter inside the keep-set.
+**Still deferred:** pre-2020 labeling (skipped by choice).
+
+**Closed 2026-07-17:** non-article `type` filter inside the keep-set (A1(a) — demoted 44,287 non-paper types, durable P2/P3 `is_keep_type` gate); Ollama-partial re-label (Wave 4b Issue B — verified unnecessary: same granite-4.1-8b model, no truncation; the real gap was `section-*` vectors, closed by a 2010+ re-embed).
