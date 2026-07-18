@@ -91,14 +91,32 @@ class BatchWriter:
 
         Returns:
             Number of papers updated.
+
+        One ``batch_update_points`` call (``wait=False``) instead of N
+        ``set_payload`` round-trips — see batch_update_abstract_structure for
+        the perf/idempotency contract. Enrichment is fill-only-missing, so a
+        ~5 s crash window just re-enriches on the next run.
         """
+        if not updates:
+            return 0
         now = datetime.now(timezone.utc).isoformat()
-        for point_id, refs in updates:
-            self.client.set_payload(
-                collection_name=self.collection_name,
-                payload={"referenced_works": refs, "enriched_at": now},
-                points=[point_id],
+        operations = [
+            models.SetPayloadOperation(
+                set_payload=models.SetPayload(
+                    payload={"referenced_works": refs, "enriched_at": now},
+                    points=[point_id],
+                )
             )
+            for point_id, refs in updates
+        ]
+        retry_qdrant(
+            lambda: self.client.batch_update_points(
+                collection_name=self.collection_name,
+                update_operations=operations,
+                wait=False,
+            ),
+            label=f"batch_update_referenced_works({len(updates)} points)",
+        )
         return len(updates)
 
     def update_abstract(
@@ -135,14 +153,30 @@ class BatchWriter:
 
         Returns:
             Number of papers updated.
+
+        Batched write (``wait=False``); same contract as
+        batch_update_abstract_structure. Idempotent (fill-only-missing).
         """
+        if not updates:
+            return 0
         now = datetime.now(timezone.utc).isoformat()
-        for point_id, abstract in updates:
-            self.client.set_payload(
-                collection_name=self.collection_name,
-                payload={"abstract": abstract, "enriched_at": now},
-                points=[point_id],
+        operations = [
+            models.SetPayloadOperation(
+                set_payload=models.SetPayload(
+                    payload={"abstract": abstract, "enriched_at": now},
+                    points=[point_id],
+                )
             )
+            for point_id, abstract in updates
+        ]
+        retry_qdrant(
+            lambda: self.client.batch_update_points(
+                collection_name=self.collection_name,
+                update_operations=operations,
+                wait=False,
+            ),
+            label=f"batch_update_abstracts({len(updates)} points)",
+        )
         return len(updates)
 
     def update_paper_with_doi_and_refs(
@@ -183,17 +217,26 @@ class BatchWriter:
         Returns:
             Number of papers updated.
         """
+        if not updates:
+            return 0
         now = datetime.now(timezone.utc).isoformat()
-        for point_id, doi, refs in updates:
-            self.client.set_payload(
-                collection_name=self.collection_name,
-                payload={
-                    "doi": doi,
-                    "referenced_works": refs,
-                    "enriched_at": now,
-                },
-                points=[point_id],
+        operations = [
+            models.SetPayloadOperation(
+                set_payload=models.SetPayload(
+                    payload={"doi": doi, "referenced_works": refs, "enriched_at": now},
+                    points=[point_id],
+                )
             )
+            for point_id, doi, refs in updates
+        ]
+        retry_qdrant(
+            lambda: self.client.batch_update_points(
+                collection_name=self.collection_name,
+                update_operations=operations,
+                wait=False,
+            ),
+            label=f"batch_update_papers_with_doi_and_refs({len(updates)} points)",
+        )
         return len(updates)
 
     def batch_update_referenced_works_normalized(
@@ -208,12 +251,24 @@ class BatchWriter:
         Returns:
             Number of papers updated.
         """
-        for point_id, refs in updates:
-            self.client.set_payload(
-                collection_name=self.collection_name,
-                payload={"referenced_works": refs},
-                points=[point_id],
+        if not updates:
+            return 0
+        operations = [
+            models.SetPayloadOperation(
+                set_payload=models.SetPayload(
+                    payload={"referenced_works": refs}, points=[point_id],
+                )
             )
+            for point_id, refs in updates
+        ]
+        retry_qdrant(
+            lambda: self.client.batch_update_points(
+                collection_name=self.collection_name,
+                update_operations=operations,
+                wait=False,
+            ),
+            label=f"batch_update_referenced_works_normalized({len(updates)} points)",
+        )
         return len(updates)
 
     def batch_update_resolved_references(
@@ -229,12 +284,24 @@ class BatchWriter:
         Returns:
             Number of papers updated.
         """
-        for point_id, resolved_refs in updates:
-            self.client.set_payload(
-                collection_name=self.collection_name,
-                payload={"resolved_references": resolved_refs},
-                points=[point_id],
+        if not updates:
+            return 0
+        operations = [
+            models.SetPayloadOperation(
+                set_payload=models.SetPayload(
+                    payload={"resolved_references": resolved_refs}, points=[point_id],
+                )
             )
+            for point_id, resolved_refs in updates
+        ]
+        retry_qdrant(
+            lambda: self.client.batch_update_points(
+                collection_name=self.collection_name,
+                update_operations=operations,
+                wait=False,
+            ),
+            label=f"batch_update_resolved_references({len(updates)} points)",
+        )
         return len(updates)
 
     def batch_update_graph_metrics(
@@ -251,12 +318,22 @@ class BatchWriter:
         Returns:
             Number of papers updated.
         """
-        for point_id, metrics in updates:
-            self.client.set_payload(
-                collection_name=self.collection_name,
-                payload=metrics,
-                points=[point_id],
+        if not updates:
+            return 0
+        operations = [
+            models.SetPayloadOperation(
+                set_payload=models.SetPayload(payload=metrics, points=[point_id])
             )
+            for point_id, metrics in updates
+        ]
+        retry_qdrant(
+            lambda: self.client.batch_update_points(
+                collection_name=self.collection_name,
+                update_operations=operations,
+                wait=False,
+            ),
+            label=f"batch_update_graph_metrics({len(updates)} points)",
+        )
         return len(updates)
 
     def batch_update_keywords(
@@ -271,12 +348,24 @@ class BatchWriter:
         Returns:
             Number of papers updated.
         """
-        for point_id, keywords in updates:
-            self.client.set_payload(
-                collection_name=self.collection_name,
-                payload={"keywords": keywords},
-                points=[point_id],
+        if not updates:
+            return 0
+        operations = [
+            models.SetPayloadOperation(
+                set_payload=models.SetPayload(
+                    payload={"keywords": keywords}, points=[point_id],
+                )
             )
+            for point_id, keywords in updates
+        ]
+        retry_qdrant(
+            lambda: self.client.batch_update_points(
+                collection_name=self.collection_name,
+                update_operations=operations,
+                wait=False,
+            ),
+            label=f"batch_update_keywords({len(updates)} points)",
+        )
         return len(updates)
 
     def batch_update_keywords_with_source(
@@ -295,6 +384,9 @@ class BatchWriter:
         Returns:
             Number of papers updated.
         """
+        if not updates:
+            return 0
+        operations = []
         for update in updates:
             if len(update) == 4:
                 point_id, keywords, source, structured = update
@@ -309,11 +401,17 @@ class BatchWriter:
             if structured:
                 payload["keywords_structured"] = structured
 
-            self.client.set_payload(
+            operations.append(models.SetPayloadOperation(
+                set_payload=models.SetPayload(payload=payload, points=[point_id])
+            ))
+        retry_qdrant(
+            lambda: self.client.batch_update_points(
                 collection_name=self.collection_name,
-                payload=payload,
-                points=[point_id],
-            )
+                update_operations=operations,
+                wait=False,
+            ),
+            label=f"batch_update_keywords_with_source({len(updates)} points)",
+        )
         return len(updates)
 
     def batch_update_abstract_structure(
@@ -413,7 +511,10 @@ class BatchWriter:
         Returns:
             Number of papers updated.
         """
+        if not updates:
+            return 0
         now = datetime.now(timezone.utc).isoformat()
+        operations = []
         for point_id, repos, best_url in updates:
             payload: dict[str, Any] = {
                 "code_repositories": repos,
@@ -421,11 +522,17 @@ class BatchWriter:
             }
             if best_url:
                 payload["code_url"] = best_url
-            self.client.set_payload(
+            operations.append(models.SetPayloadOperation(
+                set_payload=models.SetPayload(payload=payload, points=[point_id])
+            ))
+        retry_qdrant(
+            lambda: self.client.batch_update_points(
                 collection_name=self.collection_name,
-                payload=payload,
-                points=[point_id],
-            )
+                update_operations=operations,
+                wait=False,
+            ),
+            label=f"batch_update_code_repos({len(updates)} points)",
+        )
         return len(updates)
 
     def clear_all_keywords(self) -> int:
@@ -466,17 +573,26 @@ class BatchWriter:
     ) -> int:
         """Apply fill-only-missing payload merges with provenance stamp. Returns count applied."""
         today = _utc_iso_date()
-        n = 0
+        operations = []
         for point_id, fields in updates:
             if not fields:
                 continue
-            self.client.set_payload(
+            operations.append(models.SetPayloadOperation(
+                set_payload=models.SetPayload(
+                    payload={**fields, provenance_key: today}, points=[point_id],
+                )
+            ))
+        if not operations:
+            return 0
+        retry_qdrant(
+            lambda: self.client.batch_update_points(
                 collection_name=self.collection_name,
-                payload={**fields, provenance_key: today},
-                points=[point_id],
-            )
-            n += 1
-        return n
+                update_operations=operations,
+                wait=False,
+            ),
+            label=f"batch_apply_field_fill({len(operations)} points)",
+        )
+        return len(operations)
 
     def batch_promote_stubs(self, promotions: list[dict]) -> list[dict]:
         """Atomic-per-item stub→real promotion with verify+rollback."""
