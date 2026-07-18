@@ -338,7 +338,11 @@ class ReferenceResolver(OpenAlexMixin):
                 if changed:
                     progress.updated += 1
 
-            # Batch update
+            # Batch update. This writer is wait=False (batch-write Wave 1e). Step 3
+            # (internal resolution) re-reads referenced_works and re-normalizes each
+            # ref on read (IdentifierNormalizer.normalize), so a not-yet-flushed
+            # normalize write here cannot corrupt resolution — persistence is a
+            # future-read convenience, not a correctness dependency.
             if updates:
                 retry_qdrant(
                     lambda: self.storage.batch_update_referenced_works_normalized(updates),
