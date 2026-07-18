@@ -128,10 +128,12 @@ Fields added by later pipeline stages (embedding, similarity graph, clustering, 
 
 | Field | Type | Written by | Purpose |
 |---|---|---|---|
-| `pdf_url` | `str` | Crawler | Direct PDF URL. |
+| `pdf_url` | `str` | Crawler; `enrich-oa-pdf-by-doi-via-unpaywall` (fill-only-missing) | Direct PDF URL. Unpaywall fills it for DOI papers with no crawler PDF. |
 | `abstract_url` | `str` | Crawler | Landing page. |
 | `best_oa_pdf_url` | `str` | P1 enrich (from `best_oa_location.pdf_url`) | Best open-access PDF URL. |
 | `open_access` | `dict` | P1 enrich | `{is_oa, oa_status, any_repository_has_fulltext, oa_url}`. |
+| `oa_status` | `str` | `enrich-oa-pdf-by-doi-via-unpaywall` | Unpaywall OA status (gold/green/hybrid/bronze) for the filled `pdf_url`. |
+| `oa_enriched_at` | `datetime` | `enrich-oa-pdf-by-doi-via-unpaywall` | Timestamp of the Unpaywall fill. |
 
 ### 1.11 Legacy / raw
 

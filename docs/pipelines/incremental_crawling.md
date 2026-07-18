@@ -168,6 +168,7 @@ Use the provided script for complete incremental updates:
 6. `label-abstracts --backend vllm --recent-days` — Label abstract sentences with rhetorical roles *(skip with `--skip-labeling`)*
 7. `resolve-refs --create-stubs --recent-days` — Resolve references and create stub papers *(all 3 resolver sub-steps scoped)*
 8. `enrich-8-metadata-by-stub-via-openalex` — Enrich stub paper metadata (top-cited stubs, `--limit 100` default)
+8.5. `reconcile-stubs --recent-days` — Promote stubs shadowed by newly-collected real papers, preserving their `cited_by` (runs before build-cited-by so counts land on the promoted paper)
 9. `build-cited-by --incremental` — Update the cited_by citation graph *(index-only filter on `graph_indexed` + `is_stub`; skip with `--skip-graph`)*
 10. `embed-papers --recent-days` — Embed new papers: dense + section-level + BM25 vectors *(skip with `--skip-embed`)*
 

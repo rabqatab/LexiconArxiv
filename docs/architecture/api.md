@@ -767,6 +767,10 @@ Returns pre-computed similar papers for a given paper ID.
 
 Returns corpus-level statistics for the dashboard UI: total papers, papers by venue/year/tier, enrichment coverage, and embedding progress.
 
+### 9.5 GET /api/corpus-gaps
+
+Returns the biggest citation-graph holes: `top_cited_missing` (the most-cited enriched stubs — papers the corpus references most but doesn't hold, each linked by DOI/arXiv/OpenAlex) and `top_missing_venues` (a venue tally over that set). Server-side `order_by` on the indexed `cited_by_count_internal` (no full scroll); 5-min cache, `?limit=N` (default 100), `?refresh=true`.
+
 ---
 
 ## 10. MCP Tools (Updated)

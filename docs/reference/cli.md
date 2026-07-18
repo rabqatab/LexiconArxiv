@@ -209,6 +209,18 @@ uv run python -m src.cli.core_collect dedup-cleanup --dry-run
 uv run python -m src.cli.core_collect dedup-cleanup
 ```
 
+### reconcile-stubs
+
+Promote stubs shadowed by newly-collected real papers, preserving the stub's `cited_by`. When incremental collection adds a real paper for a work a prior reference already stubbed, this merges the stub's citations into the real paper and deletes the stub (before `build-cited-by` so counts land on the promoted paper). Bulk-safe — run only in incremental cycles; `--recent-days N` scopes the scan.
+
+```bash
+# Preview promotable stubs (recent papers)
+uv run python -m src.cli.core_collect reconcile-stubs --recent-days 7 --dry-run
+
+# Run
+uv run python -m src.cli.core_collect reconcile-stubs --recent-days 7
+```
+
 ---
 
 ## Enrichment Commands
@@ -261,6 +273,21 @@ uv run python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --d
 
 # Run
 uv run python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --parallel 10
+```
+
+### enrich-oa-pdf-by-doi-via-unpaywall
+
+Fill `pdf_url` (+`oa_status`) for papers with a DOI but no PDF link, via Unpaywall's free by-DOI endpoint. Email required (`UNPAYWALL_EMAIL` / `CROSSREF_EMAIL` / `OPENALEX_EMAIL`), no API key. Fill-only-missing and idempotent; `--recent-days N` scopes to recently fetched papers for incremental cycles.
+
+```bash
+# Preview
+uv run python -m src.cli.core_collect enrich-oa-pdf-by-doi-via-unpaywall --dry-run
+
+# Run
+uv run python -m src.cli.core_collect enrich-oa-pdf-by-doi-via-unpaywall --parallel 10
+
+# Incremental (recent papers only)
+uv run python -m src.cli.core_collect enrich-oa-pdf-by-doi-via-unpaywall --recent-days 7
 ```
 
 ### enrich-4-refs-by-doi-via-s2

@@ -156,6 +156,7 @@ open http://localhost:8000/docs
 - `GET /api/paper/{paper_id}` - Full paper detail (includes similar papers by section type)
 - `GET /api/stats` - Corpus statistics
 - `GET /api/dashboard` - Data health monitoring (5-min TTL cache, `?refresh=true` to force)
+- `GET /api/corpus-gaps` - Most-cited papers NOT in the corpus + most-referenced uncollected venues (5-min cache)
 
 **Trends & Analytics Endpoints**:
 - `GET /api/trends/notable` - Top papers ranked by notable score
@@ -250,6 +251,7 @@ uv run python -m src.cli.core_collect enrich-1-refs-and-abstracts-by-doi-via-ope
 uv run python -m src.cli.core_collect enrich-2-refs-by-doi-via-crossref --parallel 5      # CrossRef (ACM/Springer)
 uv run python -m src.cli.core_collect enrich-4-refs-by-doi-via-s2                         # Semantic Scholar
 uv run python -m src.cli.core_collect enrich-6-abstracts-by-doi-via-openalex --parallel 10    # Abstracts
+uv run python -m src.cli.core_collect enrich-oa-pdf-by-doi-via-unpaywall --parallel 10        # Unpaywall OA PDF URLs
 
 # Resolve TITLE:xxx refs from GROBID (fuzzy match via OpenAlex)
 uv run python -m src.cli.core_collect enrich-9-resolve-title-refs-via-openalex --parallel 3
@@ -279,6 +281,7 @@ uv run python -m src.cli.core_collect build-cited-by  # Required for GraphRAG
 # Stub Papers (external references)
 uv run python -m src.cli.core_collect stub-stats                        # Most-cited external papers
 uv run python -m src.cli.core_collect enrich-8-metadata-by-stub-via-openalex --limit 1000         # Fetch metadata for stubs
+uv run python -m src.cli.core_collect reconcile-stubs --recent-days 7 --dry-run  # Promote stubs shadowed by new real papers (preserve cited_by)
 
 # Keyword Extraction (for BM25 search)
 uv run python -m src.cli.core_collect extract-keywords              # Regex + KeyBERT (production)
@@ -419,6 +422,15 @@ lexiconarxiv/
 ```
 
 ## Recent Updates
+
+### v0.14.0 (Jul 2026) — Backlog sweep: TITLE-stub unblock, stub→core, corpus-gaps, batch-write Wave 1e, Unpaywall
+
+- **TITLE-stub resolution unblocked (matcher data-shape bug).** The 751,936 `identifier_type=title` stubs leave `title` empty and carry the raw GROBID title in `identifier` as `TITLE:<text>`, but `build_stub_index` read only `stub['title']` — so they were **invisible to the snapshot matcher and never resolvable**. Fixed to derive the title from `identifier` (4-word floor drops bare fragments); real-data check: 96.1 % of a 5K sample now index (was 0 %). Full resolution still runs through the local snapshot P2 (online title-search is a per-IP 429 trap) — gated on disk.
+- **Stub → core promotion (`reconcile-stubs`).** Incremental collection adds a real paper for a work a prior reference already stubbed, orphaning the stub's `cited_by` (~1.77 % of real papers, ~21 K corpus-wide). New `reconcile_stub_duplicates` + `find_stub_by_identifier` (indexed probes) + incremental Step 8.5 merge the stub's cited_by into the real paper before build-cited-by. Bulk-safe (recent-days scoped).
+- **Corpus-gaps dashboard.** `/api/corpus-gaps` + a Data Health Monitor section list the most-cited papers NOT in the corpus (e.g. Bleu, Classifier-Free Diffusion Guidance, MT-Bench) + most-referenced uncollected venues, via server-side `order_by` on `cited_by_count_internal` (317 ms).
+- **Batch-write Wave 1e.** Converted 10 per-point `set_payload` loops (keywords, refs, abstracts, graph metrics, code repos, field-fill, …) to a single `batch_update_points` + `wait=False` — **9.3× faster** on a live 500-point bench (567 → 5,253 writes/s). All are fill-only-missing (idempotent) so `wait=False`'s ~5 s crash window is safe; the one in-process read-after-write (resolver normalize→resolve) is protected by re-normalization on read.
+- **Unpaywall OA-PDF enricher.** `enrich-oa-pdf-by-doi-via-unpaywall` fills `pdf_url` (+`oa_status`) for DOI-bearing papers with no PDF link; free, no API key. Live-verified.
+- **Also:** research-API type exclusion no longer shrinks results below `limit` (over-fetch scaling); venue normalization confirmed already shipped (TEXT index + alias map); stub-dedup audit and zero-title-stub investigation both closed as not-bugs (uuid5 stub IDs + resolver normalization prevent duplicates; empty-title stubs are the gated title-type / fabricated-ID / low-cited classes, not an enrich-8 failure).
 
 ### v0.13.9 (Jul 2026) — Enricher-hang root cause + Ollama re-label verdict + labels-reach-search re-embed
 
