@@ -12,6 +12,15 @@ it gains section-method and drops out of the filter, but the cursor has
 already moved past it — one pass, no double-work, resumable (re-run continues
 from what's still missing).
 
+KNOWN QUIRK (2026-07-17): the completion marker is HasVector(section-method),
+but a labeled abstract with NO `method` role never gets a section-method vector
+(it correctly gets structured-abstract + whatever section roles it does have,
+e.g. section-result/section-task, and IS searchable). So method-less papers
+never clear this filter — after a full run they show as a stable "remaining"
+count (~19 K for the 2010+ pass). That is NOT missing work; do not chase it by
+re-running. A future clean-up could switch the marker to a payload flag set
+after embedding, but the data is already correct.
+
 Usage: uv run python -m scripts.analytics.reembed_labeled_sections [--limit N] [--year-min 2020]
 """
 import argparse
