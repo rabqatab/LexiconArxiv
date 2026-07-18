@@ -163,6 +163,46 @@ def register_commands(cli: click.Group):
         click.echo(f"  Deleted: {deleted} duplicate points")
         click.echo(f"  Remaining: {total_scanned - deleted} papers")
 
+    @cli.command("reconcile-stubs")
+    @click.option("--dry-run", is_flag=True, help="Count promotable stubs without merging")
+    @click.option("--recent-days", type=int, default=None,
+                  help="Only scan real papers fetched within N days (uses indexed fetched_at)")
+    def reconcile_stubs(dry_run: bool, recent_days: int | None) -> None:
+        """Promote stubs shadowed by newly-collected real papers (preserve cited_by).
+
+        Incremental collection can add a real paper for a work a prior reference
+        already created a stub for — two points for one paper, stub cited_by
+        orphaned. This merges each such stub's cited_by into the real paper and
+        deletes the stub. Bulk-safe: run this only in the incremental pipeline
+        (bootstrap creates stubs after papers, so nothing to reconcile).
+
+        Examples:
+
+          uv run python -m src.cli.core_collect reconcile-stubs --recent-days 7 --dry-run
+          uv run python -m src.cli.core_collect reconcile-stubs --recent-days 7
+        """
+        import datetime as _dt
+
+        fetched_since = None
+        if recent_days is not None:
+            fetched_since = (
+                _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=recent_days)
+            ).strftime("%Y-%m-%d")
+
+        try:
+            storage = QdrantStorage()
+        except Exception as e:
+            click.echo(f"Error connecting to Qdrant: {e}")
+            sys.exit(1)
+
+        scope = f"fetched since {fetched_since}" if fetched_since else "all real papers"
+        click.echo(f"Reconciling stub duplicates ({scope}, dry_run={dry_run})...")
+        stats = storage.reconcile_stub_duplicates(fetched_since=fetched_since, dry_run=dry_run)
+        click.echo(
+            f"  Scanned {stats['scanned']:,} real papers; "
+            f"{'would promote' if dry_run else 'promoted'} {stats['promoted']:,} stub(s)."
+        )
+
     @cli.command("data-quality")
     @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
     @click.option("--by-venue", is_flag=True, help="Show breakdown by venue")

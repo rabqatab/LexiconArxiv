@@ -872,6 +872,79 @@ class StubManager:
                 return str(pts[0].id)
         return None
 
+    def find_stub_by_identifier(self, fields: dict) -> str | None:
+        """Find a STUB matching any of doi/openalex_id/arxiv_id; return point_id or None.
+
+        Mirror of find_real_by_identifier for the reverse direction: given a
+        freshly-collected real paper's identifiers, locate a pre-existing stub
+        that stands for the same work (created earlier from a reference). All
+        three fields are keyword-indexed, so each probe is O(1)-ish.
+        """
+        is_stub = models.FieldCondition(key="is_stub", match=models.MatchValue(value=True))
+        for key in ("doi", "openalex_id", "arxiv_id"):
+            v = fields.get(key)
+            if not v:
+                continue
+            flt = models.Filter(must=[is_stub, models.FieldCondition(
+                key=key, match=models.MatchValue(value=v))])
+            pts, _ = self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=flt, limit=1, with_payload=False, with_vectors=False,
+            )
+            if pts:
+                return str(pts[0].id)
+        return None
+
+    def reconcile_stub_duplicates(
+        self, fetched_since: str | None = None, dry_run: bool = False,
+        batch_size: int = 500,
+    ) -> dict:
+        """Promote stubs shadowed by newly-collected real papers (preserve cited_by).
+
+        Incremental collection can add a real paper for a work that a prior
+        reference already created a stub for — leaving two points for one paper
+        and the stub's accumulated cited_by orphaned. For each recent real paper
+        with a matching stub, merge the stub's cited_by into the real paper and
+        delete the stub. Runs in the incremental pipeline only (bulk bootstrap
+        creates stubs *after* papers, so there is nothing to reconcile there).
+
+        Args:
+            fetched_since: ISO date; only scan real papers fetched on/after it
+                (uses the indexed fetched_at field). None = scan all real papers.
+            dry_run: If True, count matches without merging.
+            batch_size: Scroll page size.
+        """
+        must_not = [models.FieldCondition(key="is_stub", match=models.MatchValue(value=True))]
+        must = []
+        if fetched_since:
+            must.append(models.FieldCondition(
+                key="fetched_at", range=models.DatetimeRange(gte=fetched_since)))
+        flt = models.Filter(must=must or None, must_not=must_not)
+
+        scanned = promoted = 0
+        offset = None
+        while True:
+            pts, offset = self.client.scroll(
+                collection_name=self.collection_name, scroll_filter=flt,
+                limit=batch_size, offset=offset,
+                with_payload=["doi", "openalex_id", "arxiv_id"], with_vectors=False,
+            )
+            for p in pts:
+                scanned += 1
+                real_id = str(p.id)
+                stub_id = self.find_stub_by_identifier(p.payload or {})
+                if stub_id and stub_id != real_id:
+                    if not dry_run:
+                        self.merge_stub_into_real(stub_id, real_id)
+                    promoted += 1
+            if offset is None:
+                break
+        logger.info(
+            "reconcile_stub_duplicates: scanned=%d promoted=%d (dry_run=%s)",
+            scanned, promoted, dry_run,
+        )
+        return {"scanned": scanned, "promoted": promoted, "dry_run": dry_run}
+
     def merge_stub_into_real(self, stub_point_id: str, real_point_id: str) -> None:
         """Union stub.cited_by into real.cited_by, then delete the stub.
 

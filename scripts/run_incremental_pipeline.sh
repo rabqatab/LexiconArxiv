@@ -346,6 +346,14 @@ echo ""
 echo "[Step 8] Enriching stub papers..."
 uv run python -m src.cli.core_collect enrich-8-metadata-by-stub-via-openalex --parallel "$PARALLEL"
 
+# Step 8.5: Reconcile stub duplicates — promote stubs shadowed by newly
+# collected real papers, preserving their cited_by. Runs BEFORE build-cited-by
+# so citation counts land on the promoted real paper, not an orphaned stub.
+# Scoped to recent papers (bulk-safe: bootstrap has no stubs to reconcile).
+echo ""
+echo "[Step 8.5] Reconciling stub duplicates (promote shadowed stubs)..."
+uv run python -m src.cli.core_collect reconcile-stubs --recent-days "$DAYS_MARGIN"
+
 # Step 9: Incrementally update cited_by index (optional)
 if [ "$SKIP_GRAPH" = false ]; then
     echo ""

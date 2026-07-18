@@ -797,6 +797,15 @@ class QdrantStorage:
     def merge_stub_into_real(self, stub_point_id: str, real_point_id: str) -> None:
         return self.stubs.merge_stub_into_real(stub_point_id, real_point_id)
 
+    def find_stub_by_identifier(self, fields: dict) -> str | None:
+        return self.stubs.find_stub_by_identifier(fields)
+
+    def reconcile_stub_duplicates(
+        self, fetched_since: str | None = None, dry_run: bool = False,
+        batch_size: int = 500,
+    ) -> dict:
+        return self.stubs.reconcile_stub_duplicates(fetched_since, dry_run, batch_size)
+
     # =========================================================================
     # Statistics Facade (delegated to StorageStatistics)
     # =========================================================================
