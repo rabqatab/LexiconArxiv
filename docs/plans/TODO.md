@@ -71,8 +71,8 @@ Tracked enhancement backlog. Items are grouped by priority and area.
 ## Lower Priority
 
 ### Data Quality
-- [ ] **Stub dedup audit** — Multiple stubs may refer to the same paper via different identifiers. Verify merge logic is comprehensive.
-- [ ] **Zero-title stubs investigation** — Investigate why `enrich-8-metadata-by-stub-via-openalex` didn't populate titles. May need to re-run or fix the enricher.
+- [x] **Stub dedup audit** (2026-07-18, closed — merge logic is comprehensive) — Probed 40K stubs: **0 exact-identifier duplicates** (doi or openalex_id shared across two stubs) and **0/3000 cross-identifier duplicates** (a non-openalex stub whose openalex_id matches a separate openalex stub). Two structural defenses make this airtight, not luck: (1) a stub's point ID is `uuid5(identifier)`, so the same identifier collapses to one point at creation; (2) the resolver normalizes every reference to canonical form *before* stub creation, so a paper never spawns two stubs under different identifiers. No action.
+- [x] **Zero-title stubs investigation** (2026-07-18, closed — not an enrich-8 bug) — 1,428,697 empty-title stubs (28.6 % of 4.996 M). Breakdown: **title** 751,936 (carry the raw title in `identifier`; resolvable only via the gated P2 snapshot scan, not enrich-8); **openalex** 413,726 (resolvable by ID but ~17 % are fabricated 6-billion IDs that 404, rest mostly low-cited); **arxiv** 100,608 (high-cited already done at 94 % hit, remainder cited < 5); **doi** 15,135 (small reachable remainder, only 1,687 cited ≥ 2). enrich-8 works (proven 94 % arxiv hit); the empty-titles are the gated title/snapshot class, unreachable/fabricated IDs, or low-priority low-cited — not a bug. Actionable reachable slice is small; run enrich-8 on the doi/arxiv cited≥2 tail if wanted.
 
 ### Search UX
 - [ ] **Export (BibTeX/CSV/JSON)** — PRD Section 5.4 feature. Export search results for use in papers.
