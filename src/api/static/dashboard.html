@@ -336,6 +336,7 @@
             <div>Loading dashboard metrics...</div>
         </div>
     </div>
+    <div id="gaps"></div>
 </main>
 
 <script>
@@ -524,11 +525,55 @@
         }
     }
 
+    function gapLink(g) {
+        var label = g.title || '(untitled)';
+        var href = null;
+        if (g.doi) href = 'https://doi.org/' + g.doi;
+        else if (g.arxiv_id) href = 'https://arxiv.org/abs/' + g.arxiv_id;
+        else if (g.openalex_id) href = 'https://openalex.org/' + g.openalex_id;
+        if (href) return '<a href="' + href + '" target="_blank" rel="noopener">' + label + '</a>';
+        return label;
+    }
+
+    async function loadCorpusGaps() {
+        var el = document.getElementById('gaps');
+        try {
+            var resp = await fetch('/api/corpus-gaps?limit=100');
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            var data = await resp.json();
+            var rows = (data.top_cited_missing || []).map(function (g, i) {
+                return '<tr><td>' + (i + 1) + '</td>'
+                    + '<td>' + formatNumber(g.cited_by_count) + '</td>'
+                    + '<td>' + gapLink(g) + '</td>'
+                    + '<td>' + (g.venue || '-') + '</td></tr>';
+            }).join('');
+            var venues = (data.top_missing_venues || []).map(function (v) {
+                return '<tr><td>' + v.venue + '</td><td>' + v.count + '</td></tr>';
+            }).join('');
+            var html = '<div class="metrics-section">'
+                + '<h2 class="section-title">Corpus Gaps — Most-Cited Papers Not in Corpus</h2>'
+                + '<p style="opacity:.7;margin:0 0 12px">Papers the corpus references most but does not hold. Enrich or collect these to close the biggest citation-graph holes.</p>'
+                + '<table class="pipeline-table">'
+                + '<thead><tr><th>#</th><th>Internal citations</th><th>Title</th><th>Venue</th></tr></thead>'
+                + '<tbody>' + rows + '</tbody></table></div>'
+                + '<div class="metrics-section">'
+                + '<h2 class="section-title">Most-Referenced Uncollected Venues</h2>'
+                + '<table class="pipeline-table">'
+                + '<thead><tr><th>Venue</th><th>Gap papers (top 100)</th></tr></thead>'
+                + '<tbody>' + venues + '</tbody></table></div>';
+            el.innerHTML = DOMPurify.sanitize(html);
+        } catch (err) {
+            el.textContent = '';
+        }
+    }
+
     // Initial load
     loadDashboard();
+    loadCorpusGaps();
 
     // Auto-refresh
     setInterval(loadDashboard, REFRESH_INTERVAL);
+    setInterval(loadCorpusGaps, REFRESH_INTERVAL);
 </script>
 
 </body>

@@ -265,6 +265,59 @@ class StubManager:
         )
         return [(str(point.id), point.payload) for point in results]
 
+    def get_corpus_gaps(self, limit: int = 100, min_citations: int = 2) -> dict:
+        """Corpus-gap view: the most-cited papers NOT in the corpus.
+
+        Returns the top enriched stubs (title present) by internal citation
+        count — i.e. papers our corpus references a lot but doesn't hold — plus
+        a venue tally over that set (venues most-referenced-but-not-collected).
+        Uses the same server-side order_by on the indexed cited_by_count_internal
+        as get_most_cited_stubs; title-present is a cheap post-filter at limit=N.
+
+        Args:
+            limit: Number of top gap papers to return.
+            min_citations: Minimum internal citation count to qualify.
+        """
+        results, _ = self.client.scroll(
+            collection_name=self.collection_name,
+            scroll_filter=models.Filter(
+                must=[
+                    models.FieldCondition(key="is_stub", match=models.MatchValue(value=True)),
+                    models.FieldCondition(
+                        key="cited_by_count_internal", range=models.Range(gte=min_citations)),
+                ],
+                # title present — the informative gaps (opaque title-less stubs excluded)
+                must_not=[models.IsEmptyCondition(is_empty=models.PayloadField(key="title"))],
+            ),
+            order_by=models.OrderBy(
+                key="cited_by_count_internal", direction=models.Direction.DESC),
+            limit=limit,
+            with_payload=["title", "year", "venue", "identifier", "identifier_type",
+                          "doi", "arxiv_id", "openalex_id", "cited_by_count_internal"],
+        )
+        gaps = []
+        venue_counts: dict[str, int] = {}
+        for pt in results:
+            pl = pt.payload or {}
+            gaps.append({
+                "title": pl.get("title"),
+                "year": pl.get("year"),
+                "venue": pl.get("venue"),
+                "identifier_type": pl.get("identifier_type"),
+                "doi": pl.get("doi"),
+                "arxiv_id": pl.get("arxiv_id"),
+                "openalex_id": pl.get("openalex_id"),
+                "cited_by_count": pl.get("cited_by_count_internal", 0),
+            })
+            v = pl.get("venue")
+            if v:
+                venue_counts[v] = venue_counts.get(v, 0) + 1
+        top_venues = [
+            {"venue": v, "count": c}
+            for v, c in sorted(venue_counts.items(), key=lambda x: -x[1])[:15]
+        ]
+        return {"top_cited_missing": gaps, "top_missing_venues": top_venues}
+
     def get_stubs_for_enrichment(
         self,
         identifier_type: str | None = None,

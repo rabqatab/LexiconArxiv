@@ -199,3 +199,24 @@ async def get_dashboard(refresh: bool = False):
     _cache["timestamp"] = time.time()
 
     return result
+
+
+_gaps_cache = {"data": None, "timestamp": 0}
+
+
+@router.get("/corpus-gaps")
+async def get_corpus_gaps(limit: int = 100, refresh: bool = False):
+    """Corpus gaps: the most-cited papers the corpus references but doesn't hold.
+
+    Returns top enriched stubs by internal citation count plus a venue tally
+    over that set. Cheap (server-side order_by on the cited_by_count_internal
+    index); cached 5 min.
+    """
+    now = time.time()
+    if not refresh and _gaps_cache["data"] and (now - _gaps_cache["timestamp"]) < CACHE_TTL:
+        return _gaps_cache["data"]
+    storage = get_services().storage
+    data = storage.get_corpus_gaps(limit=limit)
+    _gaps_cache["data"] = data
+    _gaps_cache["timestamp"] = time.time()
+    return data

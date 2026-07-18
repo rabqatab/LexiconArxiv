@@ -800,6 +800,9 @@ class QdrantStorage:
     def find_stub_by_identifier(self, fields: dict) -> str | None:
         return self.stubs.find_stub_by_identifier(fields)
 
+    def get_corpus_gaps(self, limit: int = 100, min_citations: int = 2) -> dict:
+        return self.stubs.get_corpus_gaps(limit, min_citations)
+
     def reconcile_stub_duplicates(
         self, fetched_since: str | None = None, dry_run: bool = False,
         batch_size: int = 500,

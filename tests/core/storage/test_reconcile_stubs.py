@@ -19,11 +19,15 @@ class FakeClient:
     def _match(payload, cond):
         if hasattr(cond, "has_id") and cond.has_id is not None:
             return None  # handled by caller (id membership)
+        ie = getattr(cond, "is_empty", None)
+        if ie is not None:
+            v = payload.get(ie.key)
+            return v in (None, "", [], {})
         key = getattr(cond, "key", None)
         m = getattr(cond, "match", None)
         if key is not None and m is not None and hasattr(m, "value"):
             return payload.get(key) == m.value
-        return True  # unhandled (e.g. DatetimeRange) → don't constrain
+        return True  # unhandled (e.g. Range, DatetimeRange) → don't constrain
 
     def _ids_from_hasid(self, flt):
         for cond in (flt.must or []):
@@ -32,7 +36,7 @@ class FakeClient:
         return None
 
     def scroll(self, collection_name, scroll_filter=None, limit=10, offset=None,
-               with_payload=None, with_vectors=None):
+               with_payload=None, with_vectors=None, order_by=None):
         flt = scroll_filter
         hasid = self._ids_from_hasid(flt) if flt else None
         out = []
@@ -96,3 +100,19 @@ def test_reconcile_dry_run_mutates_nothing():
     assert stats["promoted"] == 1
     assert "S1" in mgr.client.points                       # not deleted
     assert "cited_by" not in mgr.client.points["R1"]       # not merged
+
+
+def test_corpus_gaps_only_titled_stubs_with_venue_tally():
+    points = [
+        {"id": "G1", "payload": {"is_stub": True, "title": "Famous Paper",
+                                 "venue": "NeurIPS", "cited_by_count_internal": 9}},
+        {"id": "G2", "payload": {"is_stub": True, "title": "Also Cited",
+                                 "venue": "NeurIPS", "cited_by_count_internal": 4}},
+        {"id": "G3", "payload": {"is_stub": True, "title": None,   # opaque → excluded
+                                 "cited_by_count_internal": 20}},
+        {"id": "R", "payload": {"title": "Real Paper", "cited_by_count_internal": 99}},  # not a stub
+    ]
+    d = _mgr(points).get_corpus_gaps(limit=100, min_citations=2)
+    titles = {g["title"] for g in d["top_cited_missing"]}
+    assert titles == {"Famous Paper", "Also Cited"}        # titled stubs only, real excluded
+    assert d["top_missing_venues"][0] == {"venue": "NeurIPS", "count": 2}
