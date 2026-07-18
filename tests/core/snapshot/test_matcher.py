@@ -48,3 +48,28 @@ def test_no_match_returns_none():
     work = _load_work(7)  # W1000000008 Anchor Gap Paper — not a stub
     matched = match_work_for_stubs(work, idx, all_stubs_by_id={s["point_id"]: s for s in stubs})
     assert matched is None
+
+
+def test_grobid_title_stub_from_identifier():
+    # Real-corpus shape: `title` empty, raw title in identifier as "TITLE:<text>"
+    # (751K GROBID reference stubs). These must be matchable from the identifier.
+    stubs = [{
+        "point_id": "stub-grobid-001",
+        "identifier_type": "title",
+        "identifier": "TITLE:beyond rankings comparing directed acyclic graphs",
+        "title": None, "year": None, "authors": [],
+    }]
+    idx = build_stub_index(stubs)
+    work = {"id": "https://openalex.org/W9",
+            "title": "Beyond Rankings: Comparing Directed Acyclic Graphs"}
+    matched = match_work_for_stubs(work, idx, all_stubs_by_id={s["point_id"]: s for s in stubs})
+    assert matched is not None and matched["point_id"] == "stub-grobid-001"
+
+
+def test_short_grobid_title_stub_not_indexed():
+    # 4-word floor: a bare fragment must not collide with generic snapshot titles.
+    stubs = [{"point_id": "stub-junk", "identifier_type": "title",
+              "identifier": "TITLE:related work", "title": None,
+              "year": None, "authors": []}]
+    idx = build_stub_index(stubs)
+    assert idx.title_map == {}

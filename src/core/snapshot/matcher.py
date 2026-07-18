@@ -63,8 +63,18 @@ def build_stub_index(stubs: list[dict]) -> StubIndex:
             if wid:
                 idx.openalex_map.setdefault(wid, pid)
 
-        # also index by title if the stub has one
+        # Index by title. Clean stubs carry it in `title`; GROBID reference
+        # stubs (identifier_type == "title") leave `title` empty and keep the
+        # raw title in `identifier` as "TITLE:<text>" — derive it so those
+        # ~750K stubs are matchable at all (they were invisible to the index).
         title = stub.get("title")
+        if not title and itype == "title" and ident:
+            raw = ident[6:] if ident[:6].upper() == "TITLE:" else ident
+            # ponytail: 4-word floor — bare GROBID fragments ("related work")
+            # would exact-match generic snapshot titles with no year/author to
+            # corroborate. Real titles clear it easily.
+            if len(raw.split()) >= 4:
+                title = raw
         if title:
             norm = Deduplicator.normalize_title(title)
             if norm:
