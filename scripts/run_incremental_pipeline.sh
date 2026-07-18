@@ -148,6 +148,7 @@ if [ "$DRY_RUN" = true ]; then
     echo "  6. label-abstracts"
     echo "  7. resolve-refs --create-stubs"
     echo "  8. enrich-8-metadata-by-stub-via-openalex --parallel $PARALLEL"
+    echo "  8.5. reconcile-stubs --recent-days $DAYS_MARGIN (promote stubs shadowed by new papers)"
     if [ "$SKIP_GRAPH" = false ]; then
         echo "  9. build-cited-by --incremental"
     fi
