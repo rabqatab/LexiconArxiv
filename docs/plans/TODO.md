@@ -83,7 +83,7 @@ Tracked enhancement backlog. Items are grouped by priority and area.
 - [ ] **ColBERT late interaction** — Overkill at 152K scale when cross-encoder reranking is available.
 
 ### Future External API Integrations (MCP candidates)
-- [ ] **Unpaywall** — Free OA PDF URLs by DOI. Trivial to add, high user value.
+- [x] **Unpaywall** (2026-07-18) — Free OA PDF URLs by DOI. `UnpaywallEnricher` + `enrich-oa-pdf-by-doi-via-unpaywall` CLI fills `pdf_url` (+`oa_status`) for papers with a DOI but no PDF link. Reader `get_papers_with_doi_missing_pdf` (fetched_at-scoped for incremental); batched writer `batch_update_oa_pdf` (Wave 1e, wait=False, idempotent fill-only-missing). Email via UNPAYWALL_EMAIL/CROSSREF_EMAIL/OPENALEX_EMAIL, no API key. Live-verified (BERT N19-1423 + corpus DOI 10.7717/peerj.5987 → OA gold PDF). Not auto-wired into the pipeline — run on demand, or add a step later. MCP tool can wrap `fetch_oa_pdf` if on-demand resolution is wanted.
 - [ ] **DBLP API** — Structured author/venue queries ("all papers by X at Y"). Complements semantic search.
 - [ ] **Hugging Face Papers** — Model-paper linking, trending ML papers.
 - [ ] **OpenCitations** — Citation context (the sentence where A cites B). Deep analysis.

@@ -167,6 +167,63 @@ def register_commands(cli: click.Group):
 
         asyncio.run(run_enrichment())
 
+    @cli.command("enrich-oa-pdf-by-doi-via-unpaywall")
+    @click.option("--dry-run", is_flag=True, help="Count papers without enriching")
+    @click.option("--limit", "-n", type=int, help="Max papers to process")
+    @click.option("--batch-size", type=int, default=100, help="Batch size")
+    @click.option("--parallel", "-p", type=int, default=5, help="Concurrent requests")
+    @click.option(
+        "--recent-days", type=int, default=None,
+        help="Only enrich papers fetched in the last N days (incremental cycles). "
+             "Uses the indexed fetched_at field to avoid full-corpus scroll timeouts.",
+    )
+    def enrich_oa_pdf_by_doi_via_unpaywall(
+        dry_run: bool, limit: int | None, batch_size: int,
+        parallel: int, recent_days: int | None,
+    ) -> None:
+        """Fill pdf_url via Unpaywall for papers with a DOI but no PDF link.
+
+        Free OA PDF resolution by DOI (email required via UNPAYWALL_EMAIL /
+        CROSSREF_EMAIL / OPENALEX_EMAIL; no API key). Fill-only-missing and
+        idempotent.
+
+        Examples:
+
+          uv run python -m src.cli.core_collect enrich-oa-pdf-by-doi-via-unpaywall --dry-run
+          uv run python -m src.cli.core_collect enrich-oa-pdf-by-doi-via-unpaywall -p 10
+        """
+        from src.core.enrichment.unpaywall import UnpaywallEnricher
+        from src.core.constants import get_unpaywall_email
+        from datetime import datetime, timedelta, timezone
+
+        if not get_unpaywall_email():
+            click.echo("Error: set UNPAYWALL_EMAIL (or CROSSREF_EMAIL / OPENALEX_EMAIL).")
+            sys.exit(1)
+
+        fetched_since = None
+        if recent_days is not None:
+            fetched_since = (datetime.now(timezone.utc) - timedelta(days=recent_days)).strftime("%Y-%m-%d")
+
+        async def run():
+            storage = QdrantStorage()
+            async with UnpaywallEnricher(
+                storage=storage, batch_size=batch_size, max_concurrent=parallel,
+            ) as enricher:
+                progress = await enricher.enrich_oa_pdfs(
+                    dry_run=dry_run, limit=limit, fetched_since=fetched_since,
+                )
+            click.echo("\nUnpaywall OA-PDF Results:")
+            if dry_run:
+                click.echo(f"  Papers to process: {progress.total_to_process}")
+                click.echo("  (Dry run - no changes made)")
+            else:
+                click.echo(f"  Processed: {progress.processed}")
+                click.echo(f"  Enriched:  {progress.enriched}")
+                click.echo(f"  Not OA:    {progress.not_oa}")
+                click.echo(f"  Errors:    {progress.errors}")
+
+        asyncio.run(run())
+
     @cli.command("enrich-3-refs-and-abstracts-by-title-via-openalex")
     @click.option("--dry-run", is_flag=True, help="Count papers without enriching")
     @click.option("--limit", "-n", type=int, help="Max papers to process")

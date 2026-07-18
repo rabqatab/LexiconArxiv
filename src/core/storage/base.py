@@ -436,6 +436,14 @@ class QdrantStorage:
             has_doi, limit, offset, fetched_since=fetched_since,
         )
 
+    def get_papers_with_doi_missing_pdf(
+        self,
+        limit: int = 100,
+        offset: str | None = None,
+        fetched_since: str | None = None,
+    ) -> tuple[list[tuple[str, dict]], str | None]:
+        return self.readers.get_papers_with_doi_missing_pdf(limit, offset, fetched_since)
+
     def iter_all_real_papers_minimal(self, batch_size: int = 1000):
         return self.readers.iter_all_real_papers_minimal(batch_size)
 
@@ -674,6 +682,12 @@ class QdrantStorage:
         updates: list[tuple[str, list]],
     ) -> int:
         return self.writers.batch_update_similar_papers(updates)
+
+    def batch_update_oa_pdf(
+        self,
+        updates: list[tuple[str, str, str | None]],
+    ) -> int:
+        return self.writers.batch_update_oa_pdf(updates)
 
     def batch_update_code_repos(
         self,

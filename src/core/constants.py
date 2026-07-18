@@ -25,6 +25,9 @@ AAAI_OJS_BASE_URL = "https://ojs.aaai.org"
 # ACM Digital Library
 ACM_DL_BASE_URL = "https://dl.acm.org"
 
+# Unpaywall API (free OA PDF resolution by DOI; email required, no key)
+UNPAYWALL_BASE_URL = "https://api.unpaywall.org/v2"
+
 
 # =============================================================================
 # Environment Variable Names
@@ -113,6 +116,19 @@ def get_openalex_api_keys() -> list[str]:
 def get_crossref_email() -> str | None:
     """Get CrossRef email from environment."""
     return os.getenv(CROSSREF_EMAIL_ENV)
+
+
+def get_unpaywall_email() -> str | None:
+    """Get the polite-pool email for Unpaywall (required by their API).
+
+    Falls back to the CrossRef/OpenAlex email since any valid contact address
+    is accepted — avoids forcing a separate env var.
+    """
+    return (
+        os.getenv("UNPAYWALL_EMAIL")
+        or os.getenv(CROSSREF_EMAIL_ENV)
+        or os.getenv(OPENALEX_EMAIL_ENV)
+    )
 
 
 def get_s2_api_key() -> str | None:

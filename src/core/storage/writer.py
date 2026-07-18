@@ -535,6 +535,38 @@ class BatchWriter:
         )
         return len(updates)
 
+    def batch_update_oa_pdf(
+        self,
+        updates: list[tuple[str, str, str | None]],  # [(point_id, pdf_url, oa_status), ...]
+    ) -> int:
+        """Batch-write Unpaywall OA results (pdf_url + optional oa_status).
+
+        One batch_update_points call (wait=False); same contract as
+        batch_update_abstract_structure. Fill-only-missing (the enricher only
+        selects papers without pdf_url), so idempotent — a ~5 s crash window
+        just re-resolves on the next run.
+        """
+        if not updates:
+            return 0
+        now = datetime.now(timezone.utc).isoformat()
+        operations = []
+        for point_id, pdf_url, oa_status in updates:
+            payload: dict[str, Any] = {"pdf_url": pdf_url, "oa_enriched_at": now}
+            if oa_status:
+                payload["oa_status"] = oa_status
+            operations.append(models.SetPayloadOperation(
+                set_payload=models.SetPayload(payload=payload, points=[point_id])
+            ))
+        retry_qdrant(
+            lambda: self.client.batch_update_points(
+                collection_name=self.collection_name,
+                update_operations=operations,
+                wait=False,
+            ),
+            label=f"batch_update_oa_pdf({len(updates)} points)",
+        )
+        return len(updates)
+
     def clear_all_keywords(self) -> int:
         """Clear keywords from all papers.
 

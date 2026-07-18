@@ -92,6 +92,42 @@ class PaperReader:
 
         return [(str(p.id), p.payload) for p in results], next_offset
 
+    def get_papers_with_doi_missing_pdf(
+        self,
+        limit: int = 100,
+        offset: str | None = None,
+        fetched_since: str | None = None,
+    ) -> tuple[list[tuple[str, dict]], str | None]:
+        """Get non-stub papers that have a DOI but no pdf_url.
+
+        Feeds the Unpaywall OA-PDF enricher. fetched_since bounds the scroll
+        via the indexed fetched_at field (same incremental contract as
+        get_papers_missing_references — avoids the full-scan timeout).
+
+        Returns:
+            Tuple of (list of (point_id, payload), next_offset).
+        """
+        must = [models.IsEmptyCondition(is_empty=models.PayloadField(key="pdf_url"))]
+        if fetched_since:
+            must.append(models.FieldCondition(
+                key="fetched_at", range=models.DatetimeRange(gte=fetched_since)))
+        must_not = [
+            models.FieldCondition(key="is_stub", match=models.MatchValue(value=True)),
+            models.IsEmptyCondition(is_empty=models.PayloadField(key="doi")),
+        ]
+        scroll_filter = models.Filter(must=must, must_not=must_not)
+        results, next_offset = retry_qdrant(
+            lambda: self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=scroll_filter,
+                limit=limit,
+                offset=offset,
+                with_payload=["doi", "title", "pdf_url"],
+            ),
+            label=f"scroll(get_papers_with_doi_missing_pdf, offset={offset})",
+        )
+        return [(str(p.id), p.payload) for p in results], next_offset
+
     def get_papers_missing_abstracts(
         self,
         has_doi: bool = True,

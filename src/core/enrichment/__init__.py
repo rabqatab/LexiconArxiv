@@ -50,6 +50,10 @@ from src.core.enrichment.github_search import (
     GitHubSearchEnricher,
     GitHubSearchProgress,
 )
+from src.core.enrichment.unpaywall import (
+    UnpaywallEnricher,
+    UnpaywallProgress,
+)
 
 __all__ = [
     # Base classes
@@ -81,4 +85,7 @@ __all__ = [
     # GitHub search enricher
     "GitHubSearchEnricher",
     "GitHubSearchProgress",
+    # Unpaywall OA-PDF enricher
+    "UnpaywallEnricher",
+    "UnpaywallProgress",
 ]
