@@ -25,7 +25,7 @@ Failures during (3) surface as `ConnectionError` at the transport layer; the cli
 
 ## Tools
 
-Eight tools registered as of `main` HEAD `25a262a` (2026-07-03). Every tool goes through the `_dispatch(name, arguments)` gate, which applies a **timeout budget** (see [Handler timeouts](#handler-timeouts) below) and a top-level exception catcher.
+Eleven tools registered as of 2026-07-19 (eight core + three external-integration tools). Every tool goes through the `_dispatch(name, arguments)` gate, which applies a **timeout budget** (see [Handler timeouts](#handler-timeouts) below) and a top-level exception catcher.
 
 | Tool | Purpose | Timeout budget | Handler |
 |------|---------|----------------|---------|
@@ -37,6 +37,9 @@ Eight tools registered as of `main` HEAD `25a262a` (2026-07-03). Every tool goes
 | `expand_search` | Live arXiv + OpenAlex expansion for on-demand papers | 20s | `_handle_expand_search` |
 | `research_topic` | Full research overview: notable papers + trends + summary | 15s | `_handle_research_topic` |
 | `get_mcp_version` | Return `{sha, startup_ts, python}` — for stale-subprocess detection | 5s | `_handle_get_mcp_version` |
+| `dblp_search` | Structured DBLP author/venue/title search (no key) | 20s | `_handle_dblp_search` |
+| `get_open_citations` | Open citation count + citing DOIs for a DOI (OpenCitations) | 25s | `_handle_get_open_citations` |
+| `core_fulltext_search` | Full-text OA search over 200M+ papers (CORE; needs `CORE_API_KEY`) | 25s | `_handle_core_fulltext_search` |
 
 ### `search_papers`
 

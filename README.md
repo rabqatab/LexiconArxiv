@@ -157,6 +157,7 @@ open http://localhost:8000/docs
 - `GET /api/stats` - Corpus statistics
 - `GET /api/dashboard` - Data health monitoring (5-min TTL cache, `?refresh=true` to force)
 - `GET /api/corpus-gaps` - Most-cited papers NOT in the corpus + most-referenced uncollected venues (5-min cache)
+- `POST /api/zotero/push` - Push corpus papers (by point ID) to a Zotero library (needs `ZOTERO_API_KEY` + `ZOTERO_LIBRARY_ID`)
 
 **Trends & Analytics Endpoints**:
 - `GET /api/trends/notable` - Top papers ranked by notable score
@@ -189,13 +190,18 @@ open http://localhost:8000/docs
 uv run python -m src.mcp.server
 ```
 
-Exposes six tools for AI agents via the Model Context Protocol:
+Exposes 11 tools for AI agents via the Model Context Protocol:
 - `search_papers` - Hybrid search with venue/year/tier filters
 - `get_paper` - Lookup by UUID, DOI, or arXiv ID
 - `get_citations` - Citation relationships (refs, cited_by, both)
 - `get_similar_papers` - Find semantically similar papers by section type
 - `get_corpus_stats` - Corpus summary statistics
 - `expand_search` - On-demand expansion via arXiv + OpenAlex
+- `research_topic` - Notable papers + trends + summary for a topic
+- `get_mcp_version` - Build SHA / startup / python (stale-subprocess detection)
+- `dblp_search` - Structured DBLP author/venue/title search
+- `get_open_citations` - Open citation count + citing DOIs for a DOI (OpenCitations)
+- `core_fulltext_search` - Full-text OA search over 200M+ papers (CORE; needs `CORE_API_KEY`)
 
 ## Data Sources
 
@@ -656,6 +662,12 @@ OLLAMA_BASE_URL=http://localhost:11434 # Local LLM + embedding (Gemini removed i
 GITHUB_TOKEN=ghp_...                   # 30 req/min vs 10/min for code-repo search
 DAGSTER_HOME=$HOME/dagster_home        # Holds snapshot phase checkpoints + embedding queue
 # SNAPSHOT_DIR=/mnt/ssd/openalex_snapshot/data/works   # Only needed for snapshot bootstrap
+# --- External integrations (optional) ---
+# UNPAYWALL_EMAIL=you@example.com      # Unpaywall OA-PDF enricher (falls back to CROSSREF/OPENALEX email)
+# CORE_API_KEY=...                     # CORE full-text search MCP tool (core_fulltext_search)
+# ZOTERO_API_KEY=...                   # Zotero Web API push (POST /api/zotero/push)
+# ZOTERO_LIBRARY_ID=1234567            # Zotero user/group library ID
+# ZOTERO_LIBRARY_TYPE=user             # user | group (default user)
 ```
 
 ## License

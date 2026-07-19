@@ -771,11 +771,15 @@ Returns corpus-level statistics for the dashboard UI: total papers, papers by ve
 
 Returns the biggest citation-graph holes: `top_cited_missing` (the most-cited enriched stubs — papers the corpus references most but doesn't hold, each linked by DOI/arXiv/OpenAlex) and `top_missing_venues` (a venue tally over that set). Server-side `order_by` on the indexed `cited_by_count_internal` (no full scroll); 5-min cache, `?limit=N` (default 100), `?refresh=true`.
 
+### 9.6 POST /api/zotero/push
+
+Pushes corpus papers to a Zotero library via the Zotero Web API. Body `{paper_ids: [...]}` (Qdrant point IDs, 50-item cap); each is fetched, converted to a Zotero item (journalArticle/conferencePaper), and written. Requires `ZOTERO_API_KEY` + `ZOTERO_LIBRARY_ID` (+ `ZOTERO_LIBRARY_TYPE`, default `user`) — returns 503 when unconfigured. Response: `{sent, successful, failed, raw}`.
+
 ---
 
 ## 10. MCP Tools (Updated)
 
-The MCP server exposes 8 tools as of `main` HEAD 2026-07-03. Every handler runs under an `asyncio.wait_for` **timeout budget** — 5s default, per-handler overrides for legitimately slow endpoints. See [`docs/reference/mcp-server.md`](../reference/mcp-server.md) for the full tool catalog with input schemas, response shapes, resolution ordering, and testing gotchas.
+The MCP server exposes 11 tools as of `main` HEAD 2026-07-19 (8 core + 3 external-integration tools added 2026-07-19). Every handler runs under an `asyncio.wait_for` **timeout budget** — 5s default, per-handler overrides for legitimately slow endpoints. See [`docs/reference/mcp-server.md`](../reference/mcp-server.md) for the full tool catalog with input schemas, response shapes, resolution ordering, and testing gotchas.
 
 | Tool | Description | Timeout budget |
 |------|-------------|----------------|
@@ -787,6 +791,9 @@ The MCP server exposes 8 tools as of `main` HEAD 2026-07-03. Every handler runs 
 | `expand_search` | Live arXiv + OpenAlex expansion with core/connected/external labeling | 20s |
 | `research_topic` | Deep topic research: notable papers + trends + summary + combined scoring | 15s |
 | `get_mcp_version` | Return `{git sha, startup timestamp, python version}` for stale-subprocess detection | 5s |
+| `dblp_search` | Structured DBLP author/venue/title search | 20s |
+| `get_open_citations` | Open citation count + citing DOIs for a DOI (OpenCitations) | 25s |
+| `core_fulltext_search` | Full-text OA search over 200M+ papers (CORE; needs `CORE_API_KEY`) | 25s |
 
 _\*`get_corpus_stats` runs a full-collection scroll in `get_venue_stats()`; the elevated budget is a known-perf ticket, not a target._
 

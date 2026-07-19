@@ -84,10 +84,11 @@ Tracked enhancement backlog. Items are grouped by priority and area.
 
 ### Future External API Integrations (MCP candidates)
 - [x] **Unpaywall** (2026-07-18) — Free OA PDF URLs by DOI. `UnpaywallEnricher` + `enrich-oa-pdf-by-doi-via-unpaywall` CLI fills `pdf_url` (+`oa_status`) for papers with a DOI but no PDF link. Reader `get_papers_with_doi_missing_pdf` (fetched_at-scoped for incremental); batched writer `batch_update_oa_pdf` (Wave 1e, wait=False, idempotent fill-only-missing). Email via UNPAYWALL_EMAIL/CROSSREF_EMAIL/OPENALEX_EMAIL, no API key. Live-verified (BERT N19-1423 + corpus DOI 10.7717/peerj.5987 → OA gold PDF). Not auto-wired into the pipeline — run on demand, or add a step later. MCP tool can wrap `fetch_oa_pdf` if on-demand resolution is wanted.
-- [ ] **DBLP API** — Structured author/venue queries ("all papers by X at Y"). Complements semantic search.
+- [x] **DBLP API** (2026-07-19) — Structured author/venue/title search. `src/core/external/dblp.py` (`search_dblp` + `parse_dblp_hits`, no key) exposed as MCP tool `dblp_search`. Live-verified.
 - [ ] **Hugging Face Papers** — Model-paper linking, trending ML papers.
-- [ ] **OpenCitations** — Citation context (the sentence where A cites B). Deep analysis.
-- [ ] **CORE API** — 200M+ open access full-text search beyond abstracts.
+- [x] **OpenCitations** (2026-07-19) — `src/core/external/opencitations.py` (`get_citation_count` + `get_citing_papers`; v2 API 301-redirects → follow_redirects) exposed as MCP tool `get_open_citations`. Live-verified (count=58). Note: OC gives citation counts + citing DOIs, not the citing *sentence* (that corpus isn't in the index API).
+- [x] **CORE API** (2026-07-19) — `src/core/external/core_api.py` (`search_core` + `parse_core_results`, needs `CORE_API_KEY`) exposed as MCP tool `core_fulltext_search`. Full-text OA search beyond abstracts. Gracefully no-ops without the key.
+- [x] **Export → Zotero** (2026-07-19) — `src/core/external/zotero.py` (`push_to_zotero` + `paper_to_zotero_item`) + `POST /api/zotero/push` (paper IDs → Zotero Web API; needs `ZOTERO_API_KEY` + `ZOTERO_LIBRARY_ID`, 50-item cap). Chose direct Web API push over BibTeX/RIS file export per user.
 - [ ] **ORCID** — Author disambiguation across venues.
 - [ ] **Altmetric** — Social media attention, news mentions, trending papers.
 - [ ] **PubMed/Europe PMC** — Cross-domain when AI papers reference bio/medical work.
