@@ -292,6 +292,54 @@ async def list_tools() -> list[Tool]:
                 "required": ["query"],
             },
         ),
+        Tool(
+            name="dblp_search",
+            description=(
+                "Structured bibliographic search via DBLP (author, title, venue). "
+                "Use for exact lookups like 'papers by X at NeurIPS' that semantic "
+                "search handles poorly. Returns title/authors/venue/year/DOI."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Author, title, or venue query"},
+                    "limit": {"type": "integer", "description": "Max results (default 20, max 100)", "default": 20},
+                },
+                "required": ["query"],
+            },
+        ),
+        Tool(
+            name="get_open_citations",
+            description=(
+                "Open citation data for a DOI from OpenCitations: total citation "
+                "count and the DOIs of citing papers. Complements the local "
+                "citation graph with cross-corpus citations."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "doi": {"type": "string", "description": "DOI to look up (with or without doi: prefix)"},
+                    "limit": {"type": "integer", "description": "Max citing papers to list (default 30)", "default": 30},
+                },
+                "required": ["doi"],
+            },
+        ),
+        Tool(
+            name="core_fulltext_search",
+            description=(
+                "Full-text search over 200M+ open-access papers via CORE — reaches "
+                "OA full text beyond the local corpus's abstract-level index. "
+                "Requires CORE_API_KEY; returns title/authors/year/DOI/PDF URL."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Full-text search query"},
+                    "limit": {"type": "integer", "description": "Max results (default 20, max 100)", "default": 20},
+                },
+                "required": ["query"],
+            },
+        ),
     ]
 
 
@@ -314,6 +362,9 @@ _HANDLER_TIMEOUTS: dict[str, float] = {
     "research_topic": 30.0,    # query embed + semantic rerank + trend analysis
     "expand_search": 20.0,     # external arxiv + openalex roundtrips
     "get_corpus_stats": 60.0,  # ponytail: get_venue_stats() full-scrolls 3.6M points; drop when histogram is cached
+    "dblp_search": 20.0,       # external DBLP roundtrip
+    "get_open_citations": 25.0,  # OpenCitations count + citations, 2 roundtrips
+    "core_fulltext_search": 25.0,  # external CORE roundtrip
 }
 
 
@@ -654,6 +705,46 @@ async def _handle_research_topic(arguments: dict) -> list[TextContent]:
 # Dispatch table (must be after handler defs so name lookup finds them)
 # ---------------------------------------------------------------------------
 
+async def _handle_dblp_search(arguments: dict) -> list[TextContent]:
+    from src.core.external.dblp import search_dblp
+    rows = await search_dblp(arguments["query"], limit=min(arguments.get("limit", 20), 100))
+    if not rows:
+        return [TextContent(type="text", text="No DBLP results.")]
+    lines = [f"DBLP results ({len(rows)}):"]
+    for r in rows:
+        authors = ", ".join(r["authors"][:4]) + ("…" if len(r["authors"]) > 4 else "")
+        doi = f" doi:{r['doi']}" if r.get("doi") else ""
+        lines.append(f"- {r['title']} ({r.get('venue') or '?'} {r.get('year') or '?'}) — {authors}{doi}")
+    return [TextContent(type="text", text="\n".join(lines))]
+
+
+async def _handle_get_open_citations(arguments: dict) -> list[TextContent]:
+    from src.core.external.opencitations import get_citation_count, get_citing_papers
+    doi = arguments["doi"]
+    count = await get_citation_count(doi)
+    citing = await get_citing_papers(doi, limit=min(arguments.get("limit", 30), 100))
+    lines = [f"OpenCitations for {doi}: {count} citing papers."]
+    if citing:
+        lines.append("Citing DOIs:")
+        lines += [f"- {c.get('doi') or c.get('openalex') or '?'}" for c in citing]
+    return [TextContent(type="text", text="\n".join(lines))]
+
+
+async def _handle_core_fulltext_search(arguments: dict) -> list[TextContent]:
+    from src.core.external.core_api import search_core, get_core_api_key
+    if not get_core_api_key():
+        return [TextContent(type="text", text="CORE search unavailable: CORE_API_KEY not set.")]
+    rows = await search_core(arguments["query"], limit=min(arguments.get("limit", 20), 100))
+    if not rows:
+        return [TextContent(type="text", text="No CORE results.")]
+    lines = [f"CORE full-text results ({len(rows)}):"]
+    for r in rows:
+        authors = ", ".join(r["authors"][:4]) + ("…" if len(r["authors"]) > 4 else "")
+        pdf = f" PDF:{r['download_url']}" if r.get("download_url") else ""
+        lines.append(f"- {r['title']} ({r.get('year') or '?'}) — {authors}{pdf}")
+    return [TextContent(type="text", text="\n".join(lines))]
+
+
 _HANDLERS: dict[str, callable] = {
     "search_papers": _handle_search_papers,
     "get_paper": _handle_get_paper,
@@ -663,6 +754,9 @@ _HANDLERS: dict[str, callable] = {
     "expand_search": _handle_expand_search,
     "research_topic": _handle_research_topic,
     "get_mcp_version": _handle_get_mcp_version,
+    "dblp_search": _handle_dblp_search,
+    "get_open_citations": _handle_get_open_citations,
+    "core_fulltext_search": _handle_core_fulltext_search,
 }
 
 

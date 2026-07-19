@@ -189,3 +189,9 @@ class ResearchResponse(BaseModel):
     trends: list[TopicTrend]
     summary: dict
     query_time_ms: int
+
+
+class ZoteroPushRequest(BaseModel):
+    """Push corpus papers (by point ID) to the configured Zotero library."""
+
+    paper_ids: list[str] = Field(..., description="Qdrant point IDs to push (max 50)")

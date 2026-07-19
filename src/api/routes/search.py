@@ -25,6 +25,7 @@ from src.api.models.search import (
     ResearchResponse,
     RetrievalOptions,
     TopicTrend,
+    ZoteroPushRequest,
 )
 from src.core.search.config import RetrievalConfig
 from src.core.search.research import research_topic
@@ -119,6 +120,26 @@ async def research_topic_endpoint(request: ResearchRequest):
         summary=result["summary"],
         query_time_ms=result["query_time_ms"],
     )
+
+
+@router.post("/zotero/push")
+async def zotero_push(request: ZoteroPushRequest):
+    """Push corpus papers (by point ID) to the configured Zotero library."""
+    from src.core.external.zotero import push_to_zotero, get_zotero_config
+
+    if get_zotero_config() is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Zotero not configured (set ZOTERO_API_KEY + ZOTERO_LIBRARY_ID)",
+        )
+    storage = get_services().storage
+    papers = [p for pid in request.paper_ids[:50] if (p := storage.get_paper_by_id(pid))]
+    if not papers:
+        raise HTTPException(status_code=404, detail="No papers found for given IDs")
+    try:
+        return await push_to_zotero(papers)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Zotero push failed: {e}")
 
 
 @router.post("/search/expand", response_model=ExpandResponse)
